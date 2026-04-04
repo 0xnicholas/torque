@@ -233,10 +233,11 @@ pub trait LlmClient: Send + Sync {
 **Files**:
 - `crates/agent-runtime/src/lib.rs`
 - `crates/agent-runtime/src/runtime.rs` - Main AgentRuntime
-- `crates/agent-runtime/src/llm.rs` - LLM client trait
 - `crates/agent-runtime/src/prompt.rs` - Prompt building
 - `crates/agent-runtime/src/error.rs`
 - `crates/agent-runtime/Cargo.toml`
+
+**Note**: `agent-runtime` uses the shared `llm` crate for LLM client, not a local `llm.rs`.
 
 **Tests**:
 - `crates/agent-runtime/tests/execution.rs` - Mock LLM, verify flow

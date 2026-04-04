@@ -406,6 +406,126 @@ git commit -m "feat(planner): implement semantic validation and main entry"
 
 ---
 
+### Task 4b: Implement GET /runs/{run_id} and POST /runs/{run_id}/retry
+
+**Files:**
+- Modify: `crates/planner/src/handler.rs`
+
+- [ ] **Step 1: Add get_run and retry_run handlers**
+
+```rust
+pub async fn get_run(
+    Path(run_id): Path<uuid::Uuid>,
+) -> Result<Json<GetRunResponse>, PlannerError> {
+    let pool = get_pool().await;
+    
+    let run = db::runs::get(&pool, run_id)
+        .await
+        .map_err(|e| PlannerError::Database(e.to_string()))?
+        .ok_or_else(|| PlannerError::Database("Run not found".to_string()))?;
+    
+    let nodes = db::nodes::get_by_run(&pool, run_id)
+        .await
+        .map_err(|e| PlannerError::Database(e.to_string()))?;
+    
+    let edges = db::edges::get_by_run(&pool, run_id)
+        .await
+        .map_err(|e| PlannerError::Database(e.to_string()))?;
+    
+    Ok(Json(GetRunResponse { run, nodes, edges }))
+}
+
+pub async fn retry_run(
+    Path(run_id): Path<uuid::Uuid>,
+) -> Result<Json<CreateRunResponse>, PlannerError> {
+    let pool = get_pool().await;
+    
+    let run = db::runs::get(&pool, run_id)
+        .await
+        .map_err(|e| PlannerError::Database(e.to_string()))?
+        .ok_or_else(|| PlannerError::Database("Run not found".to_string()))?;
+    
+    if run.status != RunStatus::PlanningFailed {
+        return Err(PlannerError::Validation(
+            "Only PLANNING_FAILED runs can be retried".to_string()
+        ));
+    }
+    
+    db::runs::update_status(&pool, run_id, RunStatus::Pending)
+        .await
+        .map_err(|e| PlannerError::Database(e.to_string()))?;
+    
+    Ok(Json(CreateRunResponse { run_id }))
+}
+```
+
+- [ ] **Step 2: Update main.rs to add routes**
+
+```rust
+let app = Router::new()
+    .route("/runs", axum::routing::post(create_run))
+    .route("/runs/:run_id", axum::routing::get(get_run))
+    .route("/runs/:run_id/retry", axum::routing::post(retry_run));
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add crates/planner/src/handler.rs crates/planner/src/main.rs
+git commit -m "feat(planner): add get_run and retry_run endpoints"
+```
+
+---
+
+### Task 4c: Implement planner crash recovery on startup
+
+**Files:**
+- Modify: `crates/planner/src/main.rs`
+
+- [ ] **Step 1: Add recover_planning_runs function**
+
+```rust
+async fn recover_planning_runs(pool: &PgPool) -> Result<(), String> {
+    let stale = db::runs::find_stale_planning_runs(pool, Duration::minutes(5))
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    for run in stale {
+        db::runs::update_status(pool, run.id, RunStatus::PlanningFailed)
+            .await
+            .map_err(|e| e.to_string())?;
+        tracing::warn!(run_id = %run.id, "Marked stale PLANNING run as FAILED");
+    }
+    
+    Ok(())
+}
+```
+
+- [ ] **Step 2: Call on startup**
+
+```rust
+#[tokio::main]
+async fn main() {
+    // ... setup ...
+    
+    let pool = get_pool().await;
+    if let Err(e) = recover_planning_runs(&pool).await {
+        tracing::error!("Planner crash recovery failed: {}", e);
+    }
+    
+    // ... start server ...
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add crates/planner/src/main.rs
+git commit -m "feat(planner): add crash recovery on startup"
+```
+
+---
+
 ## Phase 2: Failure Policies (Day 2)
 
 ### Task 5: Implement FailureHandler
@@ -800,7 +920,7 @@ git commit -m "feat: integrate Phase 4 components"
 
 | Phase | Tasks | Duration |
 |-------|-------|----------|
-| Phase 1: Planner | Tasks 1-4 | Day 1 |
+| Phase 1: Planner | Tasks 1-4, 4b, 4c | Day 1 |
 | Phase 2: Failure Policies | Task 5 | Day 2 |
 | Phase 3: Crash Recovery | Task 6 | Day 3 |
 | Phase 4: Node Logs | Task 7 | Day 4 |

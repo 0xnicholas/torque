@@ -1600,9 +1600,51 @@ git commit -m "feat(queue): implement complete and reset_to_pending"
 
 ---
 
+### Task 18: Implement get_waiting_count
+
+**Files:**
+- Create: `crates/queue/src/waiting_count.rs`
+
+- [ ] **Step 1: Create waiting_count.rs**
+
+```rust
+use sqlx::PgPool;
+use crate::error::QueueError;
+
+pub async fn get_waiting_count(pool: &PgPool, tenant_id: uuid::Uuid) -> Result<u64, QueueError> {
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*) FROM queue
+        WHERE tenant_id = $1 AND status = 'pending' AND available_at <= NOW()
+        "#,
+        tenant_id
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    Ok(count as u64)
+}
+```
+
+- [ ] **Step 2: Update lib.rs to export**
+
+```rust
+pub mod waiting_count;
+pub use waiting_count::get_waiting_count;
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add crates/queue/src/waiting_count.rs crates/queue/src/lib.rs
+git commit -m "feat(queue): implement get_waiting_count"
+```
+
+---
+
 ## Phase 5: Integration (Day 5)
 
-### Task 18: Workspace verification
+### Task 19: Workspace verification
 
 - [ ] **Step 1: Run cargo check --workspace**
 
@@ -1632,8 +1674,8 @@ git commit -m "feat: integrate all Phase 1 crates"
 | Phase 1: Types | Tasks 1-5 | Day 1 |
 | Phase 2: DAG | Tasks 6-9 | Day 2 |
 | Phase 3: DB | Tasks 10-13 | Day 3 |
-| Phase 4: Queue | Tasks 14-17 | Day 4 |
-| Phase 5: Integration | Task 18 | Day 5 |
+| Phase 4: Queue | Tasks 14-18 | Day 4 |
+| Phase 5: Integration | Task 19 | Day 5 |
 
 **Total Estimated Time:** 5 days
 

@@ -33,6 +33,9 @@ crates/
 │
 └── planner/                  # MODIFY
     ├── src/
+    │   ├── admin/
+    │   │   ├── mod.rs
+    │   │   └── error.rs     # NEW: Admin errors
     │   └── admin_handler.rs  # NEW: Admin API
     └── ...
 ```
@@ -209,8 +212,12 @@ impl Scheduler {
     }
     
     pub async fn is_at_quota(&self, pool: &PgPool, tenant_id: uuid::Uuid) -> Result<bool, sqlx::Error> {
+        // Use spec's Redis key format: {tenant_id}:run:{run_id}:concurrency
+        // Sum all run concurrencies for this tenant
+        let pattern = format!("{}:run:*:concurrency", tenant_id);
+        // For simplicity, we track total tenant concurrency separately
         let current: i64 = redis::cmd("GET")
-            .arg(format!("{}:concurrency", tenant_id))
+            .arg(format!("{}:total_concurrency", tenant_id))
             .query_async(&mut get_redis_conn().await?)
             .await
             .unwrap_or(0);
@@ -264,8 +271,9 @@ impl QuotaManager {
     }
     
     pub async fn check_concurrency_quota(&self, pool: &PgPool, tenant_id: uuid::Uuid) -> Result<bool, String> {
+        // Check total tenant concurrency (aggregated across all runs)
         let current: i64 = redis::cmd("GET")
-            .arg(format!("{}:run:{}:concurrency", tenant_id, "*"))
+            .arg(format!("{}:total_concurrency", tenant_id))
             .query_async(&mut self.redis.clone())
             .await
             .unwrap_or(0);
@@ -276,10 +284,15 @@ impl QuotaManager {
     }
     
     pub async fn increment_concurrency(&self, tenant_id: uuid::Uuid, run_id: uuid::Uuid) -> Result<(), String> {
-        let key = format!("{}:run:{}:concurrency", tenant_id, run_id);
-        redis::cmd("INCR")
-            .arg(&key)
-            .query_async(&mut self.redis.clone())
+        let run_key = format!("{}:run:{}:concurrency", tenant_id, run_id);
+        let total_key = format!("{}:total_concurrency", tenant_id);
+        
+        // Increment both per-run and total counters
+        let mut conn = self.redis.clone();
+        redis::pipe()
+            .cmd("INCR").arg(&run_key)
+            .cmd("INCR").arg(&total_key)
+            .query_async(&mut conn)
             .await
             .map_err(|e| e.to_string())?;
         
@@ -287,10 +300,15 @@ impl QuotaManager {
     }
     
     pub async fn decrement_concurrency(&self, tenant_id: uuid::Uuid, run_id: uuid::Uuid) -> Result<(), String> {
-        let key = format!("{}:run:{}:concurrency", tenant_id, run_id);
-        redis::cmd("DECR")
-            .arg(&key)
-            .query_async(&mut self.redis.clone())
+        let run_key = format!("{}:run:{}:concurrency", tenant_id, run_id);
+        let total_key = format!("{}:total_concurrency", tenant_id);
+        
+        // Decrement both per-run and total counters
+        let mut conn = self.redis.clone();
+        redis::pipe()
+            .cmd("DECR").arg(&run_key)
+            .cmd("DECR").arg(&total_key)
+            .query_async(&mut conn)
             .await
             .map_err(|e| e.to_string())?;
         
@@ -407,9 +425,39 @@ git commit -m "feat(executor): implement quota enforcement and usage sync"
 ### Task 4: Implement Admin API
 
 **Files:**
+- Create: `crates/planner/src/admin/error.rs`
+- Create: `crates/planner/src/admin/mod.rs`
 - Create: `crates/planner/src/admin_handler.rs`
 
-- [ ] **Step 1: Create admin_handler.rs**
+- [ ] **Step 1: Create admin/error.rs**
+
+```rust
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AdminError {
+    #[error("Agent not found: {0}")]
+    AgentNotFound(String),
+    
+    #[error("Tenant not found: {0}")]
+    TenantNotFound(String),
+    
+    #[error("Database error: {0}")]
+    Database(String),
+    
+    #[error("Validation error: {0}")]
+    Validation(String),
+}
+```
+
+- [ ] **Step 2: Create admin/mod.rs**
+
+```rust
+pub mod error;
+pub use error::AdminError;
+```
+
+- [ ] **Step 3: Create admin_handler.rs**
 
 ```rust
 use axum::{Router, Json, extract::Path};
@@ -460,7 +508,7 @@ async fn get_usage(Path(tenant_id): Path<uuid::Uuid>) -> Result<Json<TenantUsage
         .unwrap_or(0);
     
     let current_concurrency: i64 = redis::cmd("GET")
-        .arg(format!("{}:concurrency", tenant_id))
+        .arg(format!("{}:total_concurrency", tenant_id))
         .query_async(&mut get_redis_conn().await?)
         .await
         .unwrap_or(0);

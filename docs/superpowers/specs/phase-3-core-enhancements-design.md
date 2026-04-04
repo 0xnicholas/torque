@@ -85,9 +85,22 @@ pub struct CheckpointMeta {
 
 ### 1.5 When to Create Checkpoints
 
-- **After tool calls**: Every time Tool Executor completes a call
-- **Explicit request**: Agent calls the `create_checkpoint` tool
-- **Configured interval**: Auto-create every N seconds (default 30s)
+There are **two types** of checkpoints with different purposes:
+
+**1. Tool-call Checkpoints (Full Recovery)**
+- Triggered every N tool calls (default: 5)
+- Contains full context (messages, intermediate_results)
+- Used for crash recovery
+
+**2. Interval Checkpoints (Liveness Only)**
+- Triggered every N seconds (default: 30s)
+- Contains minimal state (timestamp only)
+- Used for crash detection, NOT for recovery
+- Does NOT contain messages or intermediate_results
+
+**3. Explicit Checkpoint**
+- Agent calls the `create_checkpoint` tool
+- Contains full context at moment of call
 
 **Explicit Checkpoint Tool**:
 ```rust
