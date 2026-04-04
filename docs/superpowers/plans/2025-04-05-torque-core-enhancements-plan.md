@@ -442,35 +442,77 @@ impl AgentRuntime {
         tool_call_count % 5 == 0 || last_checkpoint.map(|t| t.elapsed().as_secs() > self.checkpoint_interval_secs).unwrap_or(true)
     }
     
-    async fn restore_from_checkpoint(&self, node: Node, state: CheckpointState) -> anyhow::Result<()> {
-        // Restore context from checkpoint state
+    async fn restore_from_checkpoint(
+        &self,
+        node: Node,
+        state: CheckpointState,
+        summarizer: Option<Box<dyn Summarizer>>,
+    ) -> anyhow::Result<ContextManager> {
+        // Restore context from checkpoint state with original summarizer
         let mut context_mgr = ContextManager::new(
             node.max_tokens,
-            CompressionStrategy::SummarizeOlder { summarize_count: 10 },
-            None, // No summarizer on restore
+            self.config.compression_strategy.clone(),
+            summarizer, // Use original summarizer from config
             self.db.clone(),
             node.id,
         );
+        
+        // Restore intermediate_results from checkpoint state
+        for artifact in state.intermediate_results {
+            context_mgr.add_intermediate_result(artifact).await?;
+        }
         
         for msg in state.messages {
             context_mgr.add_message(msg).await?;
         }
         
-        // Resume execution with restored context
-        Ok(())
+        Ok(context_mgr)
+    }
+    
+    // Spawn background task for interval-based checkpointing
+    fn start_interval_checkpointing(
+        &self,
+        node_id: Uuid,
+        run_id: Uuid,
+        interval_secs: u64,
+    ) -> tokio::task::JoinHandle<()> {
+        let checkpointer = self.checkpointer.clone();
+        let db = self.db.clone();
+        
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
+            loop {
+                interval.tick().await;
+                
+                // Get current node state from context
+                let state = CheckpointState {
+                    messages: vec![], // AgentRuntime manages this internally
+                    tool_call_count: 0,
+                    intermediate_results: vec![],
+                    custom_state: Some(serde_json::json!({
+                        "type": "interval_checkpoint"
+                    })),
+                };
+                
+                if let Err(e) = checkpointer.save(run_id, node_id, state).await {
+                    tracing::error!("Interval checkpoint failed: {}", e);
+                }
+            }
+        })
     }
 }
 ```
 
-- [ ] **Step 3: Add checkpoint after tool call**
+- [ ] **Step 3: Add checkpoint after tool call with interval-based support**
 
 ```rust
 // In tool call loop, after successful tool execution:
+let intermediate = context_manager.get_intermediate_results();
 if self.should_checkpoint(tool_call_count, last_checkpoint_time) {
     let state = CheckpointState {
         messages: context_manager.get_full_history(),
         tool_call_count,
-        intermediate_results: vec![], // from context
+        intermediate_results: intermediate, // Include intermediate artifacts
         custom_state: None,
     };
     self.checkpointer.save(run_id, node_id, state).await?;
@@ -514,21 +556,42 @@ pub fn register_checkpoint_tools(
 }
 ```
 
-- [ ] **Step 5: Update crash recovery in Executor**
+- [ ] **Step 5: Update crash recovery in Executor with time travel support**
 
 ```rust
 // In Executor startup:
 async fn recover_crashed_nodes(&self) {
     let running_nodes = self.db.get_running_nodes_older_than(Duration::hours(24)).await?;
     for node in running_nodes {
-        if let Some(checkpoint) = self.checkpointer.get_latest(node.id).await? {
-            // Restore state and resume
-            self.restore_from_checkpoint(node, checkpoint).await?;
+        // Get all checkpoints for this node, sorted by creation time (newest first)
+        let checkpoints = self.checkpointer.list_node_checkpoints(node.id).await?;
+        
+        if let Some(latest) = checkpoints.first() {
+            // Get full checkpoint state
+            let state = self.checkpointer.load(latest.id).await?;
+            
+            // Determine summarizer to use (from node config)
+            let summarizer = self.get_summarizer_for_node(node.id).await?;
+            
+            // Restore state and resume from latest checkpoint
+            // Time travel to any checkpoint possible by selecting different checkpoint_id
+            self.restore_from_checkpoint(node, state, summarizer).await?;
         } else {
             // Reset to PENDING, follow failure policy
             self.reset_node_to_pending(node).await?;
         }
     }
+}
+
+// Support time travel - resume from any specific checkpoint
+async fn recover_from_specific_checkpoint(
+    &self,
+    node: Node,
+    checkpoint_id: CheckpointId,
+) -> anyhow::Result<()> {
+    let state = self.checkpointer.load(checkpoint_id).await?;
+    let summarizer = self.get_summarizer_for_node(node.id).await?;
+    self.restore_from_checkpoint(node, state, summarizer).await
 }
 ```
 
@@ -990,6 +1053,7 @@ pub struct ContextManager {
     full_history: Vec<Message>,              // Full history (persisted to node_logs)
     compressed_context: Vec<Message>,         // Compressed (used for LLM, in-memory only)
     summary_chain: Vec<Summary>,             // Summary chain (persisted to node_logs)
+    intermediate_results: Vec<ArtifactPointer>, // Tool execution results for checkpointing
 }
 
 #[async_trait::async_trait]
@@ -1021,7 +1085,17 @@ impl ContextManager {
             full_history: Vec::new(),
             compressed_context: Vec::new(),
             summary_chain: Vec::new(),
+            intermediate_results: Vec::new(),
         }
+    }
+    
+    pub fn get_intermediate_results(&self) -> Vec<ArtifactPointer> {
+        self.intermediate_results.clone()
+    }
+    
+    pub async fn add_intermediate_result(&mut self, artifact: ArtifactPointer) -> anyhow::Result<()> {
+        self.intermediate_results.push(artifact);
+        self.persist_to_logs().await
     }
     
     pub async fn add_message(&mut self, msg: Message) -> anyhow::Result<()> {
