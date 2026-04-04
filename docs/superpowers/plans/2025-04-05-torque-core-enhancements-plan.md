@@ -259,11 +259,12 @@ use crate::trait::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
 pub struct HybridCheckpointer {
     pool: sqlx::PgPool,
     redis: redis::aio::ConnectionManager,
+    tenant_id: Uuid, // Required for Redis key namespacing
 }
 
 impl HybridCheckpointer {
-    pub fn new(pool: sqlx::PgPool, redis: redis::aio::ConnectionManager) -> Self {
-        Self { pool, redis }
+    pub fn new(pool: sqlx::PgPool, redis: redis::aio::ConnectionManager, tenant_id: Uuid) -> Self {
+        Self { pool, redis, tenant_id }
     }
     
     fn compute_hash(state: &CheckpointState) -> String {
@@ -272,8 +273,8 @@ impl HybridCheckpointer {
         format!("{:x}", hasher.finalize())
     }
     
-    fn redis_key(tenant_id: &Uuid, checkpoint_id: &CheckpointId) -> String {
-        format!("{}:checkpoint:{}", tenant_id, checkpoint_id.0)
+    fn redis_key(&self, checkpoint_id: &CheckpointId) -> String {
+        format!("{}:checkpoint:{}", self.tenant_id, checkpoint_id.0)
     }
 }
 
@@ -287,7 +288,7 @@ impl Checkpointer for HybridCheckpointer {
     ) -> Result<CheckpointId> {
         let checkpoint_id = CheckpointId::new();
         let state_hash = Self::compute_hash(&state);
-        let redis_key = Self::redis_key(&Uuid::nil(), &checkpoint_id); // tenant_id from context
+        let redis_key = self.redis_key(&checkpoint_id);
         
         // Store state snapshot in Redis (TTL 24h)
         let state_json = serde_json::to_string(&state).map_err(|e| {
@@ -312,7 +313,7 @@ impl Checkpointer for HybridCheckpointer {
         .bind(checkpoint_id.0)
         .bind(run_id)
         .bind(node_id)
-        .bind(Uuid::nil()) // tenant_id - will be passed properly
+        .bind(self.tenant_id)
         .bind(&state_hash)
         .bind(&redis_key)
         .execute(&self.pool)
@@ -323,7 +324,7 @@ impl Checkpointer for HybridCheckpointer {
     
     async fn load(&self, checkpoint_id: CheckpointId) -> Result<CheckpointState> {
         // Load from Redis
-        let redis_key = format!("checkpoint:{}", checkpoint_id.0);
+        let redis_key = self.redis_key(&checkpoint_id);
         let mut conn = self.redis.clone();
         
         let state_json: Option<String> = redis::cmd("GET")
@@ -432,7 +433,36 @@ pub struct AgentRuntime {
 }
 ```
 
-- [ ] **Step 2: Add checkpoint after tool call**
+- [ ] **Step 2: Add checkpoint logic helper methods**
+
+```rust
+impl AgentRuntime {
+    fn should_checkpoint(&self, tool_call_count: u32, last_checkpoint: Option<Instant>) -> bool {
+        // Checkpoint every 5 tool calls OR if interval exceeded
+        tool_call_count % 5 == 0 || last_checkpoint.map(|t| t.elapsed().as_secs() > self.checkpoint_interval_secs).unwrap_or(true)
+    }
+    
+    async fn restore_from_checkpoint(&self, node: Node, state: CheckpointState) -> anyhow::Result<()> {
+        // Restore context from checkpoint state
+        let mut context_mgr = ContextManager::new(
+            node.max_tokens,
+            CompressionStrategy::SummarizeOlder { summarize_count: 10 },
+            None, // No summarizer on restore
+            self.db.clone(),
+            node.id,
+        );
+        
+        for msg in state.messages {
+            context_mgr.add_message(msg).await?;
+        }
+        
+        // Resume execution with restored context
+        Ok(())
+    }
+}
+```
+
+- [ ] **Step 3: Add checkpoint after tool call**
 
 ```rust
 // In tool call loop, after successful tool execution:
@@ -444,10 +474,47 @@ if self.should_checkpoint(tool_call_count, last_checkpoint_time) {
         custom_state: None,
     };
     self.checkpointer.save(run_id, node_id, state).await?;
+    last_checkpoint_time = Some(Instant::now());
 }
 ```
 
-- [ ] **Step 3: Update crash recovery in Executor**
+- [ ] **Step 4: Add explicit create_checkpoint tool**
+
+```rust
+#[derive(Debug, Deserialize)]
+pub struct CreateCheckpointArgs {
+    pub reason: Option<String>,
+}
+
+pub fn register_checkpoint_tools(
+    registry: &mut ToolRegistry,
+    checkpointer: Arc<dyn Checkpointer>,
+    node_id: Uuid,
+    run_id: Uuid,
+) {
+    registry.register("create_checkpoint", move |args: CreateCheckpointArgs| {
+        let checkpointer = checkpointer.clone();
+        async move {
+            let state = CheckpointState {
+                messages: vec![], // Current context passed separately
+                tool_call_count: 0,
+                intermediate_results: vec![],
+                custom_state: serde_json::json!({ "reason": args.reason }),
+            };
+            
+            let id = checkpointer.save(run_id, node_id, state).await
+                .map_err(|e| format!("{}", e))?;
+            
+            Ok(ToolResult {
+                output: format!("Checkpoint created: {}", id.0),
+                metadata: None,
+            })
+        }
+    });
+}
+```
+
+- [ ] **Step 5: Update crash recovery in Executor**
 
 ```rust
 // In Executor startup:
@@ -465,13 +532,15 @@ async fn recover_crashed_nodes(&self) {
 }
 ```
 
-- [ ] **Step 4: Run cargo check on entire workspace**
+- [ ] **Step 6: Run cargo check on entire workspace**
 
 ```bash
 cargo check --workspace
 ```
 
-- [ ] **Step 5: Commit**
+Expected: Compiles successfully
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git commit -m "feat(checkpointer): integrate into AgentRuntime and Executor crash recovery"
@@ -843,7 +912,7 @@ git commit -m "feat(vfs): add VFS tools (read_file, write_file, list_files, dele
 **Files:**
 - Create: `crates/agent-runtime/src/context_mgr.rs`
 
-- [ ] **Step 1: Define ContextManager**
+- [ ] **Step 1: Define ContextManager with async add_message and dual-track storage**
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -867,9 +936,17 @@ pub struct ContextManager {
     max_tokens: usize,
     warning_threshold: f64,
     compression_strategy: CompressionStrategy,
-    full_history: Vec<Message>,
-    compressed_context: Vec<Message>,
-    summary_chain: Vec<Summary>,
+    summarizer: Option<Box<dyn Summarizer>>, // LLM-based summarizer
+    db: sqlx::PgPool,                         // For node_logs persistence
+    node_id: Uuid,
+    full_history: Vec<Message>,              // Full history (persisted to node_logs)
+    compressed_context: Vec<Message>,         // Compressed (used for LLM, in-memory only)
+    summary_chain: Vec<Summary>,             // Summary chain (persisted to node_logs)
+}
+
+#[async_trait::async_trait]
+pub trait Summarizer: Send + Sync {
+    async fn summarize(&self, messages: &[Message]) -> anyhow::Result<String>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -879,26 +956,59 @@ pub struct Message {
 }
 
 impl ContextManager {
-    pub fn new(max_tokens: usize, strategy: CompressionStrategy) -> Self {
+    pub fn new(
+        max_tokens: usize,
+        strategy: CompressionStrategy,
+        summarizer: Option<Box<dyn Summarizer>>,
+        db: sqlx::PgPool,
+        node_id: Uuid,
+    ) -> Self {
         Self {
             max_tokens,
             warning_threshold: 0.8,
             compression_strategy: strategy,
+            summarizer,
+            db,
+            node_id,
             full_history: Vec::new(),
             compressed_context: Vec::new(),
             summary_chain: Vec::new(),
         }
     }
     
-    pub fn add_message(&mut self, msg: Message) {
+    pub async fn add_message(&mut self, msg: Message) -> anyhow::Result<()> {
         self.full_history.push(msg.clone());
-        self.compressed_context.push(msg);
+        self.compressed_context.push(msg.clone());
         
-        // Check if compression needed
+        // Persist full_history to node_logs (dual-track storage)
+        self.persist_to_logs().await?;
+        
+        // Check if compression needed and auto-trigger
         let token_count = self.estimate_tokens();
         if token_count as f64 > self.max_tokens as f64 * self.warning_threshold {
-            // Compression would be triggered
+            self.compress().await?;
         }
+        
+        Ok(())
+    }
+    
+    async fn persist_to_logs(&self) -> anyhow::Result<()> {
+        // Write full_history and summary_chain to node_logs.tool_calls as JSON
+        let logs_json = serde_json::json!({
+            "type": "context_snapshot",
+            "full_history": self.full_history,
+            "summary_chain": self.summary_chain,
+        });
+        
+        sqlx::query(
+            r#"UPDATE node_logs SET tool_calls = tool_calls || $1::jsonb WHERE node_id = $2"#,
+        )
+        .bind(&logs_json)
+        .bind(self.node_id)
+        .execute(&self.db)
+        .await?;
+        
+        Ok(())
     }
     
     pub fn get_compressed_context(&self) -> &[Message] {
@@ -914,41 +1024,45 @@ impl ContextManager {
     }
     
     fn estimate_tokens(&self) -> usize {
-        // Rough estimation: 1 token ≈ 4 chars
         self.full_history
             .iter()
             .map(|m| m.content.len() / 4)
             .sum()
     }
     
-    fn compress(&mut self) {
+    async fn compress(&mut self) {
         match &self.compression_strategy {
             CompressionStrategy::KeepLastN(n) => {
                 let to_keep = self.full_history.len().saturating_sub(*n);
                 self.compressed_context = self.full_history[to_keep..].to_vec();
             }
             CompressionStrategy::SummarizeOlder { summarize_count } => {
-                // Summarize older messages
-                let to_summarize = &self.full_history[0..*summarize_count];
-                let summary = format!("[Summary of {} messages]", to_summarize.len());
-                
-                self.compressed_context = vec![
-                    Message {
-                        role: "system".into(),
-                        content: format!("Previous conversation summary: {}", summary),
+                if let Some(ref summarizer) = self.summarizer {
+                    let to_summarize = &self.full_history[0..*summarize_count];
+                    match summarizer.summarize(to_summarize).await {
+                        Ok(summary) => {
+                            self.compressed_context = vec![
+                                Message {
+                                    role: "system".into(),
+                                    content: format!("Previous conversation summary: {}", summary),
+                                }
+                            ];
+                            self.compressed_context
+                                .extend(self.full_history[*summarize_count..].to_vec());
+                            
+                            self.summary_chain.push(Summary {
+                                covers_range: (0, *summarize_count),
+                                content: summary,
+                                created_at: chrono::Utc::now(),
+                            });
+                        }
+                        Err(e) => {
+                            tracing::warn!("Summarization failed: {}", e);
+                        }
                     }
-                ];
-                self.compressed_context
-                    .extend(self.full_history[*summarize_count..].to_vec());
-                
-                self.summary_chain.push(Summary {
-                    covers_range: (0, *summarize_count),
-                    content: summary,
-                    created_at: chrono::Utc::now(),
-                });
+                }
             }
             CompressionStrategy::ExtractiveCompression => {
-                // Keep messages with tool calls and final outputs
                 self.compressed_context = self
                     .full_history
                     .iter()
@@ -1007,7 +1121,7 @@ pub fn register_context_tools(
             match strategy {
                 "summarize" => {
                     mgr.compression_strategy = CompressionStrategy::SummarizeOlder {
-                        summarize_count: mgr.full_history.len() - keep_recent,
+                        summarize_count: mgr.full_history.len().saturating_sub(keep_recent),
                     };
                 }
                 "keep_last_n" => {
@@ -1019,8 +1133,11 @@ pub fn register_context_tools(
                 _ => {}
             }
             
+            // Trigger compression with new strategy
+            mgr.compress().await;
+            
             Ok(ToolResult {
-                output: "Context compression strategy updated".to_string(),
+                output: "Context compression strategy updated and compression triggered".to_string(),
                 metadata: None,
             })
         }
@@ -1031,7 +1148,6 @@ pub fn register_context_tools(
         async move {
             let mut mgr = ctx.lock().await;
             
-            let range_size = args.end_idx - args.start_idx;
             let summary = format!(
                 "Summary of messages {} to {}",
                 args.start_idx, args.end_idx
@@ -1042,6 +1158,9 @@ pub fn register_context_tools(
                 content: summary.clone(),
                 created_at: chrono::Utc::now(),
             });
+            
+            // Persist to node_logs
+            mgr.persist_to_logs().await?;
             
             Ok(ToolResult {
                 output: summary,
