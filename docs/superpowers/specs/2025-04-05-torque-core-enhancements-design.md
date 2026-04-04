@@ -510,7 +510,7 @@ agent-team/
 **checkpointer** dependencies:
 - `types` (local)
 - `db` (local)
-- `redis` (async Redis client)
+- `redis-rs` (async Redis client)
 - `async-trait`
 - `serde`
 - `serde_json`
