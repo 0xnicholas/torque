@@ -86,8 +86,19 @@ pub struct CheckpointMeta {
 ### 1.5 When to Create Checkpoints
 
 - **After tool calls**: Every time Tool Executor completes a call
-- **Explicit request**: Agent outputs `{"__checkpoint": true}`
+- **Explicit request**: Agent calls the `create_checkpoint` tool
 - **Configured interval**: Auto-create every N seconds (default 30s)
+
+**Explicit Checkpoint Tool**:
+```rust
+{
+    "name": "create_checkpoint",
+    "description": "Create a checkpoint of current execution state for future recovery",
+    "parameters": {
+        "reason": "Optional string describing why checkpoint is being created"
+    }
+}
+```
 
 ### 1.6 Database Schema Update
 
@@ -114,7 +125,7 @@ CREATE TABLE checkpoints (
 
 - Make Agent code more natural: work with file paths instead of Artifact Pointers
 - Support collaborative workspace: multiple nodes sharing files
-- Reuse ContextStore routing logic at the底层
+- Reuse ContextStore routing logic at the bottom layer
 
 ### 2.2 Architecture
 
@@ -162,16 +173,27 @@ pub struct FileMeta {
 
 ### 2.4 Path Schema (Hybrid Mode)
 
+**Absolute Paths** (full form):
 ```
-/{tenant_id}/{run_id}/workspace/*     # Shared workspace, all nodes can read/write
-/{tenant_id}/{run_id}/{node_id}/*     # Node private space, only this node can write
-/{tenant_id}/{run_id}/temp/*          # Temporary files, auto-cleanup after Run completion
+/{tid}/{rid}/workspace/*     # Shared workspace, all nodes can read/write
+/{tid}/{rid}/{nid}/*         # Node private space, only this node can write
+/{tid}/{rid}/temp/*          # Temporary files, auto-cleanup after Run completion
+```
+Where: `tid` = tenant_id, `rid` = run_id, `nid` = node_id
+
+**VFS Shortcuts** (resolved relative to current Run/Node context):
+```
+/workspace/file.json     → /{tid}/{rid}/workspace/file.json (shared)
+/output/result.json      → /{tid}/{rid}/{nid}/output/result.json (node-private)
+/temp/cache.json         → /{tid}/{rid}/temp/cache.json (temp)
 ```
 
 **Path Resolution Examples**:
-- `/workspace/shared_data.json` → Shared, visible to all nodes
-- `/output/result.json` → Auto-mapped to current node's private path `/{node_id}/output/result.json`
-- `temp/cache.json` → Temporary file, stored in Redis (small) or S3 (large)
+- `/workspace/shared_data.json` (shortcut) → `/123e4567-e89b-12d3-a456-426614174000/abc123/def456/workspace/shared_data.json`
+- `/output/result.json` (shortcut) → `/123e4567-e89b-12d3-a456-426614174000/abc123/def456/output/result.json` (auto-mapped to current node)
+- `temp/cache.json` (shortcut) → `/123e4567-e89b-12d3-a456-426614174000/abc123/def456/temp/cache.json`
+
+**Note**: Agents use VFS shortcuts in code. The VfsOverlay resolves to absolute paths internally.
 
 ### 2.5 VFS to Artifact Mapping
 
@@ -488,6 +510,7 @@ agent-team/
 **checkpointer** dependencies:
 - `types` (local)
 - `db` (local)
+- `redis` (async Redis client)
 - `async-trait`
 - `serde`
 - `serde_json`
@@ -566,16 +589,54 @@ agent-team/
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Checkpoint frequency too high | Redis memory pressure | Configurable interval, auto-cleanup old checkpoints |
-| VFS path conflicts | Data corruption | UUID-based internal paths, validation on write |
+| VFS concurrent writes | Data corruption | Advisory locking with Redis (see Section 10) |
 | Context compression loses critical info | Poor LLM responses | Multiple compression strategies, Agent can override |
 | Migration complexity | Breaking changes | Maintain backward compatibility, gradual adoption |
 
 ---
 
-## 10. Open Questions
+## 10. VFS Concurrent Write Handling
 
-1. Should we support checkpoint branching (multiple paths from one checkpoint)?
-2. How to handle VFS file locking for concurrent writes?
+**Design Decision**: Use advisory locking with Redis for concurrent write protection.
+
+**Mechanism**:
+- When writing to `/workspace/` (shared path), acquire a Redis lock: `{tid}:vfs:lock:{path}`
+- Lock TTL: 30 seconds (prevents deadlocks if holder crashes)
+- Lock acquisition uses `SET NX EX` (atomic set-if-not-exists with expiry)
+- If lock cannot be acquired, return `Err(VfsError::ConcurrentWriteConflict)` to Agent
+- Agent can retry after backoff or choose different filename
+
+**Lock Key Format**: `{tenant_id}:vfs:lock:{resolved_absolute_path}`
+
+**Example Flow**:
+```rust
+async fn write(&self, path: &str, content: &[u8]) -> Result<ArtifactPointer> {
+    let resolved = self.resolve_path(path)?;
+    
+    // Acquire lock for shared paths
+    if resolved.contains("/workspace/") {
+        let lock_key = format!("{}:vfs:lock:{}", self.tenant_id, resolved);
+        self.redis.set_nx_ex(&lock_key, self.executor_id, 30).await?
+            .ok_or(VfsError::ConcurrentWriteConflict)?;
+    }
+    
+    // ... write logic ...
+    
+    // Release lock on success
+    if resolved.contains("/workspace/") {
+        self.redis.del(&lock_key).await?;
+    }
+    
+    Ok(pointer)
+}
+```
+
+---
+
+## 11. Open Questions
+
+1. ~~How to handle VFS file locking for concurrent writes?~~ **Answered: Advisory locking with Redis**
+2. Should we support checkpoint branching (multiple paths from one checkpoint)?
 3. Should compressed context be cached in Redis for faster retrieval?
 4. Do we need a web UI for checkpoint visualization (time travel)?
 
