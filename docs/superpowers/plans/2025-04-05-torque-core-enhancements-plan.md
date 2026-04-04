@@ -470,6 +470,9 @@ impl AgentRuntime {
     }
     
     // Spawn background task for interval-based checkpointing
+    // NOTE: Interval checkpoints are for liveness detection only (crash detection).
+    // They do NOT contain full context and cannot be used for recovery.
+    // Recovery always uses the latest FULL checkpoint from tool calls or explicit create_checkpoint.
     fn start_interval_checkpointing(
         &self,
         node_id: Uuid,
@@ -484,18 +487,21 @@ impl AgentRuntime {
             loop {
                 interval.tick().await;
                 
-                // Get current node state from context
+                // Liveness checkpoint: just records that the node is still alive
+                // Does NOT save messages or intermediate_results - those are only saved
+                // during tool-call checkpoints and explicit create_checkpoint calls
                 let state = CheckpointState {
-                    messages: vec![], // AgentRuntime manages this internally
+                    messages: vec![], // Empty - for liveness only, not recovery
                     tool_call_count: 0,
-                    intermediate_results: vec![],
+                    intermediate_results: vec![], // Empty - for liveness only, not recovery
                     custom_state: Some(serde_json::json!({
-                        "type": "interval_checkpoint"
+                        "type": "liveness",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
                     })),
                 };
                 
                 if let Err(e) = checkpointer.save(run_id, node_id, state).await {
-                    tracing::error!("Interval checkpoint failed: {}", e);
+                    tracing::error!("Liveness checkpoint failed: {}", e);
                 }
             }
         })
@@ -1380,7 +1386,7 @@ impl AgentRuntime {
 }
 ```
 
-- [ ] **Step 2: Update Executor crash recovery**
+- [ ] **Step 2: Update Executor crash recovery with time travel support**
 
 ```rust
 impl Executor {
@@ -1393,12 +1399,29 @@ impl Executor {
             if let Some(latest) = checkpoints.first() {
                 let state = self.checkpointer.load(latest.id).await?;
                 
-                // Restore and resume
-                self.agent_runtime.restore_from_checkpoint(node, state).await?;
+                // Get summarizer from node config
+                let summarizer = self.get_summarizer_for_node(node.id).await?;
+                
+                // Restore and resume from latest checkpoint
+                // Time travel: select different checkpoint_id to resume from that point
+                self.agent_runtime.restore_from_checkpoint(node, state, summarizer).await?;
             } else {
                 // No checkpoint, reset and follow failure policy
                 self.reset_node(node, Policy::Retry).await?;
             }
+        }
+    }
+    
+    // Get summarizer for a node based on its agent_type config
+    async fn get_summarizer_for_node(&self, node_id: Uuid) -> anyhow::Result<Option<Box<dyn Summarizer>>> {
+        let node = self.db.get_node(node_id).await?;
+        let agent_type = self.db.get_agent_type(node.agent_type).await?;
+        
+        // Check if agent_type has summarization enabled
+        if agent_type.enable_summarization {
+            Ok(Some(Box::new(LlmSummarizer::new(self.llm.clone()))))
+        } else {
+            Ok(None)
         }
     }
 }
@@ -1444,8 +1467,9 @@ async fn test_checkpointer_save_and_load() {
         .get_connection_manager()
         .await
         .unwrap();
+    let tenant_id = Uuid::new_v4();
     
-    let checkpointer = HybridCheckpointer::new(pool, redis);
+    let checkpointer = HybridCheckpointer::new(pool, redis, tenant_id);
     
     let state = CheckpointState {
         messages: vec![
