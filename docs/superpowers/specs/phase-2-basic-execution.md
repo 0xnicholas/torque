@@ -19,7 +19,107 @@
 
 ## Components
 
-### 1. context-store crate
+### 1. llm crate (NEW - Foundation)
+
+**Purpose**: Unified LLM client for both planner and agent-runtime.
+
+**Trait**:
+```rust
+#[async_trait]
+pub trait LlmClient: Send + Sync {
+    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse>;
+    
+    async fn chat_streaming(
+        &self,
+        request: ChatRequest,
+        callback: impl Fn(Chunk) + Send + 'static,
+    ) -> Result<ChatResponse>;
+    
+    fn max_tokens(&self) -> usize;
+    
+    fn count_tokens(&self, text: &str) -> usize;
+    
+    fn model(&self) -> &str;
+}
+```
+
+**Types**:
+```rust
+pub struct ChatRequest {
+    pub model: String,
+    pub messages: Vec<Message>,
+    pub tools: Option<Vec<ToolDef>>,
+    pub max_tokens: Option<usize>,
+    pub temperature: Option<f32>,
+}
+
+pub struct ChatResponse {
+    pub message: Message,
+    pub usage: TokenUsage,
+    pub finish_reason: FinishReason,
+}
+
+pub struct Message {
+    pub role: String,
+    pub content: String,
+}
+
+pub struct ToolDef {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+pub struct Chunk {
+    pub content: String,
+    pub tool_call: Option<ToolCall>,
+    pub is_final: bool,
+}
+```
+
+**OpenAI Implementation**:
+```rust
+pub struct OpenAiClient {
+    http_client: reqwest::Client,
+    base_url: String,
+    api_key: String,
+    default_model: String,
+}
+
+impl OpenAiClient {
+    pub fn new(base_url: String, api_key: String, default_model: String) -> Self;
+    
+    pub fn from_env() -> Result<Self> {
+        Ok(Self::new(
+            std::env::var("LLM_BASE_URL")?,
+            std::env::var("LLM_API_KEY")?,
+            std::env::var("LLM_AGENT_MODEL")?,
+        ))
+    }
+}
+```
+
+**Files**:
+- `crates/llm/src/lib.rs`
+- `crates/llm/src/client.rs` - LlmClient trait + types
+- `crates/llm/src/openai.rs` - OpenAI compatible implementation
+- `crates/llm/src/streaming.rs` - Streaming SSE support
+- `crates/llm/src/tools.rs` - Tool calling formats
+- `crates/llm/src/error.rs`
+- `crates/llm/Cargo.toml`
+
+**Dependencies**:
+- `reqwest` - HTTP client
+- `async-trait` - Async trait methods
+- `serde` + `serde_json` - Serialization
+
+**Tests**:
+- `crates/llm/tests/client_tests.rs`
+- `crates/llm/tests/openai_tests.rs`
+
+---
+
+### 2. context-store crate
 
 **Purpose**: Unified read/write interface, transparent routing to Redis or S3.
 
@@ -67,7 +167,7 @@ pub struct ArtifactPointer {
 
 ---
 
-### 2. tool-executor crate
+### 3. tool-executor crate
 
 **Purpose**: Tool call execution with permission verification.
 
@@ -107,7 +207,7 @@ pub struct ToolCallRecord {
 
 ---
 
-### 3. agent-runtime crate
+### 4. agent-runtime crate
 
 **Purpose**: Single node complete execution lifecycle.
 
@@ -143,7 +243,7 @@ pub trait LlmClient: Send + Sync {
 
 ---
 
-### 4. executor crate
+### 5. executor crate
 
 **Purpose**: Executor Service entry point, Scheduler + Worker Pool.
 
@@ -194,7 +294,7 @@ pub struct ExecutorConfig {
 ```
 Phase 1: types → dag → db → queue
                             ↓
-Phase 2: context-store → tool-executor → agent-runtime → executor
+Phase 2: llm → context-store → tool-executor → agent-runtime → executor
 ```
 
 **Dependency Chain**:
@@ -205,7 +305,7 @@ executor
        │    └→ db
        ├→ context-store
        │    └→ db
-       └→ llm (trait only)
+       └→ llm ← (shared between planner and agent-runtime)
 ```
 
 ---
@@ -217,16 +317,18 @@ executor
 - `aws-sdk-s3` - S3 client
 - `async-trait` - Async trait methods
 - `tokio` - Async runtime
-- `reqwest` - HTTP client for LLM calls
+- `reqwest` - HTTP client (for llm crate)
+- `tokio-util` - Streaming utilities (for llm streaming)
 
 ---
 
 ## Implementation Order
 
-1. **context-store** - Storage foundation
-2. **tool-executor** - Tool execution + permissions
-3. **agent-runtime** - Single node execution
-4. **executor** - Scheduler + Worker Pool
+1. **llm** - LLM client foundation (used by both planner and agent-runtime)
+2. **context-store** - Storage foundation
+3. **tool-executor** - Tool execution + permissions
+4. **agent-runtime** - Single node execution
+5. **executor** - Scheduler + Worker Pool
 
 ---
 
@@ -234,6 +336,18 @@ executor
 
 ```
 crates/
+├── llm/                      # NEW - Foundation (Phase 2)
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── client.rs
+│   │   ├── openai.rs
+│   │   ├── streaming.rs
+│   │   ├── tools.rs
+│   │   └── error.rs
+│   ├── tests/
+│   │   ├── client_tests.rs
+│   │   └── openai_tests.rs
+│   └── Cargo.toml
 ├── context-store/           # NEW
 │   ├── src/
 │   │   ├── lib.rs
@@ -261,7 +375,6 @@ crates/
 │   ├── src/
 │   │   ├── lib.rs
 │   │   ├── runtime.rs
-│   │   ├── llm.rs
 │   │   ├── prompt.rs
 │   │   └── error.rs
 │   ├── tests/
@@ -280,6 +393,8 @@ crates/
     │   └── crash_recovery.rs
     └── Cargo.toml
 ```
+
+**Note**: `agent-runtime` no longer contains `llm.rs` - LLM client is now in the shared `llm` crate.
 
 ---
 
