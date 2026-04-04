@@ -383,7 +383,7 @@ impl Checkpointer for HybridCheckpointer {
     }
     
     async fn delete(&self, checkpoint_id: CheckpointId) -> Result<()> {
-        let redis_key = format!("checkpoint:{}", checkpoint_id.0);
+        let redis_key = self.redis_key(&checkpoint_id);
         
         // Delete from Redis
         let mut conn = self.redis.clone();
@@ -667,6 +667,54 @@ impl VfsOverlay {
     
     fn get_lock_key(&self, resolved_path: &str) -> String {
         format!("{}:vfs:lock:{}", self.tenant_id, resolved_path)
+    }
+    
+    async fn get_artifact_id(&self, resolved_path: &str) -> Result<ArtifactPointer, VfsError> {
+        // Query vfs_metadata to get artifact pointer
+        let row: Option<(Uuid, String, String, i64, String)> = sqlx::query_as(
+            "SELECT artifact_id, storage, location, size_bytes, content_type FROM vfs_metadata WHERE path = $1",
+        )
+        .bind(resolved_path)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| VfsError::Storage(e.to_string()))?;
+        
+        match row {
+            Some((artifact_id, storage, location, size_bytes, content_type)) => {
+                Ok(ArtifactPointer {
+                    task_id: artifact_id.to_string(),
+                    storage,
+                    location,
+                    size_bytes,
+                    content_type,
+                })
+            }
+            None => Err(VfsError::NotFound(resolved_path.to_string())),
+        }
+    }
+    
+    async fn update_metadata(&self, resolved_path: &str, pointer: &ArtifactPointer) -> Result<(), VfsError> {
+        let artifact_id = Uuid::parse_str(&pointer.task_id)
+            .map_err(|_| VfsError::Storage("Invalid artifact_id".to_string()))?;
+        
+        sqlx::query(
+            r#"
+            INSERT INTO vfs_metadata (run_id, node_id, path, artifact_id, is_directory, modified_at)
+            VALUES ($1, $2, $3, $4, false, NOW())
+            ON CONFLICT (run_id, path) DO UPDATE SET
+                artifact_id = $4,
+                modified_at = NOW()
+            "#,
+        )
+        .bind(self.run_id)
+        .bind(self.node_id)
+        .bind(resolved_path)
+        .bind(artifact_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| VfsError::Storage(e.to_string()))?;
+        
+        Ok(())
     }
 }
 
@@ -1030,7 +1078,7 @@ impl ContextManager {
             .sum()
     }
     
-    async fn compress(&mut self) {
+    async fn compress(&mut self) -> anyhow::Result<()> {
         match &self.compression_strategy {
             CompressionStrategy::KeepLastN(n) => {
                 let to_keep = self.full_history.len().saturating_sub(*n);
@@ -1057,7 +1105,7 @@ impl ContextManager {
                             });
                         }
                         Err(e) => {
-                            tracing::warn!("Summarization failed: {}", e);
+                            anyhow::bail!("Summarization failed: {}", e);
                         }
                     }
                 }
@@ -1071,6 +1119,7 @@ impl ContextManager {
                     .collect();
             }
         }
+        Ok(())
     }
 }
 ```
@@ -1203,32 +1252,35 @@ impl AgentRuntime {
         let mut context_mgr = ContextManager::new(
             node.max_tokens,
             self.config.compression_strategy.clone(),
+            self.summarizer.clone(), // LLM-based summarizer
+            self.db.clone(),         // PostgreSQL pool
+            node.id,                // Current node ID
         );
         
         // Build initial context
         context_mgr.add_message(Message {
             role: "system".into(),
             content: node.system_prompt,
-        });
+        }).await?;
         context_mgr.add_message(Message {
             role: "user".into(),
             content: node.instruction,
-        });
+        }).await?;
         
         // Tool call loop
         let mut tool_call_count = 0u32;
         loop {
             let response = self.llm
-                .chat(context_mgr.get_compressed_context())
+                .chat(context_mgr.get_compressed_context().to_vec())
                 .await?;
             
-            context_mgr.add_message(response.clone());
+            context_mgr.add_message(response.clone()).await?;
             
             match response {
                 Message { role: "assistant", content } if content.starts_with("tool:") => {
                     // Execute tool
                     let result = self.execute_tool(&content).await?;
-                    context_mgr.add_message(result);
+                    context_mgr.add_message(result).await?;
                     tool_call_count += 1;
                     
                     // Create checkpoint periodically
