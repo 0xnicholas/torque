@@ -1,4 +1,5 @@
 use llm::openai::OpenAiClient;
+use llm::LlmClient;
 
 #[tokio::test]
 async fn test_openai_client_initialization() {
