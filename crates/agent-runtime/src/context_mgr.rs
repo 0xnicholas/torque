@@ -18,16 +18,16 @@ pub enum CompressionStrategy {
 }
 
 pub struct ContextManager {
-    max_tokens: usize,
-    warning_threshold: f64,
-    compression_strategy: CompressionStrategy,
+    pub max_tokens: usize,
+    pub warning_threshold: f64,
+    pub compression_strategy: CompressionStrategy,
     summarizer: Option<Box<dyn Summarizer>>,
-    db: sqlx::PgPool,
-    node_id: Uuid,
-    full_history: Vec<Message>,
-    compressed_context: Vec<Message>,
-    summary_chain: Vec<Summary>,
-    intermediate_results: Vec<ArtifactPointer>,
+    pub db: sqlx::PgPool,
+    pub node_id: Uuid,
+    pub full_history: Vec<Message>,
+    pub compressed_context: Vec<Message>,
+    pub summary_chain: Vec<Summary>,
+    pub intermediate_results: Vec<ArtifactPointer>,
 }
 
 #[async_trait::async_trait]
@@ -83,7 +83,7 @@ impl ContextManager {
         Ok(())
     }
 
-    async fn persist_to_logs(&self) -> anyhow::Result<()> {
+    pub async fn persist_to_logs(&self) -> anyhow::Result<()> {
         let logs_json = serde_json::json!({
             "type": "context_snapshot",
             "full_history": self.full_history,
@@ -115,7 +115,7 @@ impl ContextManager {
         self.full_history.iter().map(|m| m.content.len() / 4).sum()
     }
 
-    async fn compress(&mut self) -> anyhow::Result<()> {
+    pub async fn compress(&mut self) -> anyhow::Result<()> {
         match &self.compression_strategy {
             CompressionStrategy::KeepLastN(n) => {
                 let to_keep = self.full_history.len().saturating_sub(*n);
