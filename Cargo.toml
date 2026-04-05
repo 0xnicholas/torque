@@ -10,6 +10,7 @@ members = [
     "crates/tool-executor",
     "crates/agent-runtime",
     "crates/executor",
+    "crates/checkpointer",
 ]
 
 [workspace.package]
