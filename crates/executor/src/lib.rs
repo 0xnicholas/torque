@@ -11,24 +11,27 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use db::PgPool;
 use redis::aio::ConnectionManager;
+use checkpointer::Checkpointer;
 
 pub struct ExecutorConfig {
     pub executor_id: String,
     pub worker_pool_size: usize,
     pub lock_timeout_secs: u64,
     pub crash_recovery_interval_secs: u64,
+    pub tenant_id: uuid::Uuid,
 }
 
-pub struct Executor {
+pub struct Executor<C: Checkpointer> {
     config: ExecutorConfig,
     pool: PgPool,
     redis: Option<ConnectionManager>,
     scheduler: Scheduler,
     worker_semaphore: Arc<Semaphore>,
+    checkpointer: Option<Arc<C>>,
 }
 
-impl Executor {
-    pub async fn new(config: ExecutorConfig) -> Result<Self, ExecutorError> {
+impl<C: Checkpointer + 'static> Executor<C> {
+    pub async fn new(config: ExecutorConfig, checkpointer: Option<Arc<C>>) -> Result<Self, ExecutorError> {
         let database_url = std::env::var("DATABASE_URL")
             .map_err(|_| ExecutorError::Config("DATABASE_URL not set".to_string()))?;
         
@@ -61,6 +64,7 @@ impl Executor {
             redis,
             scheduler,
             worker_semaphore: Arc::new(Semaphore::new(worker_pool_size)),
+            checkpointer,
         })
     }
     
@@ -95,10 +99,12 @@ impl Executor {
             }
         };
         
+        let checkpointer_ref = self.checkpointer.as_ref().map(|c| c.as_ref() as &dyn Checkpointer);
+        
         for entry in stale_entries {
             tracing::info!(entry_id = %entry.id, "Found stale locked entry");
             
-            let recovered = match crash_recovery::recover_node_if_needed(&self.pool, entry.node_id, entry.id).await {
+            let recovered = match crash_recovery::recover_node_if_needed(&self.pool, entry.node_id, entry.id, checkpointer_ref).await {
                 Ok(recovered) => recovered,
                 Err(e) => {
                     tracing::error!("Failed to recover node {}: {}", entry.node_id, e);

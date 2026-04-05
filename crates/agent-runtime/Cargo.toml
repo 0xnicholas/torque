@@ -9,6 +9,7 @@ db = { path = "../db" }
 llm = { path = "../llm" }
 context-store = { path = "../context-store" }
 tool-executor = { path = "../tool-executor" }
+checkpointer = { path = "../checkpointer" }
 async-trait = "0.1"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
