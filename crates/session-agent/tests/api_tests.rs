@@ -1,10 +1,12 @@
 mod common;
 
-use common::{setup_test_db, test_api_key};
+use common::{setup_test_db_or_skip, test_api_key};
 
 #[tokio::test]
 async fn test_create_session() {
-    let db = setup_test_db().await;
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
     
     let api_key = test_api_key();
     let session = session_agent::db::sessions::create(db.pool(), &api_key)
@@ -17,7 +19,9 @@ async fn test_create_session() {
 
 #[tokio::test]
 async fn test_create_and_get_message() {
-    let db = setup_test_db().await;
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
     let api_key = test_api_key();
     
     let session = session_agent::db::sessions::create(db.pool(), &api_key)
@@ -46,7 +50,9 @@ async fn test_create_and_get_message() {
 
 #[tokio::test]
 async fn test_session_status_transitions() {
-    let db = setup_test_db().await;
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
     let api_key = test_api_key();
     
     let session = session_agent::db::sessions::create(db.pool(), &api_key)
@@ -72,7 +78,9 @@ async fn test_session_status_transitions() {
 
 #[tokio::test]
 async fn test_api_key_isolation() {
-    let db = setup_test_db().await;
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
     
     let api_key_1 = "key-1".to_string();
     let api_key_2 = "key-2".to_string();
