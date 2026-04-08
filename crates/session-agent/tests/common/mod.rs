@@ -1,6 +1,9 @@
 use session_agent::db::Database;
 use sqlx::postgres::PgPoolOptions;
 
+#[allow(dead_code)]
+pub mod fake_llm;
+
 pub async fn setup_test_db_or_skip() -> Option<Database> {
     let database_url = std::env::var("TEST_DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/session_agent_test".to_string());
@@ -45,6 +48,7 @@ pub async fn setup_test_db_or_skip() -> Option<Database> {
     Some(Database::new(pool))
 }
 
+#[allow(dead_code)]
 pub fn test_api_key() -> String {
     "test-api-key-12345".to_string()
 }
