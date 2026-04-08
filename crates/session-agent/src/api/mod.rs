@@ -15,7 +15,7 @@ pub fn router(
     use crate::api::middleware::auth_middleware;
 
     Router::new()
-        .route("/sessions", post(sessions::create))
+        .route("/sessions", post(sessions::create).get(sessions::list))
         .route("/sessions/:id", get(sessions::get))
         .route("/sessions/:id/messages", get(messages::list))
         .route("/sessions/:id/chat", post(messages::chat))

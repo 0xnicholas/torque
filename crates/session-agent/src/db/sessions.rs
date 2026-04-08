@@ -34,6 +34,29 @@ pub async fn get_by_id(
     Ok(session)
 }
 
+pub async fn list_by_api_key(
+    pool: &PgPool,
+    api_key: &str,
+    limit: i64,
+    offset: i64,
+) -> anyhow::Result<Vec<Session>> {
+    let sessions = sqlx::query_as::<_, Session>(
+        r#"
+        SELECT * FROM sessions
+        WHERE api_key = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(api_key)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(sessions)
+}
+
 pub async fn update_status(
     pool: &PgPool,
     id: Uuid,

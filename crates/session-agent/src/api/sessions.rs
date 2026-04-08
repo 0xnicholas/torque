@@ -28,6 +28,20 @@ pub struct GetSessionResponse {
     pub updated_at: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ListSessionsResponse {
+    pub sessions: Vec<GetSessionResponse>,
+}
+
+fn to_get_session_response(session: crate::models::Session) -> GetSessionResponse {
+    GetSessionResponse {
+        id: session.id,
+        status: session.status,
+        created_at: session.created_at.to_rfc3339(),
+        updated_at: session.updated_at.to_rfc3339(),
+    }
+}
+
 pub async fn create(
     State((db, _)): State<(Database, Arc<OpenAiClient>)>,
     request: axum::extract::Request,
@@ -43,6 +57,21 @@ pub async fn create(
         status: session.status,
         created_at: session.created_at.to_rfc3339(),
     }))
+}
+
+pub async fn list(
+    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    request: axum::extract::Request,
+) -> Result<Json<ListSessionsResponse>, StatusCode> {
+    let api_key = extract_api_key(&request).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let sessions = crate::db::sessions::list_by_api_key(db.pool(), &api_key, 50, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let sessions = sessions.into_iter().map(to_get_session_response).collect();
+
+    Ok(Json(ListSessionsResponse { sessions }))
 }
 
 pub async fn get(
@@ -61,10 +90,5 @@ pub async fn get(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    Ok(Json(GetSessionResponse {
-        id: session.id,
-        status: session.status,
-        created_at: session.created_at.to_rfc3339(),
-        updated_at: session.updated_at.to_rfc3339(),
-    }))
+    Ok(Json(to_get_session_response(session)))
 }

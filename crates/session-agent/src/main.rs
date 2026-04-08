@@ -1,16 +1,10 @@
-use axum::Router;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use std::env;
-use tracing::{info, error};
+use tracing::info;
 
-mod agent;
-mod api;
-mod db;
-mod models;
-mod tools;
-
-use db::Database;
+use session_agent::app;
+use session_agent::db::Database;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,12 +17,6 @@ async fn main() -> anyhow::Result<()> {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/session_agent".to_string());
     
-    let llm_api_key = env::var("LLM_API_KEY")
-        .unwrap_or_else(|_| "sk-test-key".to_string());
-    
-    let llm_model = env::var("LLM_MODEL")
-        .unwrap_or_else(|_| "gpt-4o-mini".to_string());
-
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 
@@ -48,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Initializing LLM client...");
     let llm = Arc::new(llm::OpenAiClient::from_env()?);
 
-    let app = api::router(database, llm);
+    let app = app::build_app(database, llm);
 
     info!("Listening on {}", bind_addr);
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
