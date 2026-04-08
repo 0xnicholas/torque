@@ -83,7 +83,10 @@ pub async fn chat(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    if !session.can_receive_message() {
+    let marked_running = crate::db::sessions::try_mark_running(db.pool(), session.id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !marked_running {
         return Err(StatusCode::CONFLICT);
     }
 
@@ -95,15 +98,6 @@ pub async fn chat(
     let user_message = Message::user(session_id, req.message);
 
     let (tx, rx) = mpsc::channel::<StreamEvent>(100);
-
-    crate::db::sessions::update_status(
-        db.pool(),
-        session.id,
-        SessionStatus::Running,
-        None,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let runner = AgentRunner::new(llm.clone(), db.clone(), tools);
     let session_clone = session.clone();

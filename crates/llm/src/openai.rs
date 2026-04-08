@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 
 use super::client::{ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage};
 use super::error::{LlmError, Result};
@@ -68,6 +69,16 @@ impl OpenAiClient {
         }
 
         body
+    }
+
+    fn parse_finish_reason(value: Option<&str>) -> FinishReason {
+        match value {
+            Some("stop") => FinishReason::Stop,
+            Some("length") => FinishReason::Length,
+            Some("content_filter") => FinishReason::ContentFilter,
+            Some("tool_calls") => FinishReason::ToolCalls,
+            _ => FinishReason::Stop,
+        }
     }
 }
 
@@ -162,13 +173,7 @@ impl LlmClient for OpenAiClient {
             return Err(LlmError::InvalidResponse("No choices in response".to_string()));
         };
 
-        let finish_reason = match finish_reason_str.as_str() {
-            "stop" => FinishReason::Stop,
-            "length" => FinishReason::Length,
-            "content_filter" => FinishReason::ContentFilter,
-            "tool_calls" => FinishReason::ToolCalls,
-            _ => FinishReason::Stop,
-        };
+        let finish_reason = Self::parse_finish_reason(Some(finish_reason_str.as_str()));
 
         Ok(ChatResponse {
             message,
@@ -218,7 +223,16 @@ impl LlmClient for OpenAiClient {
         let text = String::from_utf8_lossy(&bytes);
         let lines: Vec<&str> = text.lines().collect();
 
+        #[derive(Default, Clone)]
+        struct ToolCallAccumulator {
+            id: String,
+            name: String,
+            arguments: String,
+        }
+
         let mut full_content = String::new();
+        let mut finish_reason = FinishReason::Stop;
+        let mut tool_calls_by_index: BTreeMap<usize, ToolCallAccumulator> = BTreeMap::new();
 
         for line in lines {
             if line.starts_with("data: ") {
@@ -249,9 +263,10 @@ impl LlmClient for OpenAiClient {
 
                 #[derive(Deserialize)]
                 struct SSEtoolCall {
+                    index: Option<usize>,
                     id: Option<String>,
                     #[serde(rename = "function")]
-                    function: SSEFunction,
+                    function: Option<SSEFunction>,
                 }
 
                 #[derive(Deserialize)]
@@ -268,31 +283,50 @@ impl LlmClient for OpenAiClient {
                                 callback(Chunk::content(content));
                             }
                             if let Some(tool_calls) = choice.delta.tool_calls {
-                                for tc in tool_calls {
-                                    if let (Some(id), Some(name), Some(arguments)) =
-                                        (tc.id, tc.function.name, tc.function.arguments)
-                                    {
-                                        let args: serde_json::Value =
-                                            serde_json::from_str(&arguments)
-                                                .unwrap_or(serde_json::Value::Object(
-                                                    Default::default(),
-                                                ));
-                                        callback(Chunk::with_tool_call(ToolCall {
-                                            id,
-                                            name,
-                                            arguments: args,
-                                        }));
+                                for (fallback_index, tc) in tool_calls.into_iter().enumerate() {
+                                    let index = tc.index.unwrap_or(fallback_index);
+                                    let acc = tool_calls_by_index.entry(index).or_default();
+
+                                    if let Some(id) = tc.id {
+                                        acc.id = id;
+                                    }
+                                    if let Some(function) = tc.function {
+                                        if let Some(name) = function.name {
+                                            acc.name.push_str(&name);
+                                        }
+                                        if let Some(arguments) = function.arguments {
+                                            acc.arguments.push_str(&arguments);
+                                        }
                                     }
                                 }
                             }
                             if choice.finish_reason.is_some() {
-                                callback(Chunk::final_marker());
+                                finish_reason =
+                                    Self::parse_finish_reason(choice.finish_reason.as_deref());
                             }
                         }
                     }
                     Err(_) => {}
                 }
             }
+        }
+
+        for (_, acc) in tool_calls_by_index {
+            if acc.name.is_empty() {
+                continue;
+            }
+            let arguments = serde_json::from_str(&acc.arguments)
+                .unwrap_or(serde_json::Value::Object(Default::default()));
+            let id = if acc.id.is_empty() {
+                format!("tool-call-{}", acc.name)
+            } else {
+                acc.id
+            };
+            callback(Chunk::with_tool_call(ToolCall {
+                id,
+                name: acc.name,
+                arguments,
+            }));
         }
 
         Ok(ChatResponse {
@@ -302,7 +336,7 @@ impl LlmClient for OpenAiClient {
                 completion_tokens: 0,
                 total_tokens: 0,
             },
-            finish_reason: FinishReason::Stop,
+            finish_reason,
         })
     }
 

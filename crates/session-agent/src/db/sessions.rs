@@ -78,3 +78,23 @@ pub async fn update_status(
 
     Ok(())
 }
+
+pub async fn try_mark_running(
+    pool: &PgPool,
+    id: Uuid,
+) -> anyhow::Result<bool> {
+    let updated_rows = sqlx::query(
+        r#"
+        UPDATE sessions
+        SET status = 'running', error_message = NULL, updated_at = NOW()
+        WHERE id = $1
+          AND status IN ('idle', 'completed')
+        "#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(updated_rows == 1)
+}

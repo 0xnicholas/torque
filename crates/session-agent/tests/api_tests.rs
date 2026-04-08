@@ -100,3 +100,24 @@ async fn test_api_key_isolation() {
     assert_eq!(sessions_1.len(), 1);
     assert_eq!(sessions_1[0].id, session_1.id);
 }
+
+#[tokio::test]
+async fn test_try_mark_running_is_atomic_gate() {
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
+
+    let session = session_agent::db::sessions::create(db.pool(), "key-1")
+        .await
+        .expect("Failed to create session");
+
+    let first = session_agent::db::sessions::try_mark_running(db.pool(), session.id)
+        .await
+        .expect("Failed to mark running first time");
+    let second = session_agent::db::sessions::try_mark_running(db.pool(), session.id)
+        .await
+        .expect("Failed to mark running second time");
+
+    assert!(first);
+    assert!(!second);
+}
