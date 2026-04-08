@@ -4,9 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
@@ -17,6 +18,9 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+subtle = "2"
 
 # Internal dependencies
 llm = { path = "../llm" }
