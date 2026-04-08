@@ -253,16 +253,60 @@ Dynamic specialists should be activated through policy-governed selection, not t
 These concepts should remain distinct:
 
 - `Role`: collaboration responsibility slot
-- `Capability`: ability contract
+- `Capability Profile`: harness-native reusable ability package
 - `AgentDefinition`: execution implementation template
 - `MemberInstance`: runtime member in a `TeamInstance`
 
 Recommended relation:
 
 `Role`
--> references `Capability`
+-> references `Capability Profile`
 -> resolves candidate `AgentDefinition`s
 -> creates runtime `MemberInstance`
+
+### 5.5.1 Tools, Routines, Capability Profiles
+
+The recommended layering inside Torque Harness is:
+
+- `Tool`
+  the lowest-level executable primitive
+- `Routine`
+  a stable execution pattern built from tools
+- `Capability Profile`
+  a reusable harness-native ability package that wraps:
+  - routines
+  - built-in tools
+  - input/output contract
+  - quality expectations
+  - risk and execution policy
+
+This means the team layer should not treat "capability" as just:
+
+- a loose abstract label
+- a raw tool list
+- a direct alias for one agent implementation
+
+Instead, the preferred center is:
+
+`Role -> Capability Profile -> AgentDefinition -> MemberInstance`
+
+### 5.5.2 Core vs Dynamic Capability Binding
+
+Core team members should bind primarily to **core capability profiles**.
+
+Dynamic extension should happen through **capability selectors** that resolve additional capability profiles within governance boundaries.
+
+Recommended pattern:
+
+- `core_capability_profiles[]`
+  stable, identity-defining team capabilities
+- `capability_selectors[]`
+  policy-governed runtime expansion points
+
+This preserves both:
+
+- stable team identity
+- controlled elasticity
 
 ### 5.6 Authoring Guidance
 
@@ -278,6 +322,22 @@ Use `role_based` team definitions when:
 - stable specialist slots matter
 - policy needs to be attached to named roles
 - the team should be inspectable by humans as a durable template
+
+### 5.7 Team and Capability Binding
+
+The default binding style should be mixed:
+
+- core roles bind directly to `capability profiles`
+- dynamic or edge roles may additionally use `capability selectors`
+
+This avoids two failure modes:
+
+- making the team too rigid
+- making the team dissolve into a fully dynamic agent marketplace
+
+Important constraint:
+
+selectors must remain policy-governed. They should not allow unrestricted capability discovery outside the team's governance boundary.
 
 ---
 
