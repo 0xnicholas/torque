@@ -37,6 +37,12 @@ impl<C: LlmClient> AgentRunner<C> {
         user_message: &Message,
         tx: mpsc::Sender<StreamEvent>,
     ) -> anyhow::Result<Message> {
+        let _ = tx
+            .send(StreamEvent::Start {
+                session_id: session.id,
+            })
+            .await;
+
         let _user_msg = crate::db::messages::create(self.db.pool(), user_message).await?;
 
         let history = crate::db::messages::get_recent_by_session(

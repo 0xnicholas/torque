@@ -96,23 +96,46 @@ pub async fn chat(
 
     let (tx, rx) = mpsc::channel::<StreamEvent>(100);
 
+    crate::db::sessions::update_status(
+        db.pool(),
+        session.id,
+        SessionStatus::Running,
+        None,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let runner = AgentRunner::new(llm.clone(), db.clone(), tools);
     let session_clone = session.clone();
     let user_message_clone = user_message.clone();
 
     tokio::spawn(async move {
-        if let Err(e) = runner.run(&session_clone, &user_message_clone, tx.clone()).await {
-            let _ = tx.send(StreamEvent::Error {
-                code: "AGENT_ERROR".to_string(),
-                message: e.to_string(),
-            }).await;
+        match runner.run(&session_clone, &user_message_clone, tx.clone()).await {
+            Ok(_) => {
+                let _ = crate::db::sessions::update_status(
+                    db.pool(),
+                    session_clone.id,
+                    SessionStatus::Completed,
+                    None,
+                )
+                .await;
+            }
+            Err(e) => {
+                let _ = tx
+                    .send(StreamEvent::Error {
+                        code: "AGENT_ERROR".to_string(),
+                        message: e.to_string(),
+                    })
+                    .await;
 
-            let _ = crate::db::sessions::update_status(
-                db.pool(),
-                session_clone.id,
-                SessionStatus::Error,
-                Some(&e.to_string()),
-            ).await;
+                let _ = crate::db::sessions::update_status(
+                    db.pool(),
+                    session_clone.id,
+                    SessionStatus::Error,
+                    Some(&e.to_string()),
+                )
+                .await;
+            }
         }
     });
 
