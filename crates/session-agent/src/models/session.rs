@@ -24,18 +24,6 @@ pub enum SessionStatus {
 }
 
 impl Session {
-    pub fn new(api_key: String) -> Self {
-        let now = Utc::now();
-        Self {
-            id: Uuid::new_v4(),
-            api_key,
-            status: SessionStatus::Idle,
-            created_at: now,
-            updated_at: now,
-            error_message: None,
-        }
-    }
-
     pub fn can_receive_message(&self) -> bool {
         matches!(self.status, SessionStatus::Idle | SessionStatus::Completed)
     }

@@ -8,6 +8,7 @@ use axum::{
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
@@ -44,7 +45,7 @@ pub async fn list(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    if session.api_key != api_key {
+    if !bool::from(session.api_key.as_bytes().ct_eq(api_key.as_bytes())) {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -78,7 +79,7 @@ pub async fn chat(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    if session.api_key != api_key {
+    if !bool::from(session.api_key.as_bytes().ct_eq(api_key.as_bytes())) {
         return Err(StatusCode::FORBIDDEN);
     }
 

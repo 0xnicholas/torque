@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::models::{Message, Session, SessionStatus};
+use crate::models::{Message, Session};
 use crate::tools::ToolRegistry;
 use crate::agent::{context::ContextManager, stream::StreamEvent};
 use llm::{Chunk, LlmClient, Message as LlmMessage, FinishReason};
@@ -37,14 +37,6 @@ impl<C: LlmClient> AgentRunner<C> {
         user_message: &Message,
         tx: mpsc::Sender<StreamEvent>,
     ) -> anyhow::Result<Message> {
-        crate::db::sessions::update_status(
-            self.db.pool(),
-            session.id,
-            SessionStatus::Running,
-            None,
-        )
-        .await?;
-
         let _user_msg = crate::db::messages::create(self.db.pool(), user_message).await?;
 
         let history = crate::db::messages::get_recent_by_session(
@@ -80,14 +72,6 @@ impl<C: LlmClient> AgentRunner<C> {
         );
 
         let saved_msg = crate::db::messages::create(self.db.pool(), &assistant_msg).await?;
-
-        crate::db::sessions::update_status(
-            self.db.pool(),
-            session.id,
-            SessionStatus::Completed,
-            None,
-        )
-        .await?;
 
         let _ = tx.send(StreamEvent::Done {
             message_id: saved_msg.id,

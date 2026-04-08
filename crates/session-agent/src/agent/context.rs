@@ -40,31 +40,11 @@ impl ContextManager {
         }
     }
 
-    pub fn with_window_size(mut self, size: usize) -> Self {
-        self.window_size = size;
-        self
-    }
-
     pub fn build_context(&self, history: Vec<Message>) -> ContextWindow {
         let start = history.len().saturating_sub(self.window_size);
         let window_messages = history[start..].to_vec();
 
         ContextWindow::new(window_messages, self.window_size)
-    }
-
-    pub fn add_system_prompt(&self, mut window: ContextWindow, prompt: &str) -> ContextWindow {
-        let system_msg = Message {
-            id: uuid::Uuid::new_v4(),
-            session_id: uuid::Uuid::nil(),
-            role: MessageRole::System,
-            content: prompt.to_string(),
-            tool_calls: None,
-            artifacts: None,
-            created_at: chrono::Utc::now(),
-        };
-
-        window.messages.insert(0, system_msg);
-        window
     }
 }
 

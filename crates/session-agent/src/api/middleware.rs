@@ -27,10 +27,6 @@ pub async fn auth_middleware(
     }
 }
 
-pub fn auth_layer() -> impl Clone + Send + 'static {
-    axum::middleware::from_fn::<_, axum::body::Body>(auth_middleware)
-}
-
 pub fn extract_api_key(request: &Request) -> Option<String> {
     request.extensions().get::<String>().cloned()
 }

@@ -1,4 +1,4 @@
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 
 pub mod messages;
 pub mod sessions;
@@ -15,9 +15,5 @@ impl Database {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
-    }
-
-    pub async fn begin(&self) -> anyhow::Result<Transaction<'_, Postgres>> {
-        Ok(self.pool.begin().await?)
     }
 }
