@@ -1,4 +1,4 @@
-use axum::body::Body;
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use llm::OpenAiClient;
 use serde_json::json;
@@ -122,4 +122,69 @@ async fn chat_route_is_wired_and_protected_by_auth() {
         .expect("app should respond");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn metrics_route_is_wired_and_protected_by_auth() {
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .expect("lazy pool should build");
+    let db = Database::new(pool);
+    let llm = Arc::new(OpenAiClient::new(
+        "http://127.0.0.1:1/v1".to_string(),
+        "test-key".to_string(),
+        "gpt-4o-mini".to_string(),
+    ));
+
+    let app = session_agent::app::build_app(db, llm);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/metrics")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn metrics_route_returns_session_gate_contention_counter() {
+    session_agent::metrics::reset_session_gate_contention_total_for_tests();
+    let pool = PgPoolOptions::new()
+        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .expect("lazy pool should build");
+    let db = Database::new(pool);
+    let llm = Arc::new(OpenAiClient::new(
+        "http://127.0.0.1:1/v1".to_string(),
+        "test-key".to_string(),
+        "gpt-4o-mini".to_string(),
+    ));
+
+    let app = session_agent::app::build_app(db, llm);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/metrics")
+                .header("x-api-key", "test-api-key")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("metrics body should be readable");
+    let json: serde_json::Value =
+        serde_json::from_slice(&body).expect("metrics should be valid json");
+
+    assert_eq!(json["session_gate_contention_total"], 0);
 }

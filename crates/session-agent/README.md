@@ -45,6 +45,7 @@ The service runs SQLx migrations automatically at startup.
 - `GET /sessions/{id}`
 - `GET /sessions/{id}/messages`
 - `POST /sessions/{id}/chat` (SSE)
+- `GET /metrics`
 
 All endpoints require header:
 
@@ -113,11 +114,38 @@ On failure:
 data: {"event":"error","code":"AGENT_ERROR","message":"..."}
 ```
 
+Terminal event contract:
+
+- every `/chat` stream ends with exactly one terminal event: `done` or `error`
+- terminal event is always the last event before stream close
+- clients should treat stream close without terminal event as transport failure and retry/reconcile
+
+Concurrent chat contract:
+
+- per session, only one `/chat` request may run at a time
+- competing request receives HTTP `409 Conflict`
+- server increments `session_gate_contention_total` metric for each gate conflict
+
 ### 4. Read Session Messages
 
 ```bash
 curl -s "$BASE_URL/sessions/$SESSION_ID/messages" \
   -H "X-API-Key: $API_KEY"
+```
+
+### 5. Read Runtime Metrics
+
+```bash
+curl -s "$BASE_URL/metrics" \
+  -H "X-API-Key: $API_KEY"
+```
+
+Example response:
+
+```json
+{
+  "session_gate_contention_total": 0
+}
 ```
 
 ## Notes

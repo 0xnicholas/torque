@@ -87,6 +87,12 @@ pub async fn chat(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if !marked_running {
+        let contention_total = crate::metrics::increment_session_gate_contention_total();
+        tracing::warn!(
+            session_id = %session.id,
+            contention_total,
+            "session chat gate contention"
+        );
         return Err(StatusCode::CONFLICT);
     }
 
