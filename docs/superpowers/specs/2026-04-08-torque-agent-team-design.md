@@ -320,6 +320,7 @@ Suggested minimum fields:
 - `definition_mode`
 - `supervisor_spec`
 - `member_specs[]`
+- `dynamic_selectors[]`
 - `available_modes[]`
 - `leadership_policy`
 - `delegation_policy`
@@ -344,10 +345,14 @@ team_definition:
     capability_refs: []
     policy_overrides: {}
 
+  dynamic_selectors:
+    - selector_id: string
+      capability_refs: []
+      selection_policy: {}
+
   member_specs:
     - member_id: string
       role_ref: string | optional
-      kind: core | dynamic
       default_agent_definition_ref: string | optional
       candidate_agent_definition_refs: []
       capability_refs: []
@@ -374,13 +379,24 @@ Compilation should be deterministic and inspection-friendly.
 Recommended lowering:
 
 - `supervisor` -> `supervisor_spec`
-- each `core_member` -> one `member_spec` with `kind = core`
-- each `dynamic_selector` -> one or more `member_spec` templates with `kind = dynamic`
+- each `core_member` -> one canonical `member_spec`
+- each `dynamic_selector` -> one canonical `dynamic_selector`
 - `available_modes` -> `available_modes`
 - `policies.*` -> matching canonical policy blocks
 - member `overrides` -> `member_spec.policy_overrides` using a strict whitelist
 
 This compilation step should be visible to operators and debuggers. The compiled `TeamDefinition` should be inspectable even when the authored form was terse.
+
+The canonical model should distinguish:
+
+- `member_specs[]`
+  stable member definitions only
+- `dynamic_selectors[]`
+  governance objects that describe which capabilities may be activated dynamically and under what constraints
+
+`dynamic_selector` should not be flattened away into a fake member object, because it carries distinct governance semantics.
+
+Activated dynamic members belong to runtime team state, not to `TeamDefinition`.
 
 ### 5.3 Team Leader
 
@@ -411,9 +427,11 @@ The recommended runtime composition is:
 
 - one `supervisor`
 - zero or more `core members`
-- zero or more `dynamic specialists`
+- zero or more activated `dynamic specialists`
 
 Dynamic specialists should be activated through policy-governed selection, not through unconstrained free spawning.
+
+`TeamDefinition` may also be valid with no `core members` and no predeclared dynamic specialists, as long as the supervisor exists. This supports a supervisor-only orchestration shell that may later expand through governed selectors or remain single-agent.
 
 ### 5.5 Role, Capability, AgentDefinition, MemberInstance
 
@@ -470,6 +488,12 @@ Recommended pattern:
 - `capability_selectors[]`
   policy-governed runtime expansion points
 
+At the definition layer:
+
+- core member definitions live in `member_specs[]`
+- dynamic expansion rules live in `dynamic_selectors[]`
+- activated dynamic members appear only in runtime `TeamInstance` state
+
 This preserves both:
 
 - stable team identity
@@ -509,7 +533,8 @@ In other words:
 The default binding style should be mixed:
 
 - core members or core roles bind directly to `capability profiles`
-- dynamic or edge members may additionally use `capability selectors`
+- dynamic expansion is governed through `dynamic_selectors[]`
+- activated dynamic members are runtime objects resolved through those selectors
 
 This avoids two failure modes:
 
@@ -528,7 +553,9 @@ Structural constraints:
 
 - `team.id`, `name`, `mode`, and `supervisor` are required
 - `mode = lightweight` forbids full role-based constructs such as explicit role inheritance trees
-- `core_members` may be empty only if `dynamic_selectors` is non-empty
+- `core_members` may be empty
+- `dynamic_selectors` may also be empty
+- a supervisor-only `lightweight` team is valid
 - `available_modes` must be non-empty and must be a subset of supported modes
 
 Binding constraints:
@@ -544,7 +571,6 @@ Policy constraints:
 - member `overrides` are restricted to a small whitelist such as:
   - `can_delegate`
   - `can_be_lead`
-  - `visibility_scope`
 - member overrides must not replace team-wide approval, resource, or failure policy
 
 Safety constraints:
@@ -559,8 +585,219 @@ Every valid `lightweight` definition must compile into a canonical form that una
 
 - who is the supervisor
 - which members are stable core members
-- which dynamic members may be activated
+- which selectors may activate dynamic members
 - what governance policy is in effect
+
+### 5.9 Capability Registry and Selector Resolution
+
+`dynamic_selectors[]` should be treated as governed runtime expansion points, not as static member declarations.
+
+Their purpose is to define:
+
+- which `Capability Profile`s are eligible for dynamic expansion
+- which governance rules constrain that expansion
+- which approvals, resource limits, or risk checks apply before activation
+
+Recommended adjacent module split:
+
+- `TeamDefinition`
+  declares `dynamic_selectors[]`
+- `Capability Registry`
+  provides the catalog of capability profiles and their compatible `AgentDefinition` implementations
+- `Selector Resolver`
+  performs activation-time candidate resolution under current team and task constraints
+- `Supervisor`
+  makes the final team-local activation choice
+- `TeamInstance`
+  records the activated runtime member after selection
+
+Important boundary:
+
+`dynamic_selector` should bind to `Capability Profile`, not directly to arbitrary `AgentDefinition`.
+
+### 5.9.1 Activation-Time Resolution
+
+Selector resolution should happen when the team is actually attempting dynamic activation.
+
+It should not be fully resolved:
+
+- at `TeamDefinition` compile time
+- or once at `TeamInstance` creation time
+
+because selector use depends on current execution context, including:
+
+- the active `TeamTask`
+- current team policy state
+- resource and concurrency limits
+- approval state
+- task-local intent and constraints
+
+This preserves selector semantics as a governed runtime expansion mechanism rather than a precomputed member list.
+
+### 5.9.2 Selector Resolver Responsibilities
+
+`Selector Resolver` should be a distinct runtime module rather than implicit supervisor logic.
+
+Recommended inputs include:
+
+- `team_instance_id`
+- `team_task_id`
+- `selector_id`
+- task intent or goal slice
+- explicit execution constraints
+- optional mode hint
+- current approval and resource context
+
+Recommended responsibilities:
+
+- load the referenced selector definition
+- validate selector use against team policy
+- check approval and resource preconditions
+- query the capability registry
+- resolve compatible candidate `AgentDefinition`s for allowed capability profiles
+- rank or order candidates with concise rationale
+- return candidates to the supervisor
+
+### 5.9.3 Selector Resolver Output
+
+The resolver should return an ordered candidate set, not a final activation decision and not a runtime member object.
+
+Each candidate should conceptually include:
+
+- `capability_profile_ref`
+- `agent_definition_ref`
+- `selection_rationale`
+- `policy_check_summary`
+- `approval_requirement`
+- `resource_estimate`
+
+This preserves team governance:
+
+- resolver evaluates and filters
+- supervisor decides
+- runtime creates the actual dynamic member only after supervisor choice
+
+### 5.9.4 Hard Boundaries
+
+The following constraints should remain explicit:
+
+- `dynamic_selector` does not directly choose arbitrary `AgentDefinition`s
+- selector-bound dynamic activation must go through `Selector Resolver`
+- `Selector Resolver` does not create runtime members
+- activated dynamic members appear only after supervisor selection and runtime instantiation
+
+### 5.10 Approval as a Team Governance Contract
+
+Within `Team`, approval should be modeled first as a governance decision point.
+
+Runtime waiting, pausing, and resuming are execution consequences of that decision, not the definition of approval itself.
+
+The approval layer should answer:
+
+- what actions require approval
+- who may raise an approval need
+- who may resolve approval locally
+- which cases require external approval
+- what happens on approval or rejection
+
+### 5.10.1 Approval Sources
+
+Approval demand may originate from multiple sources, including:
+
+- supervisor judgment
+- member execution signaling approval need
+- selector resolution marking a candidate as approval-gated
+- capability-level risk policy
+- operation-level runtime signals such as privileged tools, external side effects, or high-cost actions
+
+These are approval signals, not yet the final team governance record.
+
+### 5.10.2 Ownership Model
+
+The ownership model should remain supervisor-centered:
+
+- non-supervisor modules may emit approval-needed signals
+- supervisor evaluates them in team context
+- supervisor creates or confirms the team-level approval action
+- runtime persists `ApprovalRequest` when durable waiting is required
+
+This preserves the intended split:
+
+- members and supporting modules may detect risk
+- supervisor owns team-level governance
+- runtime owns the durable waiting mechanism
+
+### 5.10.3 Merge Rule
+
+Approval requirements should merge by **most restrictive applicable rule wins**.
+
+Relevant sources may include:
+
+- team-level `approval_policy`
+- selector-level policy
+- capability-level risk policy
+- operation-level runtime signal
+
+Recommended semantics:
+
+- if any applicable source requires approval, the action is not approval-free
+- if any applicable source requires external approval, local supervisor approval is insufficient
+- local supervisor approval is valid only when all applicable sources allow local resolution
+
+Approval should therefore not be modeled as simple override precedence.
+
+### 5.10.4 Approval Outcome Classes
+
+At the team level, approval should normalize into a small set of outcome classes:
+
+- `no_approval_required`
+- `supervisor_local_approval`
+- `external_approval_required`
+
+It should also preserve a structured `reason_set[]`, for example:
+
+- `selector_policy`
+- `capability_risk_policy`
+- `tool_side_effect`
+- `member_requested`
+- `cost_threshold_exceeded`
+
+This supports auditability, replay, and operator understanding.
+
+### 5.10.5 Runtime Relationship
+
+Runtime `ApprovalRequest` should be treated as the durable execution object for a pending approval gate.
+
+It is not the source of governance policy.
+
+Recommended relationship:
+
+- governance layers determine whether approval is required
+- supervisor confirms the team-level approval action
+- runtime creates `ApprovalRequest`
+- `TeamInstance` or `TeamTask` enters `WAITING_APPROVAL`
+- approval resolution resumes the appropriate team path
+
+### 5.10.6 Rejection Semantics
+
+Approval rejection should not automatically imply team failure.
+
+Instead, rejection should route through existing team policy, for example:
+
+- branch failure
+- candidate rejection and reselection
+- task re-route
+- escalation to external operator
+- team or task failure only when no acceptable continuation remains
+
+### 5.10.7 Hard Boundaries
+
+The following constraints should remain explicit:
+
+- non-supervisor modules may raise approval signals
+- non-supervisor modules do not decide team-level approval outcomes
+- runtime `ApprovalRequest` is a durable execution object, not the governance source
+- approval merges by most restrictive applicable rule
 
 ---
 
@@ -962,6 +1199,44 @@ It exists for:
 - decision visibility
 - recovery support
 
+### 10.1.1 Governance Boundary
+
+`SharedTaskState` should be treated as a governance-filtered coordination surface.
+
+It is not a place where any member may directly dump raw output.
+
+Likewise, artifact publish should be treated first as a governance action, with storage updates as a downstream consequence.
+
+### 10.1.2 Default Content Boundary
+
+By default, `SharedTaskState` should contain only lightweight accepted coordination content, such as:
+
+- accepted facts
+- accepted artifact refs
+- decision summaries
+- blocker summaries
+- progress summaries
+- approval refs
+
+It should not contain by default:
+
+- full member output bodies
+- raw tool output
+- member-private drafts
+- full conversation history
+- large content payloads
+
+Those belong instead to:
+
+- `Artifact`
+  complete outputs and retrievable result bodies
+- `TeamEvent`
+  historical collaboration record
+- `Checkpoint`
+  recovery snapshots
+- member-private runtime state
+  transient working state not yet accepted by the team
+
 ### 10.2 Explicit Non-Purposes
 
 It is not:
@@ -975,13 +1250,54 @@ It is not:
 
 Shared state should store references and accepted facts, not full artifact bodies.
 
+### 10.3.1 Publish Scopes
+
+For team governance, publish should distinguish at least three scopes:
+
+- `private`
+  visible only to the producing member and the supervisor
+- `team_shared`
+  accepted into `SharedTaskState` according to team policy
+- `external_published`
+  promoted beyond the team through upper-layer integration
+
+`team_shared` and `external_published` must not be treated as the same action.
+
+### 10.3.2 Ownership Model
+
+Recommended ownership:
+
+- ordinary members may return results and propose publish
+- lead specialists may also propose publish
+- supervisor decides whether to accept and publish
+- runtime/storage layers apply the resulting shared-state and artifact-reference updates
+
+This preserves supervisor-first governance while still allowing members to surface publication candidates efficiently.
+
 Recommended flow:
 
 `member private artifact`
--> `result returned`
+-> `result returned or publish proposed`
 -> `supervisor accepts`
--> `artifact publish/promote`
+-> publish to `team_shared`
+-> optional later promotion to `external_published`
 -> `SharedTaskState` stores reference + fact/summary
+
+### 10.3.3 Publish Record Semantics
+
+Each team-level publish action should be traceable as a governance event.
+
+Suggested publish record semantics include:
+
+- `artifact_ref`
+- `published_by`
+- `source_scope`
+- `target_scope`
+- `publish_reason`
+- `accepted_summary`
+- `derived_fact_entries[]`
+
+This allows shared state to remain small while making publish auditable and replayable.
 
 ### 10.4 Shared Visibility Levels
 
@@ -996,6 +1312,17 @@ For clarity, shared visibility should distinguish at least three conceptual leve
 
 This distinction prevents "published to team" from being confused with "published to the outside world".
 
+### 10.5 Hard Boundaries
+
+The following rules should remain explicit:
+
+- `SharedTaskState` is not a transcript store
+- `SharedTaskState` is not an artifact body store
+- members do not directly mutate `SharedTaskState`
+- members may propose publish
+- supervisor decides acceptance and publish
+- `team_shared` and `external_published` are separate governance actions
+
 ---
 
 ## 11. Delegation Model
@@ -1009,6 +1336,40 @@ Delegation inside a team should be explicit and governed.
 -> `Child AgentInstance`
 -> `DelegationResult`
 
+`Task` and `DelegationRequest` should remain distinct:
+
+- `Task`
+  describes the work itself
+- `DelegationRequest`
+  describes the governed parent-child execution contract under which that work is assigned
+
+In other words:
+
+- `Task` is a content contract
+- `DelegationRequest` is a control contract
+
+### 11.1.1 Task vs Delegation Boundary
+
+`Task` should carry work-content fields such as:
+
+- goal
+- instructions
+- input artifact refs
+- visible context refs
+- constraints
+- expected outputs
+
+`DelegationRequest` should carry parent-child control fields such as:
+
+- parent identity
+- resolved target
+- return contract
+- approval outcome
+- resource guard or admission outcome
+- delegation-depth and re-delegation authority
+
+If a field only makes sense because one instance is assigning work to another, it should belong to delegation rather than task.
+
 ### 11.2 Default Visibility Rules
 
 Default delegation should be conservative:
@@ -1021,6 +1382,15 @@ Default delegation should be conservative:
 
 Delegation inside the team should still honor the runtime-level return-contract idea.
 
+Important distinction:
+
+- `Task.expected_outputs`
+  describes the work product the child should produce
+- `DelegationRequest.return_contract`
+  describes how the child should report that result back to the parent
+
+`expected_outputs` therefore defines the result shape of the work, while `return_contract` defines the parent-child reporting shape.
+
 Recommended defaults:
 
 - `structured_result + artifacts` for most specialist work
@@ -1028,6 +1398,54 @@ Recommended defaults:
 - `decision` for review or arbitration branches
 
 `full_trace` should remain exceptional.
+
+### 11.2.2 Policy Resolution Before Delegation
+
+Delegation should be created only after relevant governance policy has been resolved for that specific assignment.
+
+In particular:
+
+- selector resolution determines the candidate target before delegation is issued
+- approval policy is merged before delegation is issued
+- resource policy performs admission control before delegation is issued
+
+The child should receive the resulting effective contract, not the raw unresolved policy stack.
+
+This means delegation carries the resolved outcome of:
+
+- target selection
+- approval requirements
+- resource and concurrency admission
+
+not the burden of recomputing those decisions at execution time.
+
+### 11.2.3 Delegation Result Is Not Automatic Completion
+
+`DelegationResult` should be treated as a child-to-parent return packet, not as automatic task acceptance or publish.
+
+Important consequences:
+
+- child completion does not imply parent acceptance
+- parent acceptance does not imply team publish
+- delegation failure does not imply parent or team failure
+- approval-needed is not equivalent to failure
+
+The parent or supervisor remains responsible for deciding how the returned result affects branch, task, and team progression.
+
+### 11.2.4 Parent-Side Result Evaluation Order
+
+Parent-side handling of `DelegationResult` should follow a stable evaluation order:
+
+1. `contract_validity`
+   verify the result conforms to the delegation contract
+2. `governance_and_safety`
+   evaluate approval, policy, and execution-risk implications
+3. `work_product_fitness`
+   evaluate whether the result satisfies the intended task outcome
+4. `integration_and_publishability`
+   decide whether and how the accepted result should be integrated, published, or kept private
+
+This keeps result handling explicit and prevents raw child completion from being mistaken for final team acceptance.
 
 ### 11.3 Lead Specialist
 
@@ -1136,9 +1554,17 @@ Team recovery should not depend on one giant snapshot of the whole team.
 
 Instead:
 
+- `TeamEvent` remains the team-level truth source
+- `TeamCheckpoint` is a recovery acceleration layer
 - each `AgentInstance` keeps its own checkpoint/event history
 - `TeamInstance` keeps its team-level coordination state
 - recovery reconciles those layers
+
+This follows the same broader Torque rule:
+
+- event log is truth
+- checkpoint accelerates recovery
+- recovery restores the team shell first and reconciles member runtime state second
 
 ### 13.2 Team Checkpoint Contents
 
@@ -1159,6 +1585,14 @@ Suggested contents:
 
 This checkpoint should remain coordination-focused. It should never become a dump of all member internals.
 
+It should not include:
+
+- member private scratch state
+- full member conversation state
+- raw artifact bodies
+- duplicated kernel event streams
+- embedded member runtime snapshots
+
 ### 13.3 Recommended Recovery Strategy
 
 Recommended default:
@@ -1172,6 +1606,14 @@ Recommended default:
 
 This gives a strong balance of correctness and cost.
 
+Conceptually, recovery should:
+
+- restore the team coordination shell
+- replay collaboration facts after the checkpoint anchor
+- inspect current member/runtime state
+- reconcile the team view against execution reality
+- continue via a policy-governed next step rather than requiring exact in-place resumption
+
 Recommended default recovery mode:
 
 - `supervisor-first`
@@ -1180,6 +1622,34 @@ That means:
 
 - recover the team shell and supervisor first
 - then recover only the members needed to continue safely
+
+### 13.3.1 Dynamic Member Reconciliation
+
+Dynamic members should be restored through reconciliation, not through embedded team-level snapshots.
+
+Recommended model:
+
+- `TeamCheckpoint` stores active dynamic member refs
+- recovery queries those member instances through runtime/kernel recovery surfaces
+- the team determines which members are completed, resumable, failed, lost, or superseded
+- supervisor and team policy decide whether to accept results, resume execution, replace the member, or reroute the branch
+
+This keeps the boundary clear:
+
+- team checkpoint stores coordination state
+- member/kernel checkpoint stores member execution state
+- dynamic member continuity is achieved through reference reconciliation
+
+### 13.3.2 Recovery Continuation Outcomes
+
+After replay and reconciliation, recovery should be able to continue through a small set of policy-governed outcomes, such as:
+
+- branch resumes with existing member
+- completed member result is accepted and published
+- lost or failed member is replaced through selector re-resolution
+- task path is rerouted or downgraded
+- approval or operator escalation is required
+- team or task fails only when no acceptable continuation remains
 
 ### 13.4 Time Travel
 
