@@ -133,13 +133,16 @@ Torque should support two authoring styles:
 
 #### Lightweight Team
 
-A light governance-oriented definition:
+A governance-first definition with a small stable team shell and policy-governed dynamic extension.
+
+Primary characteristics:
 
 - supervisor
-- member selection rules
-- delegation policy
-- shared-state policy
-- limits and governance
+- a small number of named core members
+- capability-based dynamic selectors
+- team-level delegation policy
+- team-level shared-state policy
+- limits and governance defaults
 
 This is suitable for ad hoc or lightly structured teams.
 
@@ -155,6 +158,155 @@ A more explicit template:
 - role-level policy
 
 This is suitable for stable, reusable team templates.
+
+### 5.1.1 Authoring Surfaces
+
+Torque should support multiple input surfaces for `TeamDefinition`, but they should not become distinct semantic models.
+
+Recommended approach:
+
+- human-authored `YAML` as the primary authoring surface
+- programmatic builders or API payloads as alternative inputs
+- a single compilation step into one canonical internal form
+
+The runtime, storage, scheduler, and recovery layers should depend only on the canonical form, not on the original authoring surface.
+
+### 5.1.2 Lightweight Authoring Model
+
+`lightweight` should not be a smaller copy of `role_based`.
+
+It should be a governance-oriented authoring model optimized for:
+
+- a clearly defined supervisor
+- a small amount of stable team identity
+- controlled dynamic specialist expansion
+- explicit collaboration constraints
+
+Recommended external shape:
+
+- `supervisor`
+- `core_members[]`
+- `dynamic_selectors[]`
+- `available_modes[]`
+- `policies`
+- a very small whitelist of member-level overrides
+
+The intent is:
+
+- stable identity comes from a few named `core_members`
+- runtime elasticity comes from `dynamic_selectors`
+- governance remains team-centric rather than role-centric
+
+### 5.1.3 Suggested Lightweight YAML Shape
+
+The external `lightweight` form should be concise for authors, while still compiling to explicit governance internally.
+
+Illustrative shape:
+
+```yaml
+team:
+  id: research_team
+  name: Research Team
+  mode: lightweight
+  description: Governance-first team for supervised research and synthesis
+
+  supervisor:
+    capability_profile: supervisor.general
+    agent_definition: agent.supervisor.default
+
+  core_members:
+    - id: researcher
+      capability_profile: specialist.research
+      agent_definition: agent.research.default
+      overrides:
+        can_delegate: false
+        can_be_lead: false
+
+    - id: writer
+      capability_profile: specialist.write
+      agent_definition: agent.writer.default
+      overrides:
+        can_delegate: false
+        can_be_lead: true
+
+  dynamic_selectors:
+    - id: analysis_pool
+      allowed_capability_profiles:
+        - specialist.analysis
+        - specialist.verification
+      selection_policy:
+        max_active: 2
+        approval: supervisor_only
+
+  available_modes:
+    - route
+    - coordinate
+    - tasks
+
+  policies:
+    leadership:
+      task_entry: supervisor_only
+      supervisor_may_override: true
+      supervisor_may_activate_dynamic_members: true
+
+    delegation:
+      max_depth: 2
+      parallel_allowed: true
+      member_delegation_default: false
+
+    shared_state:
+      members_can_read:
+        - accepted_facts
+        - published_artifacts
+        - blockers
+        - progress_summaries
+      members_can_write: none
+      publication_flow: supervisor_accepts
+
+    approval:
+      supervisor_local_approval: true
+      external_approval_required_for:
+        - high_risk_tools
+        - external_side_effects
+
+    resources:
+      max_active_members: 4
+      max_parallel_tasks: 3
+
+    failure:
+      member_failure_default: return_to_supervisor
+      dynamic_member_launch_failure: retry_once
+```
+
+Field names may evolve, but the structural intent should remain:
+
+- authoring is concise
+- compilation expands omitted defaults
+- runtime semantics are explicit
+
+### 5.1.4 Lightweight Defaults and Ergonomics
+
+`lightweight` authoring should favor safe defaults over excessive verbosity.
+
+Recommended defaults:
+
+- `task_entry = supervisor_only`
+- `member_delegation_default = false`
+- `publication_flow = supervisor_accepts`
+- `supervisor_may_activate_dynamic_members = true`
+- `members_can_write = none`
+
+Recommended ergonomics:
+
+- allow shorthand for common supervisor/member capability bindings
+- allow named governance presets that expand to full policy blocks
+- keep all shorthand purely authoring-level and require full expansion before runtime
+
+Torque should not initially support fuzzy natural-language authoring or inference-heavy compilation for `TeamDefinition`.
+
+Hard rule:
+
+`lightweight` authoring may be concise, but compiled governance must be explicit.
 
 ### 5.2 Canonical Internal Form
 
@@ -214,6 +366,21 @@ team_definition:
 ```
 
 The exact field names may evolve, but the semantic shape should remain stable.
+
+### 5.2.2 Compilation from Lightweight to Canonical Form
+
+Compilation should be deterministic and inspection-friendly.
+
+Recommended lowering:
+
+- `supervisor` -> `supervisor_spec`
+- each `core_member` -> one `member_spec` with `kind = core`
+- each `dynamic_selector` -> one or more `member_spec` templates with `kind = dynamic`
+- `available_modes` -> `available_modes`
+- `policies.*` -> matching canonical policy blocks
+- member `overrides` -> `member_spec.policy_overrides` using a strict whitelist
+
+This compilation step should be visible to operators and debuggers. The compiled `TeamDefinition` should be inspectable even when the authored form was terse.
 
 ### 5.3 Team Leader
 
@@ -313,8 +480,10 @@ This preserves both:
 Use `lightweight` team definitions when:
 
 - the team is mostly an orchestration shell
-- member identity is dynamic
+- there are only a few stable named members
+- member identity is partly dynamic
 - governance matters more than long-lived role taxonomy
+- capability selectors are the main extension mechanism
 
 Use `role_based` team definitions when:
 
@@ -323,12 +492,24 @@ Use `role_based` team definitions when:
 - policy needs to be attached to named roles
 - the team should be inspectable by humans as a durable template
 
+Suggested migration signals toward `role_based`:
+
+- more than a few stable named members
+- many member-specific policy exceptions
+- role-like semantics start mattering more than team shell governance
+- authoring starts approximating role inheritance or complex slot taxonomies
+
+In other words:
+
+- `lightweight` optimizes for a governed collaboration shell
+- `role_based` optimizes for a durable reusable organization model
+
 ### 5.7 Team and Capability Binding
 
 The default binding style should be mixed:
 
-- core roles bind directly to `capability profiles`
-- dynamic or edge roles may additionally use `capability selectors`
+- core members or core roles bind directly to `capability profiles`
+- dynamic or edge members may additionally use `capability selectors`
 
 This avoids two failure modes:
 
@@ -338,6 +519,48 @@ This avoids two failure modes:
 Important constraint:
 
 selectors must remain policy-governed. They should not allow unrestricted capability discovery outside the team's governance boundary.
+
+### 5.8 Validation Constraints for Lightweight Definitions
+
+`lightweight` definitions should be aggressively validated so the mode retains a clear boundary.
+
+Structural constraints:
+
+- `team.id`, `name`, `mode`, and `supervisor` are required
+- `mode = lightweight` forbids full role-based constructs such as explicit role inheritance trees
+- `core_members` may be empty only if `dynamic_selectors` is non-empty
+- `available_modes` must be non-empty and must be a subset of supported modes
+
+Binding constraints:
+
+- every referenced `capability_profile` must resolve
+- explicit `agent_definition` bindings must be compatible with the referenced capability profile
+- every `dynamic_selector` must define a non-empty allowed capability set
+- selectors must resolve only within pre-registered governance-approved capability catalogs
+
+Policy constraints:
+
+- team-level policy is authoritative by default
+- member `overrides` are restricted to a small whitelist such as:
+  - `can_delegate`
+  - `can_be_lead`
+  - `visibility_scope`
+- member overrides must not replace team-wide approval, resource, or failure policy
+
+Safety constraints:
+
+- dynamic member activation should remain supervisor-governed by default
+- `can_be_lead` may permit branch-level lead behavior, but does not create a second team leader
+- local approval and mandatory external approval rules must not overlap ambiguously
+
+Compilation constraint:
+
+Every valid `lightweight` definition must compile into a canonical form that unambiguously answers:
+
+- who is the supervisor
+- which members are stable core members
+- which dynamic members may be activated
+- what governance policy is in effect
 
 ---
 
