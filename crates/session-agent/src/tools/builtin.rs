@@ -117,9 +117,5 @@ impl Tool for CodeExecuteTool {
 }
 
 pub fn create_builtin_tools() -> Vec<Box<dyn Tool>> {
-    vec![
-        Box::new(WebSearchTool),
-        Box::new(FileReadTool),
-        Box::new(CodeExecuteTool),
-    ]
+    vec![Box::new(WebSearchTool)]
 }
