@@ -176,6 +176,45 @@ Suggested minimum fields:
 - `resource_policy`
 - `failure_policy`
 
+### 5.2.1 Canonical Shape
+
+Regardless of authoring style, the normalized internal shape should be close to:
+
+```yaml
+team_definition:
+  team_id: string
+  name: string
+  description: string
+  definition_mode: lightweight | role_based
+
+  supervisor_spec:
+    agent_definition_ref: string
+    capability_refs: []
+    policy_overrides: {}
+
+  member_specs:
+    - member_id: string
+      role_ref: string | optional
+      kind: core | dynamic
+      default_agent_definition_ref: string | optional
+      candidate_agent_definition_refs: []
+      capability_refs: []
+      can_be_lead: bool
+      can_delegate: bool
+      policy_overrides: {}
+
+  available_modes: [route, broadcast, coordinate, tasks]
+
+  leadership_policy: {}
+  delegation_policy: {}
+  shared_state_policy: {}
+  approval_policy: {}
+  resource_policy: {}
+  failure_policy: {}
+```
+
+The exact field names may evolve, but the semantic shape should remain stable.
+
 ### 5.3 Team Leader
 
 `Team leader` is not a separate object model from `Supervisor`.
@@ -201,6 +240,14 @@ This allows:
 - reusable teams
 - runtime elasticity
 
+The recommended runtime composition is:
+
+- one `supervisor`
+- zero or more `core members`
+- zero or more `dynamic specialists`
+
+Dynamic specialists should be activated through policy-governed selection, not through unconstrained free spawning.
+
 ### 5.5 Role, Capability, AgentDefinition, MemberInstance
 
 These concepts should remain distinct:
@@ -216,6 +263,21 @@ Recommended relation:
 -> references `Capability`
 -> resolves candidate `AgentDefinition`s
 -> creates runtime `MemberInstance`
+
+### 5.6 Authoring Guidance
+
+Use `lightweight` team definitions when:
+
+- the team is mostly an orchestration shell
+- member identity is dynamic
+- governance matters more than long-lived role taxonomy
+
+Use `role_based` team definitions when:
+
+- the team is intended to be reusable
+- stable specialist slots matter
+- policy needs to be attached to named roles
+- the team should be inspectable by humans as a durable template
 
 ---
 
@@ -235,6 +297,15 @@ Suggested concerns:
 - whether the supervisor can activate dynamic specialists
 - whether the supervisor can initiate handoff or escalation
 
+Recommended default:
+
+- all `TeamTask`s enter through the supervisor
+- supervisor may accept or reject member results
+- supervisor may activate dynamic specialists
+- supervisor may terminate branches
+- supervisor may escalate
+- supervisor does not default to performing specialist work itself
+
 ### 6.2 Delegation Policy
 
 Defines how work can flow inside the team.
@@ -248,6 +319,13 @@ Suggested concerns:
 - whether parallel delegation is allowed
 - whether dynamic specialists may be injected
 
+Recommended default:
+
+- delegation depth is shallow by default
+- only the supervisor may delegate freely
+- lead specialists may delegate only when explicitly allowed
+- ordinary specialists may not recursively delegate by default
+
 ### 6.3 Shared State Policy
 
 Defines who can see and update team shared state.
@@ -259,6 +337,12 @@ Recommended default:
 - members can see blockers and progress summaries
 - members cannot see other members' private scratch state
 - members cannot see full unfiltered history
+
+Recommended default write permissions:
+
+- supervisor may publish facts and artifacts
+- lead specialists may propose publications
+- ordinary specialists may return results but not directly mutate shared state
 
 ### 6.4 Approval Policy
 
@@ -283,6 +367,13 @@ Suggested concerns:
 - branch timeout
 - tool risk constraints
 
+Recommended default:
+
+- cap concurrent active members
+- cap concurrent delegations
+- prefer route/guided-delegate over structured orchestration unless justified
+- require supervisor triage before fan-out
+
 ### 6.6 Failure Policy
 
 Defines how team-level failures are handled.
@@ -293,6 +384,13 @@ Suggested concerns:
 - leader failure handling
 - partial failure tolerance
 - branch failure aggregation
+
+Recommended default:
+
+- member failure does not imply team failure
+- branch failure may trigger reroute or escalation
+- supervisor failure is team-critical
+- explicit abort should be rare and policy-governed
 
 ---
 
@@ -344,7 +442,25 @@ Suggested statuses:
 - `WAITING_APPROVAL`: governance pause
 - `BLOCKED`: team needs external resolution, not just member completion
 
-### 7.3 Important Rule
+### 7.3 Recommended Core Transitions
+
+The most important transitions are:
+
+- `CREATED -> TRIAGING`
+- `TRIAGING -> ROUTING`
+- `TRIAGING -> ORCHESTRATING`
+- `ROUTING -> WAITING_MEMBERS`
+- `ORCHESTRATING -> WAITING_MEMBERS`
+- `WAITING_MEMBERS -> ORCHESTRATING`
+- `WAITING_MEMBERS -> WAITING_APPROVAL`
+- `WAITING_MEMBERS -> BLOCKED`
+- `WAITING_MEMBERS -> COMPLETED`
+- `WAITING_APPROVAL -> ORCHESTRATING`
+- `BLOCKED -> ORCHESTRATING`
+- `any active state -> FAILED`
+- `any active state -> CANCELLED`
+
+### 7.4 Important Rule
 
 `TeamInstance` status must be team-controlled, not inferred mechanically from member states.
 
@@ -396,6 +512,22 @@ The default handling path should be:
 4. medium task -> lead specialist with constrained support delegation
 5. complex task -> structured orchestration
 
+### 8.3 TeamTask Status
+
+Suggested task-level statuses:
+
+- `OPEN`
+- `TRIAGED`
+- `ROUTED`
+- `IN_PROGRESS`
+- `WAITING_APPROVAL`
+- `BLOCKED`
+- `DONE`
+- `FAILED`
+- `CANCELLED`
+
+These are separate from `TeamInstance` status. One team may carry multiple team tasks over its lifetime.
+
 ---
 
 ## 9. Triage and Team Modes
@@ -412,19 +544,53 @@ The supervisor should judge:
 - whether the task has meaningful dependency structure
 - whether the cost/risk justifies full orchestration
 
+### 9.1.1 Triage Output
+
+Triage should produce a small explicit decision object, conceptually similar to:
+
+```yaml
+triage_result:
+  complexity: simple | medium | complex
+  processing_path: single_route | guided_delegate | structured_orchestration
+  selected_mode: route | broadcast | coordinate | tasks | null
+  lead_member_ref: string | null
+  rationale: string
+```
+
+This is useful for observability, replay, and supervisor auditability.
+
 ### 9.2 Default Processing Paths
 
 #### Single-Route
 
 Use when one specialist is sufficient.
 
+Expected shape:
+
+- one primary member
+- minimal shared-state churn
+- supervisor mainly waits and accepts/rejects the result
+
 #### Guided-Delegate
 
 Use when one lead specialist should drive the work, with limited support delegation.
 
+Expected shape:
+
+- one lead specialist
+- optional small support fan-out
+- supervisor remains global owner
+
 #### Structured-Orchestration
 
 Use when multiple roles, stages, or review gates are clearly needed.
+
+Expected shape:
+
+- explicit orchestration mode
+- clearer branch structure
+- stronger use of shared task state
+- heavier governance and observability
 
 ### 9.3 Team Modes
 
@@ -444,6 +610,27 @@ Each mode should eventually define:
 - shared-state usage pattern
 - expected return shape
 - failure-handling expectations
+
+#### `route`
+
+- single-owner execution
+- lowest coordination overhead
+- best default for simple tasks
+
+#### `broadcast`
+
+- parallel exploration or comparison
+- suitable for research, option generation, cross-checking
+
+#### `coordinate`
+
+- supervisor-led multi-round coordination
+- suitable when intermediate arbitration is required
+
+#### `tasks`
+
+- decomposition-oriented execution
+- suitable when the problem naturally separates into multiple task units
 
 ---
 
@@ -498,6 +685,19 @@ Recommended flow:
 -> `artifact publish/promote`
 -> `SharedTaskState` stores reference + fact/summary
 
+### 10.4 Shared Visibility Levels
+
+For clarity, shared visibility should distinguish at least three conceptual levels:
+
+- `private`
+  only the producing member or supervisor
+- `team_shared`
+  visible according to shared-state policy
+- `external_published`
+  visible beyond the team through upper-layer integration
+
+This distinction prevents "published to team" from being confused with "published to the outside world".
+
 ---
 
 ## 11. Delegation Model
@@ -519,6 +719,18 @@ Default delegation should be conservative:
 - child sees only explicitly passed artifacts and visible external contexts
 - child output is private until accepted/published
 
+### 11.2.1 Return Contract
+
+Delegation inside the team should still honor the runtime-level return-contract idea.
+
+Recommended defaults:
+
+- `structured_result + artifacts` for most specialist work
+- `summary_only` for cheap exploratory fan-out
+- `decision` for review or arbitration branches
+
+`full_trace` should remain exceptional.
+
 ### 11.3 Lead Specialist
 
 For medium-complexity work, a lead specialist may temporarily own a task branch.
@@ -529,6 +741,19 @@ Important constraint:
 - it is only the branch-level primary executor
 - it may receive constrained delegation rights
 - it still reports upward to the supervisor
+
+### 11.4 Permission Tiers
+
+The default authority tiers should be:
+
+- **Supervisor**
+  may triage, select mode, delegate broadly, accept/reject results, publish shared state, escalate, and terminate branches
+
+- **Lead Specialist**
+  may execute a primary branch, optionally perform constrained delegation, and propose publications
+
+- **Specialist**
+  may execute assigned work and return results, but does not mutate team shared state directly by default
 
 ---
 
@@ -561,6 +786,26 @@ Recommended event categories:
 - shared-state updates
 - approval and escalation
 - failure and recovery
+
+Recommended representative event types include:
+
+- `team_created`
+- `team_task_received`
+- `triage_completed`
+- `mode_selected`
+- `lead_assigned`
+- `member_activated`
+- `delegation_created`
+- `member_result_received`
+- `member_result_accepted`
+- `member_result_rejected`
+- `artifact_published`
+- `fact_published`
+- `approval_requested`
+- `team_blocked`
+- `team_unblocked`
+- `team_completed`
+- `team_failed`
 
 ### 12.2 Important Distinction
 
@@ -614,6 +859,8 @@ Suggested contents:
 - `decision_summary`
 - `event_anchor_id`
 
+This checkpoint should remain coordination-focused. It should never become a dump of all member internals.
+
 ### 13.3 Recommended Recovery Strategy
 
 Recommended default:
@@ -626,6 +873,15 @@ Recommended default:
 - replay tail team events after checkpoint
 
 This gives a strong balance of correctness and cost.
+
+Recommended default recovery mode:
+
+- `supervisor-first`
+
+That means:
+
+- recover the team shell and supervisor first
+- then recover only the members needed to continue safely
 
 ### 13.4 Time Travel
 
