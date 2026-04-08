@@ -28,3 +28,4 @@ llm = { path = "../llm" }
 [dev-dependencies]
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
+serial_test = "3"

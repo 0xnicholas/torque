@@ -20,7 +20,9 @@ pub async fn setup_test_db_or_skip() -> Option<Database> {
         }
     };
 
-    if let Err(err) = sqlx::query("DROP TABLE IF EXISTS session_messages, sessions, tools CASCADE")
+    if let Err(err) = sqlx::query(
+        "DROP TABLE IF EXISTS session_messages, sessions, tools, _sqlx_migrations CASCADE",
+    )
         .execute(&pool)
         .await
     {

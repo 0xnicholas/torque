@@ -1,8 +1,10 @@
 mod common;
 
 use common::{setup_test_db_or_skip, test_api_key};
+use serial_test::serial;
 
 #[tokio::test]
+#[serial]
 async fn test_create_session() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -18,6 +20,7 @@ async fn test_create_session() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_create_and_get_message() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -49,6 +52,7 @@ async fn test_create_and_get_message() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_status_transitions() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -77,6 +81,7 @@ async fn test_session_status_transitions() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_api_key_isolation() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -102,6 +107,7 @@ async fn test_api_key_isolation() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_try_mark_running_is_atomic_gate() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -123,6 +129,7 @@ async fn test_try_mark_running_is_atomic_gate() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_try_mark_running_is_atomic_under_concurrency() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;

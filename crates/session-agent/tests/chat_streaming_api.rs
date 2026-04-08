@@ -4,6 +4,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use llm::OpenAiClient;
 use serde_json::Value;
+use serial_test::serial;
 use session_agent::app::build_app;
 use session_agent::metrics;
 use tower::util::ServiceExt;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 use common::setup_test_db_or_skip;
 
 #[tokio::test]
+#[serial]
 async fn chat_endpoint_emits_start_event_in_sse_stream() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -75,6 +77,7 @@ async fn chat_endpoint_emits_start_event_in_sse_stream() {
 }
 
 #[tokio::test]
+#[serial]
 async fn chat_endpoint_concurrent_requests_conflict_and_increment_metric() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;

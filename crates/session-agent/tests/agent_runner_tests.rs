@@ -2,6 +2,7 @@ mod common;
 
 use common::fake_llm::FakeLlm;
 use common::setup_test_db_or_skip;
+use serial_test::serial;
 use serde_json::json;
 use session_agent::agent::{AgentRunner, StreamEvent};
 use session_agent::models::{Message, MessageRole};
@@ -10,6 +11,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 #[tokio::test]
+#[serial]
 async fn runner_persists_messages_and_emits_start_chunk_done() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
@@ -58,6 +60,7 @@ async fn runner_persists_messages_and_emits_start_chunk_done() {
 }
 
 #[tokio::test]
+#[serial]
 async fn runner_handles_tool_call_and_records_tool_log() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
