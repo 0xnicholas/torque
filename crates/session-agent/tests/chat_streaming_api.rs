@@ -67,4 +67,8 @@ async fn chat_endpoint_emits_start_event_in_sse_stream() {
     let sse = String::from_utf8(body.to_vec()).expect("sse should be utf8");
 
     assert!(sse.contains(r#""event":"start""#));
+    assert!(
+        sse.contains(r#""event":"done""#) || sse.contains(r#""event":"error""#),
+        "stream should terminate with done or error event"
+    );
 }

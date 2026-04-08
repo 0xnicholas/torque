@@ -121,3 +121,27 @@ async fn test_try_mark_running_is_atomic_gate() {
     assert!(first);
     assert!(!second);
 }
+
+#[tokio::test]
+async fn test_try_mark_running_is_atomic_under_concurrency() {
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
+
+    let session = session_agent::db::sessions::create(db.pool(), "key-1")
+        .await
+        .expect("Failed to create session");
+
+    let pool = db.pool().clone();
+    let session_id = session.id;
+
+    let (first, second) = tokio::join!(
+        session_agent::db::sessions::try_mark_running(&pool, session_id),
+        session_agent::db::sessions::try_mark_running(&pool, session_id),
+    );
+
+    let first = first.expect("first mark should return");
+    let second = second.expect("second mark should return");
+
+    assert_ne!(first, second, "exactly one concurrent caller should win");
+}
