@@ -498,7 +498,124 @@ This helps:
 
 ---
 
-## 11. Recommended Summary Rule
+## 11. Context Control and Compaction
+
+Torque should treat context control as a first-class systems concern, not as an afterthought in prompt wording.
+
+Token cost comes from both:
+
+- input context volume
+- output verbosity and return shape
+
+So context control should manage both sides.
+
+### 11.1 Structured Internal Communication
+
+Internal agent-to-agent communication should prefer structured outputs over long natural-language explanations.
+
+Recommended default:
+
+- intermediate agents return `JSON` or schema-constrained outputs
+- field lengths are bounded
+- explanatory prose is minimized
+- only final user-facing agents default to natural-language presentation
+
+This means the system should prefer:
+
+- internal communication: structured
+- final presentation: natural-language
+
+### 11.2 Role-Based Context Budgets
+
+Not every agent should receive the same context budget.
+
+Recommended pattern:
+
+- router or classifier
+  very small context budget
+- specialist
+  medium context budget
+- planner or reviewer
+  larger context budget when justified
+- final responder
+  receives only the final necessary materials for user-facing synthesis
+
+These budgets may apply to:
+
+- maximum prompt size
+- maximum output size
+- maximum retrieval depth
+- maximum visible shared-state slice
+- maximum tool or retrieval rounds
+
+### 11.3 Pointer-First Context Transfer
+
+Internal context transfer should prefer pointers and references over full content bodies.
+
+Examples:
+
+- `artifact://spec-v2`
+- `decision://kyc/2026-04-01/3`
+- `fact://risk-threshold/high-country-review`
+- `doc://risk-policy-v2#section-4`
+- `ticket://1234.summary`
+
+The default rule should be:
+
+- pass references first
+- retrieve bodies only when needed
+- summarize locally after retrieval when possible
+
+This keeps the hot execution context small while preserving access to richer context on demand.
+
+### 11.4 Output Control
+
+Context systems must control output shape as well as input size.
+
+Recommended default controls include:
+
+- schema-constrained intermediate outputs
+- explicit result modes
+- bounded summary fields
+- bounded reasoning or explanation fields
+- no verbose prose unless the caller specifically requests it
+
+This prevents internal execution from wasting tokens on user-style explanation when only machine-consumable structure is needed.
+
+### 11.5 Periodic State Convergence
+
+Long-running flows should periodically converge and compact state.
+
+Recommended convergence outputs include:
+
+- confirmed facts
+- confirmed decisions
+- open questions
+- reusable artifact refs
+- current blocker summary
+
+After convergence:
+
+- the compacted state becomes the active hot context
+- raw long-form discussion may be moved to event or artifact history
+- future execution should prefer the compacted state and references over replaying the full discussion
+
+This does not require deleting raw history. It means raw history stops being the default execution context.
+
+### 11.6 Summary Rule
+
+Recommended default:
+
+- scope input aggressively
+- structure internal output aggressively
+- pass pointers before bodies
+- compact long-running state periodically
+
+Together, these form Torque's default context-efficiency model.
+
+---
+
+## 12. Recommended Summary Rule
 
 The default context rule for Torque should be:
 
@@ -510,7 +627,7 @@ And the default transfer rule should be:
 
 ---
 
-## 12. Open Questions
+## 13. Open Questions
 
 - Should Torque define a first-class named `TaskPacket` object in the runtime API, or keep it as an internal execution concept at first?
 - How much of shared-state slicing should be policy-driven versus runtime-default heuristics?
