@@ -604,6 +604,8 @@ The supervisor should judge:
 - whether the task has meaningful dependency structure
 - whether the cost/risk justifies full orchestration
 
+This triage is part of supervisor behavior. It should not be treated as evidence that Torque requires a separate first-class `Planner` object.
+
 ### 9.1.1 Triage Output
 
 Triage should produce a small explicit decision object, conceptually similar to:
@@ -618,6 +620,19 @@ triage_result:
 ```
 
 This is useful for observability, replay, and supervisor auditability.
+
+### 9.1.2 Planning as a Capability
+
+If explicit planning is needed, it should initially exist as a **harness-native capability profile**, not as a required standalone system component.
+
+Recommended interpretation:
+
+- simple tasks: supervisor triage is enough
+- complex tasks: supervisor may invoke a `planning capability profile`
+- planning output becomes an artifact or structured result
+- further playbook/workflow lowering, if any, belongs to upper layers
+
+This keeps planning available without making a dedicated `Planner` object a prerequisite for team execution.
 
 ### 9.2 Default Processing Paths
 
@@ -989,7 +1004,73 @@ In condensed form:
 
 ---
 
-## 15. Open Questions
+## 15. Boundaries with Capability, Workflow, and Playbook
+
+The team model should remain distinct from adjacent concepts.
+
+### 15.1 Capability Profile
+
+`Capability Profile` answers:
+
+"What stable reusable ability does this member or role have?"
+
+In Torque, a capability profile is the preferred team-facing ability layer, typically backed by:
+
+- routines
+- built-in tools
+- I/O contract
+- quality expectations
+- risk and execution policy
+
+### 15.2 Workflow
+
+`Workflow` answers:
+
+"What control structure should execution follow?"
+
+Examples include:
+
+- routing
+- branching
+- fan-out/fan-in
+- staged progression
+- loop or retry structure
+
+Team modes are not the same as a full workflow model. They are harness-level orchestration strategies.
+
+### 15.3 Playbook
+
+`Playbook` answers:
+
+"Why is this work being done, what standard defines success, and what normative rules constrain execution?"
+
+Playbook-like systems may exist above Torque, but they are not required for Team to function.
+
+### 15.4 Planning
+
+Planning is currently best modeled as a **capability profile**, not as a first-class architecture object.
+
+That means:
+
+- no required standalone planner object
+- no required planner service
+- no assumption that every team task must first produce a complete plan artifact
+
+The supervisor may invoke planning behavior when appropriate, but Team does not depend on a global planner abstraction.
+
+### 15.5 Summary Boundary
+
+The clean boundary is:
+
+- `Team` manages collaboration
+- `Capability Profile` packages reusable ability
+- `Workflow` expresses control structure when needed
+- `Playbook` expresses higher-level task semantics and constraints when present
+- `Planning` is initially a capability, not a mandatory object
+
+---
+
+## 16. Open Questions
 
 - Should nested teams be explicit first-class harness objects or be lowered through supervisor delegation only?
 - How much of shared task state should be directly queryable by regular members?
