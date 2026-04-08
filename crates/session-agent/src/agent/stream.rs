@@ -15,6 +15,12 @@ pub enum StreamEvent {
         name: String,
         arguments: Value,
     },
+    ToolResult {
+        name: String,
+        success: bool,
+        content: String,
+        error: Option<String>,
+    },
     Done {
         message_id: Uuid,
         artifacts: Option<Value>,

@@ -27,3 +27,18 @@ fn done_event_serializes_to_sse() {
     assert!(sse.contains(&message_id.to_string()));
     assert!(sse.contains("\"kind\":\"note\""));
 }
+
+#[test]
+fn tool_result_event_serializes_to_sse() {
+    let event = StreamEvent::ToolResult {
+        name: "web_search".to_string(),
+        success: true,
+        content: "Mock search results for: torque".to_string(),
+        error: None,
+    };
+    let sse = event.to_sse();
+
+    assert!(sse.contains("\"event\":\"tool_result\""));
+    assert!(sse.contains("\"name\":\"web_search\""));
+    assert!(sse.contains("\"success\":true"));
+}

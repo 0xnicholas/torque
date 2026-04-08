@@ -95,12 +95,30 @@ async fn runner_handles_tool_call_and_records_tool_log() {
     assert_eq!(tool_calls[0]["name"], "web_search");
 
     let mut saw_tool_call_event = false;
+    let mut saw_tool_result_event = false;
     while let Some(event) = rx.recv().await {
-        if let StreamEvent::ToolCall { name, .. } = event {
-            if name == "web_search" {
-                saw_tool_call_event = true;
+        match event {
+            StreamEvent::ToolCall { name, .. } => {
+                if name == "web_search" {
+                    saw_tool_call_event = true;
+                }
             }
+            StreamEvent::ToolResult {
+                name,
+                success,
+                content,
+                ..
+            } => {
+                if name == "web_search"
+                    && success
+                    && content.contains("Mock search results for: torque")
+                {
+                    saw_tool_result_event = true;
+                }
+            }
+            _ => {}
         }
     }
     assert!(saw_tool_call_event, "tool_call event should be emitted");
+    assert!(saw_tool_result_event, "tool_result event should be emitted");
 }

@@ -100,6 +100,8 @@ Expected stream shape:
 
 ```txt
 data: {"event":"start","session_id":"..."}
+data: {"event":"tool_call","name":"web_search","arguments":{"query":"..."}}
+data: {"event":"tool_result","name":"web_search","success":true,"content":"...","error":null}
 data: {"event":"chunk","content":"..."}
 data: {"event":"chunk","content":"..."}
 data: {"event":"done","message_id":"...","artifacts":null}

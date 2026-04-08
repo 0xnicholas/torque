@@ -150,6 +150,14 @@ impl<C: LlmClient> AgentRunner<C> {
                         }));
 
                         let result = self.tools.execute(&tool_call.name, tool_call.arguments.clone()).await?;
+                        let _ = tx
+                            .send(StreamEvent::ToolResult {
+                                name: tool_call.name.clone(),
+                                success: result.success,
+                                content: result.content.clone(),
+                                error: result.error.clone(),
+                            })
+                            .await;
 
                         if result.success {
                             consecutive_failures = 0;
