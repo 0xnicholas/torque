@@ -31,7 +31,7 @@ Kernel 的核心是 `AgentInstance`，不是 graph。
 
 ## Core Layering
 
-建议把 Torque 理解成 5 层：
+建议把 Torque 理解成 6 层：
 
 1. **Kernel Execution**
    定义执行入口、实例、任务、delegation、approval、checkpoint 等运行时契约。
@@ -47,6 +47,9 @@ Kernel 的核心是 `AgentInstance`，不是 graph。
 
 5. **Harness / Team Layer**
    定义 team、shared task state、selector resolution、publish、team approval、team recovery 等协作层语义。
+
+6. **Recovery Layer**
+   定义 event truth、checkpoint acceleration、restore、replay、reconciliation 等恢复语义。
 
 ---
 

@@ -2,32 +2,69 @@
 
 ## Overview
 
-Torque is a Rust-based **Agent Runtime Kernel** with a higher-level **Harness** built on top of it.
+This document is the high-level architectural overview for Torque.
 
-The project is intentionally organized around a small number of architectural layers rather than a product-specific workflow model.
+Its role is to make the global model legible:
 
-Torque is designed to be:
+- what Torque is trying to become
+- which layers exist and where their boundaries are
+- which runtime objects matter most
+- which invariants should remain stable as the codebase evolves
 
-- agent-centric
-- stateful
-- recoverable
-- policy-governed
-- context-aware
+This document is intended to be more complete than a short concept index, but it is still not the full source of truth for every layer-specific contract. Detailed design remains in the specs under `docs/superpowers/specs/`.
 
-Torque is not designed around:
+When code and docs diverge:
 
-- a built-in DAG-first planner/executor core
-- a mandatory workflow DSL
-- a graph node as the kernel execution primitive
-- chat transcript accumulation as the primary context model
+- code is authoritative for current runtime behavior
+- the spec set is authoritative for intended architecture and new implementation direction
+
+---
+
+## Project Positioning
+
+Torque is evolving toward:
+
+- an **Agent Runtime Kernel**
+- a higher-level **Harness** built on top of that kernel
+- explicit models for execution, capability resolution, policy evaluation, context state management, team orchestration, and recovery
+
+Torque is not currently modeled as:
+
+- a DAG-first planner/executor system
+- a workflow engine whose kernel abstraction is graph nodes
+- a system where chat transcript accumulation is the primary context model
+- a product-specific workspace runtime with hard-coded domain objects at the kernel layer
 
 The current architectural center is `AgentInstance`, not DAG.
 
 ---
 
+## Document Role
+
+This file should be read as the architectural map for the repository.
+
+It answers:
+
+- what the major architectural layers are
+- which objects belong to which layer
+- how execution flows across those objects
+- which separations are intentional and should not be casually collapsed
+
+It does not attempt to fully define:
+
+- exact persistence schemas
+- full API payload definitions
+- prompt templates
+- retrieval algorithms
+- storage engine details
+
+For those details, use the relevant layer-specific spec.
+
+---
+
 ## Current Repo Reality
 
-The repository has two truths that must be held separately:
+The repository is in transition, so two truths must be held separately:
 
 1. **Target architecture**
    defined by the spec set under `docs/superpowers/specs/`
@@ -38,16 +75,35 @@ The repository has two truths that must be held separately:
 Current code paths of interest:
 
 - `crates/llm`
-  OpenAI-compatible client, streaming, tool-call primitives
+  OpenAI-compatible client, streaming, and tool-call primitives
 - `crates/session-agent`
-  current product-facing MVP path for a single persistent agent session
+  the current product-facing MVP slice for a single persistent agent session
 - `crates/checkpointer`
-  emerging checkpoint abstraction
+  an emerging checkpoint abstraction
 
-When code and architecture docs diverge:
+This means the implementation should not be read as fully architecture-complete yet. Some modules are prototype-era, while the architecture direction is more complete in the documents than in the code.
 
-- code is authoritative for current runtime behavior
-- specs are authoritative for intended architecture and new implementation direction
+---
+
+## How To Read Torque
+
+The most stable mental model is:
+
+`Upper-layer system`
+-> `Harness`
+-> `Kernel`
+-> `Execution objects + policy/context/recovery surfaces`
+
+In practical terms:
+
+- the **kernel** owns execution semantics
+- the **harness** owns higher-level collaboration and orchestration behavior
+- **capability** decides how upper layers refer to abilities
+- **policy** decides what is allowed
+- **context/state** decides what execution can see
+- **recovery** decides how long-running execution can be restored safely
+
+This is a layered system, not a single all-purpose orchestration object.
 
 ---
 
@@ -57,30 +113,45 @@ Torque should be understood as six related layers.
 
 ### 1. Kernel Execution
 
-Defines the core runtime execution contract:
+This layer defines the core runtime execution contract.
+
+Primary objects:
 
 - `ExecutionRequest`
+- `AgentDefinition`
 - `AgentInstance`
 - `Task`
 - `ExecutionResult`
 - `DelegationRequest`
 - `DelegationResult`
 - `ApprovalRequest`
+- `Artifact`
+- `MemoryWriteCandidate`
+- `ExternalContextRef`
+- `Event`
+- `Checkpoint`
 
-This layer is responsible for:
+This layer owns:
 
 - execution entry
 - instance lifecycle
 - task ownership
-- delegation
-- streaming progression
+- turn progression
+- tool mediation
+- delegation runtime
 - suspension and resumption
+
+This layer does not own:
+
+- team collaboration semantics
+- product-specific workflow models
+- graph-native planning abstractions
 
 ### 2. Capability Layer
 
-Defines how upper layers refer to abilities without hard-binding to concrete implementations.
+This layer defines how upper layers refer to abilities without hard-binding to concrete implementations.
 
-Core objects:
+Primary objects:
 
 - `CapabilityRef`
 - `CapabilityProfile`
@@ -94,9 +165,11 @@ This layer separates:
 - which implementations can satisfy it
 - which candidates are valid in the current run
 
+This layer should let upper layers depend on capability identity rather than directly on a specific `AgentDefinition`.
+
 ### 3. Policy Layer
 
-Defines governance as an evaluated rule system rather than scattered booleans.
+This layer defines governance as evaluated policy, not scattered booleans.
 
 Core idea:
 
@@ -111,26 +184,30 @@ Initial policy dimensions include:
 - memory
 - tool
 
+This layer owns governance decisions. It should not be replaced by ad hoc flags spread across runtime structs.
+
 ### 4. Context and State Layer
 
-Defines how execution receives and manages context.
+This layer defines how execution receives and manages context.
 
-This layer explicitly rejects “full chat history as context” as the default model.
+It explicitly rejects "full chat history as the default context model".
 
-Instead, Torque uses:
+Instead, Torque prefers:
 
 - layered state
 - structured summaries
 - explicit references
 - derived execution packets
 - lazy loading
-- periodic state convergence / compaction
+- periodic state convergence and compaction
+
+This layer is about visibility, ownership, and shaping of execution input, not just prompt construction.
 
 ### 5. Harness / Team Layer
 
-Defines higher-level orchestration on top of the kernel.
+This layer defines higher-level orchestration on top of the kernel.
 
-Core objects:
+Primary objects:
 
 - `TeamDefinition`
 - `TeamInstance`
@@ -138,28 +215,68 @@ Core objects:
 - `SharedTaskState`
 - `TeamEvent`
 
+This layer owns:
+
+- triage and coordination
+- selector-governed dynamic expansion
+- collaboration patterns
+- shared-state publish
+- team-local approval routing
+- collaboration-level recovery behavior
+
 Default collaboration model:
 
 `Supervisor -> Subagent`
 
-This layer is responsible for:
-
-- triage and coordination
-- selector-governed dynamic expansion
-- shared-state publish
-- team-local approval routing
-- collaboration-level recovery
+This layer should lower decisions into kernel-level runtime objects rather than importing team semantics into kernel execution types.
 
 ### 6. Recovery Layer
 
-Defines recovery as:
+This layer defines how long-running execution is restored safely.
+
+It is based on:
 
 - event truth
 - checkpoint acceleration
 - replay
 - reconciliation
 
-This applies consistently across kernel and team layers.
+Recovery applies across kernel and team layers, but it should not erase the ownership boundaries of those layers.
+
+---
+
+## Kernel vs Harness Boundary
+
+This boundary is one of the most important separations in the system.
+
+The kernel should remain neutral and reusable. It should not require Torque to understand a particular upper-layer workflow, playbook, or workspace model in order to execute work.
+
+The harness may provide:
+
+- planning and decomposition behavior
+- team structures
+- orchestration modes
+- collaboration strategies
+- built-in higher-level routines
+
+But those decisions should lower into standard kernel objects such as:
+
+- `ExecutionRequest`
+- `DelegationRequest`
+- `ApprovalRequest`
+- `Artifact`
+- `ExecutionResult`
+
+Recommended boundary:
+
+`Upper-layer orchestration`
+-> `Harness decisions`
+-> `ExecutionRequest / DelegationRequest / Artifact / ApprovalRequest`
+-> `Kernel`
+-> `ExecutionResult / Artifact / ApprovalRequest`
+-> `Harness and upper layers`
+
+If a concept is only meaningful for collaboration or orchestration, it probably belongs in the harness, not the kernel.
 
 ---
 
@@ -173,16 +290,75 @@ The core execution chain is:
 -> create or continue `AgentInstance`
 -> assign or continue `Task`
 -> instance executes
+-> runtime may produce `Artifact`, `DelegationRequest`, `ApprovalRequest`, `MemoryWriteCandidate`, `Checkpoint`
 -> runtime emits `ExecutionResult`
 
 Important boundaries:
 
 - `ExecutionRequest` is a kernel intent object, not merely an HTTP payload
-- `AgentInstance` is the execution owner
+- `AgentDefinition` is the static execution template
+- `AgentInstance` is the live execution owner
 - `Task` is the current work item
 - `ExecutionResult` is a progression result, not just a final text response
 
-A single instance may outlive a task, but it should have only one active primary task at a time.
+An `AgentInstance` may outlive an individual `Task`, but it should have only one active primary task at a time. If true concurrency is needed, the system should prefer multiple instances or explicit delegation.
+
+---
+
+## Core Object Relationships
+
+The most important object boundaries are:
+
+- `AgentDefinition`
+  static identity, defaults, and policy surfaces for an agent type
+- `AgentInstance`
+  live execution owner created from an `AgentDefinition`
+- `ExecutionRequest`
+  kernel entry intent for what execution should happen now
+- `Task`
+  the specific work item the instance is currently trying to complete
+- `ExecutionResult`
+  the structured progression result of that execution
+
+Supporting execution objects:
+
+- `Artifact`
+  execution output and downstream input surface
+- `ExternalContextRef`
+  neutral reference to externally owned context
+- `MemoryWriteCandidate`
+  nomination object for durable semantic retention
+- `ApprovalRequest`
+  auditable request for human or policy-mediated approval
+- `Event`
+  truth source for execution history
+- `Checkpoint`
+  acceleration layer for recovery
+
+These objects should not be collapsed into one session-shaped blob.
+
+---
+
+## Execution Lifecycle
+
+The recommended lifecycle is:
+
+1. `Instantiate`
+2. `Hydrate`
+3. `Deliberate`
+4. `Act`
+5. `Checkpoint`
+6. `Publish`
+7. `Suspend / Resume / Complete / Fail`
+
+Two important state machines remain separate:
+
+- **Agent instance state**
+  lifecycle of the live execution owner
+- **Task state**
+  lifecycle of the work item being attempted
+
+Torque should not collapse instance state and task state into the same object or lifecycle.
 
 ---
 
@@ -197,12 +373,13 @@ The standard relationship is:
 -> `Child AgentInstance`
 -> `DelegationResult`
 
-Important rules:
+Key rules:
 
-- the child does not inherit the parent’s full private history
+- the child does not inherit the parent's full private history
 - the child receives a constrained execution packet, not the whole transcript
-- child output is returned to the parent, not automatically published
-- completion is not automatic acceptance
+- the child executes under its own instance lifecycle
+- child output returns to the parent, not automatically to the outside world
+- child completion is not automatic parent acceptance
 
 Conceptually, parent-side handling should evaluate:
 
@@ -211,19 +388,49 @@ Conceptually, parent-side handling should evaluate:
 3. work-product fitness
 4. integration and publishability
 
+This separation is important because `Task` describes the work itself, while `DelegationRequest` describes how that work is assigned under a parent-child control relationship.
+
 ---
 
-## Context Model
+## Context and State Model
 
-Torque treats context as a **state management system**, not a giant prompt buffer.
+Torque treats context as a **state system**, not a giant prompt buffer.
 
-The effective model is layered:
+The recommended layers are:
 
 - global stable layer
 - team/shared coordination layer
 - agent-instance private layer
 - external knowledge layer
 - execution-time `TaskPacket` layer
+
+### Authoritative vs Derived State
+
+Authoritative state should remain in the objects that actually own it:
+
+- `AgentDefinition`
+- `AgentInstance`
+- `Task`
+- `DelegationRequest`
+- `TeamDefinition`
+- `TeamInstance`
+- `TeamTask`
+- `SharedTaskState`
+- `Artifact`
+- `ExternalContextRef`
+- `ApprovalRequest`
+- `MemoryWriteCandidate`
+
+Torque should not create one persistent `TaskState` god object that tries to combine:
+
+- work definition
+- delegation control
+- shared coordination state
+- artifact index
+- memory cache
+- external knowledge snapshot
+
+Derived views are still allowed, but they remain derived.
 
 ### TaskPacket
 
@@ -239,6 +446,7 @@ It is not:
 - the source of truth
 - a full transcript
 - a full shared-state dump
+- a replacement for persistent state ownership
 
 Default behavior should prefer:
 
@@ -250,7 +458,7 @@ Default behavior should prefer:
 
 ## Context Planes
 
-Torque keeps three planes separate:
+Torque keeps three context-related planes explicitly separate:
 
 - `ExternalContextRef`
   external reference plane
@@ -259,44 +467,37 @@ Torque keeps three planes separate:
 - `Memory`
   semantic retention plane
 
-These planes interact only through explicit, policy-governed transitions.
+These planes are related, but they are not interchangeable.
+
+Recommended transition model:
+
+- `ExternalContextRef`
+  may be retrieved into local execution context
+- execution
+  may create `Artifact`
+- accepted output
+  may be published into `SharedTaskState`
+- `Artifact` or accepted content
+  may become `MemoryWriteCandidate`
+- `MemoryWriteCandidate`
+  may be retained as `Memory`
 
 Important non-rules:
 
 - external context does not automatically become artifact
 - artifact does not automatically become memory
 - team publish does not automatically become memory write
+- memory does not replace artifact retention
+- artifact does not replace external reference access
+
+`SharedTaskState` is not one of the three planes. It is a governance-filtered coordination surface.
 
 This separation is important for:
 
 - token control
-- replayability
 - ownership boundaries
+- replayability
 - recovery correctness
-
----
-
-## Team Model
-
-`Team` is a harness-layer capability, not a kernel primitive.
-
-Key principles:
-
-- supervisor-led by default
-- governance-first
-- dynamic expansion through selectors
-- explicit shared-state publication
-- team-local approval routing
-
-`SharedTaskState` is intentionally narrow. It should hold accepted coordination state such as:
-
-- accepted facts
-- decision summaries
-- blocker summaries
-- progress summaries
-- artifact refs
-
-It is not a transcript store and not a blob store.
 
 ---
 
@@ -321,15 +522,15 @@ This keeps:
 
 Upper layers should usually depend on capability-level references, not directly on concrete agent definitions.
 
+Capability is not implementation. Those should remain distinct concepts.
+
 ---
 
 ## Policy Model
 
 Torque treats policy as a first-class governance system.
 
-Policy is not just configuration spread across structs.
-
-Instead:
+Policy is not just configuration spread across structs. Instead:
 
 - multiple policy sources contribute input
 - evaluation is done per dimension
@@ -342,6 +543,54 @@ Important rule:
 
 Different layers may speak about different dimensions, and no single lower layer should silently override everything else.
 
+Policy should govern:
+
+- approval
+- visibility
+- delegation
+- resource usage
+- memory retention
+- tool access
+
+If a design problem is fundamentally about runtime governance, it likely belongs in policy rather than as a new ad hoc boolean flag.
+
+---
+
+## Team Model
+
+`Team` is a harness-layer capability, not a kernel primitive.
+
+Key principles:
+
+- supervisor-led by default
+- governance-first
+- explicit shared-state publication
+- dynamic expansion through selectors
+- team-local approval routing
+- collaboration-level recovery
+
+The default collaboration model remains:
+
+`Supervisor -> Subagent`
+
+`SharedTaskState` is intentionally narrow. It should hold accepted coordination state such as:
+
+- accepted facts
+- decision summaries
+- blocker summaries
+- progress summaries
+- approval refs
+- published artifact refs
+
+It is not:
+
+- a transcript store
+- a blob store
+- a private scratch space for every member
+- a memory plane
+
+The team layer should capture collaboration facts and decisions, while the kernel continues to capture per-agent execution facts.
+
 ---
 
 ## Recovery Model
@@ -349,20 +598,65 @@ Different layers may speak about different dimensions, and no single lower layer
 Torque recovery follows one consistent rule:
 
 - `Event` is the truth source
-- `Checkpoint` is the recovery acceleration layer
+- `Checkpoint` is the acceleration layer
 - `Recovery` is restore + replay + reconciliation
 
 This means:
 
 - checkpoints are not canonical truth
-- restoring a snapshot is not enough
-- recovery must reconcile against current storage/runtime reality
+- restoring a snapshot is not enough by itself
+- replay is part of correctness, not just debugging
+- recovery must reconcile against current storage and runtime reality
 
 This applies to:
 
 - kernel instance recovery
 - team recovery
 - long-running execution continuity
+
+---
+
+## Architectural Invariants
+
+The following invariants should not be casually broken.
+
+### 1. Kernel Is Instance-Centric
+
+- `AgentInstance` is the execution owner
+- `ExecutionRequest` is the execution intent object
+- `Task` is the current work item
+- `ExecutionResult` is a progression result
+
+Do not collapse these back into one "request = task = session" object.
+
+### 2. Context Is a State System, Not a Transcript Dump
+
+- do not default to sharing full chat history
+- prefer structured state and refs
+- keep `TaskPacket` narrow and derived
+- use lazy loading by default
+
+### 3. Keep the Three Context Planes Separate
+
+- `ExternalContextRef` is not `Artifact`
+- `Artifact` is not `Memory`
+- team publish is not memory retention
+
+### 4. Capability Is Not Implementation
+
+Keep `CapabilityRef`, `CapabilityProfile`, `CapabilityRegistryBinding`, `CapabilityResolution`, and `AgentDefinition` conceptually distinct.
+
+### 5. Policy Is Evaluated Governance
+
+Do not rebuild policy as scattered booleans when the change is fundamentally about approval, visibility, delegation, resource, memory, or tool governance.
+
+### 6. Team Is Supervisor-Led by Default
+
+Do not assume a symmetric peer mesh or unrestricted recursive delegation as the default collaboration model.
+
+### 7. Event Truth, Checkpoint Acceleration
+
+Do not treat checkpoints as a second canonical truth model.
 
 ---
 
@@ -374,22 +668,21 @@ It is intentionally narrow:
 
 - single agent
 - persistent session
-- multi-turn chat
-- SSE streaming
+- multi-turn interaction
+- streaming
 - bounded context window
-- optional minimal safe tool support
+- minimal safe tool support
 
-It is meant to demonstrate:
+It demonstrates:
 
 `Torque already supports a stateful agent experience`
 
-It is not meant to demonstrate:
+It does not yet demonstrate the full target architecture, especially around:
 
 - team orchestration
-- approval UI
-- recovery UI
 - capability registry UX
 - full policy exposure
+- full recovery experience
 
 The current MVP implementation path primarily lives in:
 
@@ -398,49 +691,56 @@ The current MVP implementation path primarily lives in:
 
 ---
 
+## Implementation Guidance
+
+When adding or changing architecture-aligned code:
+
+- prefer placing core runtime concepts in kernel-oriented crates rather than product-facing wrappers
+- keep team-specific collaboration logic out of generic kernel execution abstractions
+- prefer explicit objects over prompt-only conventions when a concept needs persistence, auditability, or recovery
+- prefer refs and structured summaries over large inline payloads
+- keep runtime decision points observable and auditable
+
+When changing contracts or ownership boundaries:
+
+- update the relevant spec
+- do not silently drift implementation away from the spec set
+- state clearly which layer owns any new cross-cutting module
+
+---
+
 ## Authoritative Documents
 
-The architecture is split across a small set of focused documents.
+The architecture is split across a focused set of documents.
 
-### Architecture and contracts
+### High-Level Architecture
 
 - [Torque Agent Runtime / Harness Design](./superpowers/specs/2026-04-08-torque-agent-runtime-harness-design.md)
 - [Torque Kernel Execution Contract Design](./superpowers/specs/2026-04-08-torque-kernel-execution-contract-design.md)
-- [Torque Recovery Core Design](./superpowers/specs/2026-04-08-torque-recovery-core-design.md)
 
-### Capability and governance
+### Capability and Governance
 
 - [Torque Capability Registry Model Design](./superpowers/specs/2026-04-08-torque-capability-registry-model-design.md)
 - [Torque Policy Model Design](./superpowers/specs/2026-04-08-torque-policy-model-design.md)
 
-### Context and data planes
+### Context and Data Planes
 
 - [Torque Context State Model Design](./superpowers/specs/2026-04-08-torque-context-state-model-design.md)
 - [Torque Context Planes Design](./superpowers/specs/2026-04-08-torque-context-planes-design.md)
 
-### Team and collaboration
+### Collaboration and Recovery
 
 - [Torque Agent Team Design](./superpowers/specs/2026-04-08-torque-agent-team-design.md)
+- [Torque Recovery Core Design](./superpowers/specs/2026-04-08-torque-recovery-core-design.md)
 
-### MVP
+### Concept Navigation
 
-- [Session Agent MVP Design](./superpowers/specs/2026-04-08-session-agent-mvp-design.md)
-- [Session Agent MVP Implementation Plan](./superpowers/plans/2026-04-08-session-agent-mvp.md)
-
-### High-level concept index
-
-- [Torque Concepts](./learn.md)
+- [Concept Index](./learn.md)
 
 ---
 
-## Practical Guidance
+## One-Line Summary
 
-When making changes in this repo:
+Torque can be summarized as:
 
-- read the specific spec for the layer you are touching
-- keep prototype-era code and target architecture mentally separate
-- prefer explicit contracts over prompt-only conventions when persistence, auditing, or recovery matters
-- keep context narrow and structured
-- avoid reintroducing DAG-first or transcript-first assumptions unless the architecture explicitly changes
-
-If a change spans multiple layers, update the relevant design docs first or keep the implementation aligned with the current contracts.
+an instance-centric agent runtime kernel, plus a harness layer that lowers higher-level orchestration into explicit execution, capability, policy, context, team, and recovery contracts instead of hard-coding a workflow or transcript-centric system into the kernel.
