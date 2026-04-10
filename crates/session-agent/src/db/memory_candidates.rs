@@ -98,8 +98,14 @@ pub async fn update_status(
         UPDATE memory_candidates
         SET status = $1,
             updated_at = NOW(),
-            accepted_at = CASE WHEN $1::TEXT = 'accepted' THEN NOW() ELSE accepted_at END,
-            rejected_at = CASE WHEN $1::TEXT = 'rejected' THEN NOW() ELSE rejected_at END
+            accepted_at = CASE
+                WHEN $1::TEXT = 'accepted' THEN COALESCE(accepted_at, NOW())
+                ELSE NULL
+            END,
+            rejected_at = CASE
+                WHEN $1::TEXT = 'rejected' THEN COALESCE(rejected_at, NOW())
+                ELSE NULL
+            END
         WHERE project_scope = $2 AND id = $3
         RETURNING *
         "#,

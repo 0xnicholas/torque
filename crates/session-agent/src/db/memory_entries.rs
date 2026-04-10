@@ -1,8 +1,30 @@
+use anyhow::ensure;
 use crate::models::{MemoryEntry, MemoryEntryStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn create(pool: &PgPool, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry> {
+    if let Some(source_candidate_id) = entry.source_candidate_id {
+        let candidate_exists = sqlx::query_scalar::<_, bool>(
+            r#"
+            SELECT EXISTS(
+                SELECT 1
+                FROM memory_candidates
+                WHERE project_scope = $1 AND id = $2
+            )
+            "#,
+        )
+        .bind(&entry.project_scope)
+        .bind(source_candidate_id)
+        .fetch_one(pool)
+        .await?;
+
+        ensure!(
+            candidate_exists,
+            "memory entry source_candidate_id must reference a candidate in the same project_scope"
+        );
+    }
+
     let row = sqlx::query_as::<_, MemoryEntry>(
         r#"
         INSERT INTO memory_entries (
@@ -96,7 +118,10 @@ pub async fn update_status(
         UPDATE memory_entries
         SET status = $1,
             updated_at = NOW(),
-            invalidated_at = CASE WHEN $1::TEXT = 'invalidated' THEN NOW() ELSE invalidated_at END
+            invalidated_at = CASE
+                WHEN $1::TEXT = 'invalidated' THEN COALESCE(invalidated_at, NOW())
+                ELSE NULL
+            END
         WHERE project_scope = $2 AND id = $3
         RETURNING *
         "#,
