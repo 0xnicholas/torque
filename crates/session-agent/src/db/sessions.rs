@@ -2,16 +2,13 @@ use crate::models::{Session, SessionStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-pub async fn create(
-    pool: &PgPool,
-    api_key: &str,
-) -> anyhow::Result<Session> {
+pub async fn create(pool: &PgPool, api_key: &str) -> anyhow::Result<Session> {
     let session = sqlx::query_as::<_, Session>(
         r#"
-        INSERT INTO sessions (api_key, status)
-        VALUES ($1, 'idle')
+        INSERT INTO sessions (api_key, status, project_scope)
+        VALUES ($1, 'idle', 'default')
         RETURNING *
-        "#
+        "#,
     )
     .bind(api_key)
     .fetch_one(pool)
@@ -20,16 +17,11 @@ pub async fn create(
     Ok(session)
 }
 
-pub async fn get_by_id(
-    pool: &PgPool,
-    id: Uuid,
-) -> anyhow::Result<Option<Session>> {
-    let session = sqlx::query_as::<_, Session>(
-        r#"SELECT * FROM sessions WHERE id = $1"#
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_by_id(pool: &PgPool, id: Uuid) -> anyhow::Result<Option<Session>> {
+    let session = sqlx::query_as::<_, Session>(r#"SELECT * FROM sessions WHERE id = $1"#)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(session)
 }
@@ -68,7 +60,7 @@ pub async fn update_status(
         UPDATE sessions
         SET status = $1, error_message = $2, updated_at = NOW()
         WHERE id = $3
-        "#
+        "#,
     )
     .bind(status)
     .bind(error_message)
@@ -79,10 +71,7 @@ pub async fn update_status(
     Ok(())
 }
 
-pub async fn try_mark_running(
-    pool: &PgPool,
-    id: Uuid,
-) -> anyhow::Result<bool> {
+pub async fn try_mark_running(pool: &PgPool, id: Uuid) -> anyhow::Result<bool> {
     let updated_rows = sqlx::query(
         r#"
         UPDATE sessions

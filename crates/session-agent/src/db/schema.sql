@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     api_key TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'idle',
+    project_scope TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     error_message TEXT
@@ -31,5 +32,6 @@ CREATE TABLE IF NOT EXISTS tools (
 
 -- index for faster queries
 CREATE INDEX IF NOT EXISTS idx_sessions_api_key ON sessions(api_key);
+CREATE INDEX IF NOT EXISTS idx_sessions_project_scope ON sessions(project_scope);
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON session_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON session_messages(created_at);

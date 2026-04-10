@@ -10,13 +10,14 @@ use uuid::Uuid;
 
 use crate::api::middleware::extract_api_key;
 use crate::db::Database;
-use llm::OpenAiClient;
 use crate::models::SessionStatus;
+use llm::OpenAiClient;
 
 #[derive(Debug, Serialize)]
 pub struct CreateSessionResponse {
     pub id: Uuid,
     pub status: SessionStatus,
+    pub project_scope: String,
     pub created_at: String,
 }
 
@@ -24,6 +25,7 @@ pub struct CreateSessionResponse {
 pub struct GetSessionResponse {
     pub id: Uuid,
     pub status: SessionStatus,
+    pub project_scope: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -37,6 +39,7 @@ fn to_get_session_response(session: crate::models::Session) -> GetSessionRespons
     GetSessionResponse {
         id: session.id,
         status: session.status,
+        project_scope: session.project_scope,
         created_at: session.created_at.to_rfc3339(),
         updated_at: session.updated_at.to_rfc3339(),
     }
@@ -55,6 +58,7 @@ pub async fn create(
     Ok(Json(CreateSessionResponse {
         id: session.id,
         status: session.status,
+        project_scope: session.project_scope,
         created_at: session.created_at.to_rfc3339(),
     }))
 }

@@ -8,6 +8,7 @@ pub struct Session {
     pub id: Uuid,
     pub api_key: String,
     pub status: SessionStatus,
+    pub project_scope: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub error_message: Option<String>,
