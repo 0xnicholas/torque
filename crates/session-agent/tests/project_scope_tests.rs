@@ -11,8 +11,6 @@ use std::sync::Arc;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 
-const DEFAULT_PROJECT_SCOPE: &str = "default";
-
 async fn setup_app() -> Option<(Database, axum::Router)> {
     let Some(db) = setup_test_db_or_skip().await else {
         return None;
@@ -39,10 +37,15 @@ async fn read_json(response: axum::response::Response) -> Value {
 
 #[tokio::test]
 #[serial]
-async fn project_scope_tests_create_session_defaults_project_scope_and_persists_it() {
+async fn project_scope_tests_create_session_derives_project_scope_and_persists_it() {
     let Some((db, app)) = setup_app().await else {
         return;
     };
+
+    let expected_project_scope = session_agent::db::sessions::current_project_scope()
+        .expect("project scope should be derivable");
+    assert!(!expected_project_scope.is_empty());
+    assert_ne!(expected_project_scope, "default");
 
     let api_key = test_api_key();
     let response = app
@@ -63,7 +66,7 @@ async fn project_scope_tests_create_session_defaults_project_scope_and_persists_
     let session_id = Uuid::parse_str(json["id"].as_str().expect("id should be a string"))
         .expect("id should be a uuid");
 
-    assert_eq!(json["project_scope"], DEFAULT_PROJECT_SCOPE);
+    assert_eq!(json["project_scope"], expected_project_scope);
 
     let row = sqlx::query_scalar::<_, String>("SELECT project_scope FROM sessions WHERE id = $1")
         .bind(session_id)
@@ -71,15 +74,20 @@ async fn project_scope_tests_create_session_defaults_project_scope_and_persists_
         .await
         .expect("project_scope should be persisted");
 
-    assert_eq!(row, DEFAULT_PROJECT_SCOPE);
+    assert_eq!(row, expected_project_scope);
 }
 
 #[tokio::test]
 #[serial]
-async fn project_scope_tests_list_and_get_session_return_project_scope() {
+async fn project_scope_tests_list_and_get_session_return_derived_project_scope() {
     let Some((_db, app)) = setup_app().await else {
         return;
     };
+    let expected_project_scope = session_agent::db::sessions::current_project_scope()
+        .expect("project scope should be derivable");
+    assert!(!expected_project_scope.is_empty());
+    assert_ne!(expected_project_scope, "default");
+
     let api_key = test_api_key();
 
     let create_response = app
@@ -120,7 +128,7 @@ async fn project_scope_tests_list_and_get_session_return_project_scope() {
         .expect("sessions should be an array");
 
     assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0]["project_scope"], DEFAULT_PROJECT_SCOPE);
+    assert_eq!(sessions[0]["project_scope"], expected_project_scope);
 
     let get_response = app
         .oneshot(
@@ -137,5 +145,5 @@ async fn project_scope_tests_list_and_get_session_return_project_scope() {
     assert_eq!(get_response.status(), StatusCode::OK);
     let get_json = read_json(get_response).await;
 
-    assert_eq!(get_json["project_scope"], DEFAULT_PROJECT_SCOPE);
+    assert_eq!(get_json["project_scope"], expected_project_scope);
 }

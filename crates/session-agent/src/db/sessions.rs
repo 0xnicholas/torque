@@ -2,15 +2,33 @@ use crate::models::{Session, SessionStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+pub fn current_project_scope() -> anyhow::Result<String> {
+    let cwd = std::env::current_dir()?;
+    let scope = cwd
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| cwd.display().to_string());
+
+    if scope.is_empty() {
+        anyhow::bail!("project scope derived from current workdir was empty");
+    }
+
+    Ok(scope)
+}
+
 pub async fn create(pool: &PgPool, api_key: &str) -> anyhow::Result<Session> {
+    let project_scope = current_project_scope()?;
     let session = sqlx::query_as::<_, Session>(
         r#"
         INSERT INTO sessions (api_key, status, project_scope)
-        VALUES ($1, 'idle', 'default')
+        VALUES ($1, 'idle', $2)
         RETURNING *
         "#,
     )
     .bind(api_key)
+    .bind(project_scope)
     .fetch_one(pool)
     .await?;
 
