@@ -27,6 +27,21 @@ async fn setup_app() -> Option<(Database, axum::Router)> {
     Some((db, app))
 }
 
+fn expected_project_scope() -> String {
+    let cwd = std::env::current_dir().expect("current dir should be available");
+    let scope = cwd
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| cwd.display().to_string());
+
+    assert!(!scope.is_empty());
+    assert_ne!(scope, "default");
+
+    scope
+}
+
 async fn read_json(response: axum::response::Response) -> Value {
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
@@ -42,10 +57,7 @@ async fn project_scope_tests_create_session_derives_project_scope_and_persists_i
         return;
     };
 
-    let expected_project_scope = session_agent::db::sessions::current_project_scope()
-        .expect("project scope should be derivable");
-    assert!(!expected_project_scope.is_empty());
-    assert_ne!(expected_project_scope, "default");
+    let expected_project_scope = expected_project_scope();
 
     let api_key = test_api_key();
     let response = app
@@ -83,10 +95,7 @@ async fn project_scope_tests_list_and_get_session_return_derived_project_scope()
     let Some((_db, app)) = setup_app().await else {
         return;
     };
-    let expected_project_scope = session_agent::db::sessions::current_project_scope()
-        .expect("project scope should be derivable");
-    assert!(!expected_project_scope.is_empty());
-    assert_ne!(expected_project_scope, "default");
+    let expected_project_scope = expected_project_scope();
 
     let api_key = test_api_key();
 
