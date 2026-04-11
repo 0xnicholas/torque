@@ -1,4 +1,4 @@
-use crate::models::{MemoryCandidate, MemoryCandidateStatus};
+use crate::models::{MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -117,4 +117,125 @@ pub async fn update_status(
     .await?;
 
     Ok(row)
+}
+
+pub async fn accept_candidate_to_entry(
+    pool: &PgPool,
+    project_scope: &str,
+    candidate_id: Uuid,
+) -> anyhow::Result<Option<(MemoryCandidate, MemoryEntry)>> {
+    let mut tx = pool.begin().await?;
+
+    let candidate = sqlx::query_as::<_, MemoryCandidate>(
+        r#"
+        SELECT *
+        FROM memory_candidates
+        WHERE project_scope = $1 AND id = $2
+        FOR UPDATE
+        "#,
+    )
+    .bind(project_scope)
+    .bind(candidate_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(_candidate) = candidate else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+
+    if let Some(existing_entry) = sqlx::query_as::<_, MemoryEntry>(
+        r#"
+        SELECT *
+        FROM memory_entries
+        WHERE project_scope = $1 AND source_candidate_id = $2
+        "#,
+    )
+    .bind(project_scope)
+    .bind(candidate_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        let accepted_candidate = sqlx::query_as::<_, MemoryCandidate>(
+            r#"
+            UPDATE memory_candidates
+            SET status = 'accepted',
+                updated_at = NOW(),
+                accepted_at = COALESCE(accepted_at, NOW()),
+                rejected_at = NULL
+            WHERE project_scope = $1 AND id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(project_scope)
+        .bind(candidate_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        return Ok(Some((accepted_candidate, existing_entry)));
+    }
+
+    let accepted_candidate = sqlx::query_as::<_, MemoryCandidate>(
+        r#"
+        UPDATE memory_candidates
+        SET status = 'accepted',
+            updated_at = NOW(),
+            accepted_at = COALESCE(accepted_at, NOW()),
+            rejected_at = NULL
+        WHERE project_scope = $1 AND id = $2
+        RETURNING *
+        "#,
+    )
+    .bind(project_scope)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let entry = sqlx::query_as::<_, MemoryEntry>(
+        r#"
+        INSERT INTO memory_entries (
+            id,
+            project_scope,
+            layer,
+            content,
+            source_candidate_id,
+            source_type,
+            source_ref,
+            proposer,
+            status,
+            created_at,
+            updated_at,
+            invalidated_at
+        )
+        VALUES (
+            gen_random_uuid(),
+            $1,
+            $2,
+            $3,
+            $4,
+            'candidate_acceptance',
+            $5,
+            $6,
+            $7,
+            NOW(),
+            NOW(),
+            NULL
+        )
+        RETURNING *
+        "#,
+    )
+    .bind(project_scope)
+    .bind(&accepted_candidate.layer)
+    .bind(&accepted_candidate.proposed_fact)
+    .bind(candidate_id)
+    .bind(format!("memory-candidate://{}", candidate_id))
+    .bind(accepted_candidate.proposer.clone())
+    .bind(MemoryEntryStatus::Active)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(Some((accepted_candidate, entry)))
 }

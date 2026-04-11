@@ -1,15 +1,45 @@
 mod common;
 
+use axum::body::{to_bytes, Body};
+use axum::http::{Request, StatusCode};
 use chrono::Utc;
 use common::setup_test_db_or_skip;
+use llm::OpenAiClient;
+use serde_json::{json, Value};
 use serial_test::serial;
+use session_agent::db::Database;
 use session_agent::models::{
     MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus, MemoryLayer,
 };
+use std::sync::Arc;
+use tower::util::ServiceExt;
 use uuid::Uuid;
 
 fn unique_project_scope() -> String {
     format!("memory-candidate-test-{}", Uuid::new_v4())
+}
+
+async fn setup_app() -> Option<(Database, axum::Router)> {
+    let Some(db) = setup_test_db_or_skip().await else {
+        return None;
+    };
+
+    let llm = Arc::new(OpenAiClient::new(
+        "http://127.0.0.1:1/v1".to_string(),
+        "test-key".to_string(),
+        "gpt-4o-mini".to_string(),
+    ));
+    let app = session_agent::app::build_app(Database::new(db.pool().clone()), llm);
+
+    Some((db, app))
+}
+
+async fn read_json(response: axum::response::Response) -> Value {
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body should be readable");
+
+    serde_json::from_slice(&body).expect("response should be valid json")
 }
 
 #[tokio::test]
@@ -303,4 +333,141 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
     .expect("entry should exist");
 
     assert!(active.invalidated_at.is_none());
+}
+
+#[tokio::test]
+#[serial]
+async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry() {
+    let Some((db, app)) = setup_app().await else {
+        return;
+    };
+
+    let api_key = "test-api-key";
+    let session = session_agent::db::sessions::create(db.pool(), api_key)
+        .await
+        .expect("session should be created");
+    sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("entries cleanup should succeed");
+    sqlx::query("DELETE FROM memory_candidates WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("candidates cleanup should succeed");
+
+    let create_candidate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/sessions/{}/memory/candidates", session.id))
+                .header("x-api-key", api_key)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "layer": "L1",
+                        "proposed_fact": "Accepted fact should become durable entry"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(create_candidate_response.status(), StatusCode::OK);
+    let candidate_json = read_json(create_candidate_response).await;
+    let candidate_id = Uuid::parse_str(
+        candidate_json["id"]
+            .as_str()
+            .expect("candidate id should be string"),
+    )
+    .expect("candidate id should parse");
+
+    let accept_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/sessions/{}/memory/candidates/{}/accept",
+                    session.id, candidate_id
+                ))
+                .header("x-api-key", api_key)
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(accept_response.status(), StatusCode::OK);
+    let accept_json = read_json(accept_response).await;
+    assert_eq!(accept_json["candidate"]["status"], "Accepted");
+    assert_eq!(
+        accept_json["entry"]["source_candidate_id"],
+        Value::String(candidate_id.to_string())
+    );
+
+    let entries_after = session_agent::db::memory_entries::list_by_project_scope(
+        db.pool(),
+        &session.project_scope,
+        100,
+        0,
+    )
+    .await
+    .expect("entries should list");
+    assert_eq!(entries_after.len(), 1);
+}
+
+#[tokio::test]
+#[serial]
+async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries() {
+    let Some((db, app)) = setup_app().await else {
+        return;
+    };
+
+    let api_key = "test-api-key";
+    let session = session_agent::db::sessions::create(db.pool(), api_key)
+        .await
+        .expect("session should be created");
+    sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("entries cleanup should succeed");
+
+    let mut entry = MemoryEntry::new(
+        session.project_scope.clone(),
+        MemoryLayer::L0,
+        "Durable fact visible from memory endpoint".to_string(),
+    );
+    entry.source_type = Some("manual_seed".to_string());
+    session_agent::db::memory_entries::create(db.pool(), &entry)
+        .await
+        .expect("entry should be created");
+
+    let list_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/sessions/{}/memory", session.id))
+                .header("x-api-key", api_key)
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json = read_json(list_response).await;
+    let entries = list_json.as_array().expect("response should be an array");
+    assert!(
+        entries.iter().any(|entry_json| {
+            entry_json["content"]
+                == Value::String("Durable fact visible from memory endpoint".to_string())
+        }),
+        "expected seeded entry to be present in memory endpoint response"
+    );
 }
