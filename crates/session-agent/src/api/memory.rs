@@ -28,6 +28,15 @@ pub struct AcceptCandidateResponse {
     pub entry: MemoryEntry,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ReplaceEntryRequest {
+    pub content: String,
+    pub layer: Option<MemoryLayer>,
+    pub source_type: Option<String>,
+    pub source_ref: Option<String>,
+    pub proposer: Option<String>,
+}
+
 async fn load_session_for_api_key(
     db: &Database,
     session_id: Uuid,
@@ -109,4 +118,71 @@ pub async fn list_entries(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(entries))
+}
+
+pub async fn replace_entry(
+    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
+    Extension(api_key): Extension<String>,
+    Json(req): Json<ReplaceEntryRequest>,
+) -> Result<Json<MemoryEntry>, StatusCode> {
+    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+
+    let old_entry = crate::db::memory_entries::get_by_id(db.pool(), &session.project_scope, entry_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let replaced = crate::db::memory_entries::update_status(
+        db.pool(),
+        &session.project_scope,
+        old_entry.id,
+        crate::models::MemoryEntryStatus::Replaced,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if replaced.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let mut new_entry = MemoryEntry::new(
+        session.project_scope.clone(),
+        req.layer.unwrap_or(old_entry.layer),
+        req.content,
+    );
+    new_entry.source_type = req.source_type.or(Some("memory_replace".to_string()));
+    new_entry.source_ref = req
+        .source_ref
+        .or(Some(format!("memory-entry://{}", old_entry.id)));
+    new_entry.proposer = req.proposer;
+
+    let saved = crate::db::memory_entries::create(db.pool(), &new_entry)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(saved))
+}
+
+pub async fn invalidate_entry(
+    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
+    Extension(api_key): Extension<String>,
+) -> Result<Json<MemoryEntry>, StatusCode> {
+    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+
+    let updated = crate::db::memory_entries::update_status(
+        db.pool(),
+        &session.project_scope,
+        entry_id,
+        crate::models::MemoryEntryStatus::Invalidated,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Some(updated) = updated else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    Ok(Json(updated))
 }

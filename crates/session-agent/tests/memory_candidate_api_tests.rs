@@ -418,7 +418,12 @@ async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry()
     )
     .await
     .expect("entries should list");
-    assert_eq!(entries_after.len(), 1);
+    assert!(
+        entries_after
+            .iter()
+            .any(|entry| entry.source_candidate_id == Some(candidate_id)),
+        "accepted candidate should produce a durable entry linked by source_candidate_id"
+    );
 }
 
 #[tokio::test]
@@ -470,4 +475,140 @@ async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries
         }),
         "expected seeded entry to be present in memory endpoint response"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates_new_entry() {
+    let Some((db, app)) = setup_app().await else {
+        return;
+    };
+
+    let api_key = "test-api-key";
+    let session = session_agent::db::sessions::create(db.pool(), api_key)
+        .await
+        .expect("session should be created");
+    sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("entries cleanup should succeed");
+
+    let entry = MemoryEntry::new(
+        session.project_scope.clone(),
+        MemoryLayer::L0,
+        "Old durable fact".to_string(),
+    );
+    let old_entry = session_agent::db::memory_entries::create(db.pool(), &entry)
+        .await
+        .expect("seed entry should save");
+
+    let replace_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/sessions/{}/memory/{}/replace",
+                    session.id, old_entry.id
+                ))
+                .header("x-api-key", api_key)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "content": "New durable fact",
+                        "layer": "L1"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(replace_response.status(), StatusCode::OK);
+    let new_entry_json = read_json(replace_response).await;
+    let new_entry_id = Uuid::parse_str(
+        new_entry_json["id"]
+            .as_str()
+            .expect("new entry id should be string"),
+    )
+    .expect("new entry id should parse");
+    assert_ne!(new_entry_id, old_entry.id);
+    assert_eq!(
+        new_entry_json["content"],
+        Value::String("New durable fact".to_string())
+    );
+
+    let old_after =
+        session_agent::db::memory_entries::get_by_id(db.pool(), &session.project_scope, old_entry.id)
+            .await
+            .expect("query should succeed")
+            .expect("old entry should exist");
+    assert!(matches!(old_after.status, MemoryEntryStatus::Replaced));
+
+    let all_entries = session_agent::db::memory_entries::list_by_project_scope(
+        db.pool(),
+        &session.project_scope,
+        100,
+        0,
+    )
+    .await
+    .expect("entries should list");
+    assert!(
+        all_entries.iter().any(|entry_row| entry_row.id == new_entry_id),
+        "new replacement entry should exist in scoped listing"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
+    let Some((db, app)) = setup_app().await else {
+        return;
+    };
+
+    let api_key = "test-api-key";
+    let session = session_agent::db::sessions::create(db.pool(), api_key)
+        .await
+        .expect("session should be created");
+    sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("entries cleanup should succeed");
+
+    let entry = MemoryEntry::new(
+        session.project_scope.clone(),
+        MemoryLayer::L0,
+        "Fact to invalidate".to_string(),
+    );
+    let saved = session_agent::db::memory_entries::create(db.pool(), &entry)
+        .await
+        .expect("entry should save");
+
+    let invalidate_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/sessions/{}/memory/{}/invalidate",
+                    session.id, saved.id
+                ))
+                .header("x-api-key", api_key)
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(invalidate_response.status(), StatusCode::OK);
+    let invalidate_json = read_json(invalidate_response).await;
+    assert_eq!(invalidate_json["status"], Value::String("Invalidated".to_string()));
+
+    let stored = session_agent::db::memory_entries::get_by_id(db.pool(), &session.project_scope, saved.id)
+        .await
+        .expect("query should succeed")
+        .expect("entry should exist");
+    assert!(matches!(stored.status, MemoryEntryStatus::Invalidated));
+    assert!(stored.invalidated_at.is_some());
 }
