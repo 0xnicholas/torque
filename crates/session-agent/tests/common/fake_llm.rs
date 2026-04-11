@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use llm::{
-    ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, ToolCall, TokenUsage,
+    ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage, ToolCall,
 };
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -16,6 +16,7 @@ struct ScriptedResponse {
 pub struct FakeLlm {
     model: String,
     scripted: Mutex<VecDeque<ScriptedResponse>>,
+    requests: Mutex<Vec<ChatRequest>>,
 }
 
 impl FakeLlm {
@@ -28,6 +29,7 @@ impl FakeLlm {
                 finish_reason: FinishReason::Stop,
                 message_content: content,
             }])),
+            requests: Mutex::new(Vec::new()),
         }
     }
 
@@ -58,7 +60,15 @@ impl FakeLlm {
                     message_content: final_text,
                 },
             ])),
+            requests: Mutex::new(Vec::new()),
         }
+    }
+
+    pub fn recorded_requests(&self) -> Vec<ChatRequest> {
+        self.requests
+            .lock()
+            .map(|requests| requests.clone())
+            .unwrap_or_default()
     }
 
     fn pop_response(&self) -> Result<ScriptedResponse, llm::LlmError> {
@@ -66,15 +76,18 @@ impl FakeLlm {
             .scripted
             .lock()
             .map_err(|_| llm::LlmError::Streaming("fake llm mutex poisoned".to_string()))?;
-        scripted
-            .pop_front()
-            .ok_or_else(|| llm::LlmError::InvalidResponse("no fake llm response scripted".to_string()))
+        scripted.pop_front().ok_or_else(|| {
+            llm::LlmError::InvalidResponse("no fake llm response scripted".to_string())
+        })
     }
 }
 
 #[async_trait]
 impl LlmClient for FakeLlm {
-    async fn chat(&self, _request: ChatRequest) -> llm::Result<ChatResponse> {
+    async fn chat(&self, request: ChatRequest) -> llm::Result<ChatResponse> {
+        if let Ok(mut requests) = self.requests.lock() {
+            requests.push(request.clone());
+        }
         let response = self.pop_response()?;
         Ok(ChatResponse {
             message: Message::assistant(response.message_content),
@@ -89,9 +102,12 @@ impl LlmClient for FakeLlm {
 
     async fn chat_streaming(
         &self,
-        _request: ChatRequest,
+        request: ChatRequest,
         callback: impl Fn(Chunk) + Send + 'static,
     ) -> llm::Result<ChatResponse> {
+        if let Ok(mut requests) = self.requests.lock() {
+            requests.push(request.clone());
+        }
         let response = self.pop_response()?;
         for chunk in response.chunks.clone() {
             callback(chunk);

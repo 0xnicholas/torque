@@ -1,7 +1,8 @@
-use crate::models::{Message, MessageRole};
+use crate::models::{MemoryEntry, Message, MessageRole};
 use llm::Message as LlmMessage;
 
 pub const DEFAULT_WINDOW_SIZE: usize = 10;
+pub const DEFAULT_MEMORY_RECALL_LIMIT: i64 = 5;
 
 pub struct ContextWindow {
     pub messages: Vec<Message>,
@@ -46,10 +47,39 @@ impl ContextManager {
 
         ContextWindow::new(window_messages, self.window_size)
     }
+
+    pub fn build_memory_slice_message(&self, entries: &[MemoryEntry]) -> Option<LlmMessage> {
+        if entries.is_empty() {
+            return None;
+        }
+
+        let mut lines = Vec::with_capacity(entries.len() + 2);
+        lines.push("Project memory (durable facts, may be stale):".to_string());
+        lines.push("Use these only when relevant to the user request.".to_string());
+
+        for entry in entries {
+            lines.push(format!("- [{}] {}", entry.layer_string(), entry.content));
+        }
+
+        Some(LlmMessage::system(lines.join("\n")))
+    }
 }
 
 impl Default for ContextManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+trait MemoryLayerString {
+    fn layer_string(&self) -> &'static str;
+}
+
+impl MemoryLayerString for MemoryEntry {
+    fn layer_string(&self) -> &'static str {
+        match &self.layer {
+            crate::models::MemoryLayer::L0 => "l0",
+            crate::models::MemoryLayer::L1 => "l1",
+        }
     }
 }

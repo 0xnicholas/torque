@@ -1,8 +1,11 @@
+use crate::agent::{
+    context::{ContextManager, DEFAULT_MEMORY_RECALL_LIMIT},
+    stream::StreamEvent,
+};
 use crate::db::Database;
 use crate::models::{Message, Session};
 use crate::tools::ToolRegistry;
-use crate::agent::{context::ContextManager, stream::StreamEvent};
-use llm::{Chunk, LlmClient, Message as LlmMessage, FinishReason};
+use llm::{Chunk, FinishReason, LlmClient, Message as LlmMessage};
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -18,11 +21,7 @@ pub struct AgentRunner<C: LlmClient> {
 }
 
 impl<C: LlmClient> AgentRunner<C> {
-    pub fn new(
-        llm: Arc<C>,
-        db: Database,
-        tools: Arc<ToolRegistry>,
-    ) -> Self {
+    pub fn new(llm: Arc<C>, db: Database, tools: Arc<ToolRegistry>) -> Self {
         Self {
             llm,
             db,
@@ -45,23 +44,36 @@ impl<C: LlmClient> AgentRunner<C> {
 
         let _user_msg = crate::db::messages::create(self.db.pool(), user_message).await?;
 
-        let history = crate::db::messages::get_recent_by_session(
-            self.db.pool(),
-            session.id,
-            50,
-        )
-        .await?;
+        let history =
+            crate::db::messages::get_recent_by_session(self.db.pool(), session.id, 50).await?;
 
         let context = self.context_manager.build_context(history);
+        let recalled_memory = crate::db::memory_entries::recall_for_prompt(
+            self.db.pool(),
+            &session.project_scope,
+            &user_message.content,
+            DEFAULT_MEMORY_RECALL_LIMIT,
+        )
+        .await?;
         let tool_defs = self.tools.to_llm_tools().await;
 
         let system_prompt = format!(
             "You are a helpful assistant. You have access to tools: {}. \
              Use tools when needed. When you're done, provide a final response.",
-            tool_defs.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", ")
+            tool_defs
+                .iter()
+                .map(|t| t.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         let mut llm_messages = vec![LlmMessage::system(&system_prompt)];
+        if let Some(memory_slice) = self
+            .context_manager
+            .build_memory_slice_message(&recalled_memory)
+        {
+            llm_messages.push(memory_slice);
+        }
         llm_messages.extend(context.to_llm_messages());
 
         let (final_content, tool_calls_log) = self
@@ -79,10 +91,12 @@ impl<C: LlmClient> AgentRunner<C> {
 
         let saved_msg = crate::db::messages::create(self.db.pool(), &assistant_msg).await?;
 
-        let _ = tx.send(StreamEvent::Done {
-            message_id: saved_msg.id,
-            artifacts,
-        }).await;
+        let _ = tx
+            .send(StreamEvent::Done {
+                message_id: saved_msg.id,
+                artifacts,
+            })
+            .await;
 
         Ok(saved_msg)
     }
@@ -106,12 +120,14 @@ impl<C: LlmClient> AgentRunner<C> {
                 .with_tools(tools.clone());
 
             let content_buffer = Arc::new(Mutex::new(String::new()));
-            let tool_calls_buffer: Arc<Mutex<Vec<llm::ToolCall>>> = Arc::new(Mutex::new(Vec::new()));
+            let tool_calls_buffer: Arc<Mutex<Vec<llm::ToolCall>>> =
+                Arc::new(Mutex::new(Vec::new()));
             let tx_clone = tx.clone();
             let content_buffer_clone = content_buffer.clone();
             let tool_calls_buffer_clone = tool_calls_buffer.clone();
 
-            let response = self.llm
+            let response = self
+                .llm
                 .chat_streaming(request, move |chunk: Chunk| {
                     let content = chunk.content.clone();
                     if let Some(tool_call) = &chunk.tool_call {
@@ -139,17 +155,22 @@ impl<C: LlmClient> AgentRunner<C> {
                     tool_call_count += 1;
 
                     for tool_call in &tool_calls {
-                        let _ = tx.send(StreamEvent::ToolCall {
-                            name: tool_call.name.clone(),
-                            arguments: tool_call.arguments.clone(),
-                        }).await;
+                        let _ = tx
+                            .send(StreamEvent::ToolCall {
+                                name: tool_call.name.clone(),
+                                arguments: tool_call.arguments.clone(),
+                            })
+                            .await;
 
                         tool_calls_log.push(serde_json::json!({
                             "name": tool_call.name,
                             "arguments": tool_call.arguments,
                         }));
 
-                        let result = self.tools.execute(&tool_call.name, tool_call.arguments.clone()).await?;
+                        let result = self
+                            .tools
+                            .execute(&tool_call.name, tool_call.arguments.clone())
+                            .await?;
                         let _ = tx
                             .send(StreamEvent::ToolResult {
                                 name: tool_call.name.clone(),

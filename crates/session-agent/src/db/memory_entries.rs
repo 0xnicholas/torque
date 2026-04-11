@@ -1,7 +1,9 @@
-use anyhow::ensure;
 use crate::models::{MemoryEntry, MemoryEntryStatus};
+use anyhow::ensure;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+pub const DEFAULT_MEMORY_RECALL_CANDIDATE_LIMIT: i64 = 100;
 
 pub async fn create(pool: &PgPool, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry> {
     if let Some(source_candidate_id) = entry.source_candidate_id {
@@ -133,4 +135,66 @@ pub async fn update_status(
     .await?;
 
     Ok(row)
+}
+
+pub async fn recall_for_prompt(
+    pool: &PgPool,
+    project_scope: &str,
+    query: &str,
+    limit: i64,
+) -> anyhow::Result<Vec<MemoryEntry>> {
+    let candidate_limit = std::cmp::max(
+        limit.saturating_mul(5),
+        DEFAULT_MEMORY_RECALL_CANDIDATE_LIMIT,
+    );
+    let mut rows = sqlx::query_as::<_, MemoryEntry>(
+        r#"
+        SELECT *
+        FROM memory_entries
+        WHERE project_scope = $1
+          AND status = 'active'
+        ORDER BY created_at DESC, id DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(project_scope)
+    .bind(candidate_limit)
+    .fetch_all(pool)
+    .await?;
+
+    let query_terms: Vec<String> = query
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter_map(|part| {
+            let term = part.trim().to_ascii_lowercase();
+            if term.len() >= 3 {
+                Some(term)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    rows.sort_by(|a, b| {
+        let a_score = recall_match_score(&a.content, &query_terms);
+        let b_score = recall_match_score(&b.content, &query_terms);
+        b_score
+            .cmp(&a_score)
+            .then_with(|| b.created_at.cmp(&a.created_at))
+            .then_with(|| b.id.cmp(&a.id))
+    });
+
+    rows.truncate(std::cmp::max(limit, 0) as usize);
+    Ok(rows)
+}
+
+fn recall_match_score(content: &str, query_terms: &[String]) -> usize {
+    if query_terms.is_empty() {
+        return 0;
+    }
+
+    let haystack = content.to_ascii_lowercase();
+    query_terms
+        .iter()
+        .filter(|term| haystack.contains(term.as_str()))
+        .count()
 }
