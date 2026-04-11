@@ -4,7 +4,7 @@
 
 **Goal:** Build a stable, product-facing single-agent session demo with persistent sessions, multi-turn chat, SSE streaming, bounded context handling, and a minimal safe tool surface.
 
-**Architecture:** Evolve `crates/session-agent` into a clean MVP path rather than building a second demo stack. Keep the public surface small and product-facing while tightening internal seams around HTTP API, session persistence, agent runner, context trimming, streaming events, and one safe built-in tool.
+**Architecture:** Evolve `crates/agent-runtime-service` into a clean MVP path rather than building a second demo stack. Keep the public surface small and product-facing while tightening internal seams around HTTP API, session persistence, agent runner, context trimming, streaming events, and one safe built-in tool.
 
 **Tech Stack:** Rust, Axum, Tokio, SQLx/PostgreSQL, SSE, OpenAI-compatible LLM client, serde/serde_json
 
@@ -14,53 +14,53 @@
 
 ### Existing files that should remain primary
 
-- `crates/session-agent/src/main.rs`
+- `crates/agent-runtime-service/src/main.rs`
   service bootstrap, environment loading, app construction
-- `crates/session-agent/src/api/mod.rs`
+- `crates/agent-runtime-service/src/api/mod.rs`
   route registration and app-state wiring
-- `crates/session-agent/src/api/sessions.rs`
+- `crates/agent-runtime-service/src/api/sessions.rs`
   session create/get/list handlers
-- `crates/session-agent/src/api/messages.rs`
+- `crates/agent-runtime-service/src/api/messages.rs`
   message list and streaming chat handlers
-- `crates/session-agent/src/agent/runner.rs`
+- `crates/agent-runtime-service/src/agent/runner.rs`
   per-turn execution loop and persistence orchestration
-- `crates/session-agent/src/agent/context.rs`
+- `crates/agent-runtime-service/src/agent/context.rs`
   recent-window context trimming and summary seam
-- `crates/session-agent/src/agent/stream.rs`
+- `crates/agent-runtime-service/src/agent/stream.rs`
   SSE event model
-- `crates/session-agent/src/db/sessions.rs`
+- `crates/agent-runtime-service/src/db/sessions.rs`
   session queries and status updates
-- `crates/session-agent/src/db/messages.rs`
+- `crates/agent-runtime-service/src/db/messages.rs`
   message persistence and recent-history reads
-- `crates/session-agent/src/tools/builtin.rs`
+- `crates/agent-runtime-service/src/tools/builtin.rs`
   demo-safe built-in tools
-- `crates/session-agent/src/tools/registry.rs`
+- `crates/agent-runtime-service/src/tools/registry.rs`
   runtime tool lookup and execution
-- `crates/session-agent/tests/common/mod.rs`
+- `crates/agent-runtime-service/tests/common/mod.rs`
   integration test DB setup
-- `crates/session-agent/tests/api_tests.rs`
+- `crates/agent-runtime-service/tests/api_tests.rs`
   current API/data tests; keep or split as needed
-- `crates/session-agent/README.md`
+- `crates/agent-runtime-service/README.md`
   local demo setup and API walkthrough
 
 ### New files recommended
 
-- `crates/session-agent/src/app.rs`
+- `crates/agent-runtime-service/src/app.rs`
   reusable app builder for production and tests
-- `crates/session-agent/src/agent/runtime.rs`
+- `crates/agent-runtime-service/src/agent/runtime.rs`
   optional thin façade for “single turn input -> streaming output” if `runner.rs` starts growing too large
-- `crates/session-agent/tests/session_http_api.rs`
+- `crates/agent-runtime-service/tests/session_http_api.rs`
   HTTP-level session lifecycle tests
-- `crates/session-agent/tests/chat_streaming_api.rs`
+- `crates/agent-runtime-service/tests/chat_streaming_api.rs`
   HTTP-level chat/SSE tests
-- `crates/session-agent/tests/agent_runner_tests.rs`
+- `crates/agent-runtime-service/tests/agent_runner_tests.rs`
   unit/integration tests around runner behavior with a fake LLM
-- `crates/session-agent/tests/context_window_tests.rs`
+- `crates/agent-runtime-service/tests/context_window_tests.rs`
   context trimming tests
 
 ### Optional test-only support
 
-- `crates/session-agent/tests/common/fake_llm.rs`
+- `crates/agent-runtime-service/tests/common/fake_llm.rs`
   fake LLM implementation or adapter used by runner/SSE tests
 
 If fake-LLM support fits better under `src/agent/` as a test helper module, keep it there instead of adding a new common file.
@@ -70,11 +70,11 @@ If fake-LLM support fits better under `src/agent/` as a test helper module, keep
 ### Task 1: Create a Testable App Construction Seam
 
 **Files:**
-- Create: `crates/session-agent/src/app.rs`
-- Modify: `crates/session-agent/src/lib.rs`
-- Modify: `crates/session-agent/src/main.rs`
-- Modify: `crates/session-agent/src/api/mod.rs`
-- Test: `crates/session-agent/tests/session_http_api.rs`
+- Create: `crates/agent-runtime-service/src/app.rs`
+- Modify: `crates/agent-runtime-service/src/lib.rs`
+- Modify: `crates/agent-runtime-service/src/main.rs`
+- Modify: `crates/agent-runtime-service/src/api/mod.rs`
+- Test: `crates/agent-runtime-service/tests/session_http_api.rs`
 
 - [ ] **Step 1: Write the failing HTTP app-construction test**
 
@@ -89,7 +89,7 @@ async fn create_session_route_works_through_app_builder() {
 
 - [ ] **Step 2: Run the new test to confirm the current app cannot be exercised cleanly**
 
-Run: `cargo test -p session-agent create_session_route_works_through_app_builder -- --nocapture`
+Run: `cargo test -p agent-runtime-service create_session_route_works_through_app_builder -- --nocapture`
 
 Expected: FAIL because there is no reusable app-construction seam for tests or because the current route wiring is too tightly bound to `main.rs` / concrete client setup.
 
@@ -109,19 +109,19 @@ If tests need a fake client, move one level further and introduce a wrapper stat
 - [ ] **Step 4: Update `main.rs` to use the new app builder**
 
 ```rust
-let app = session_agent::app::build_app(database, llm);
+let app = agent_runtime_service::app::build_app(database, llm);
 ```
 
 - [ ] **Step 5: Run the new test again**
 
-Run: `cargo test -p session-agent create_session_route_works_through_app_builder -- --nocapture`
+Run: `cargo test -p agent-runtime-service create_session_route_works_through_app_builder -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/session-agent/src/app.rs crates/session-agent/src/lib.rs crates/session-agent/src/main.rs crates/session-agent/src/api/mod.rs crates/session-agent/tests/session_http_api.rs
+git add crates/agent-runtime-service/src/app.rs crates/agent-runtime-service/src/lib.rs crates/agent-runtime-service/src/main.rs crates/agent-runtime-service/src/api/mod.rs crates/agent-runtime-service/tests/session_http_api.rs
 git commit -m "refactor: add reusable session agent app builder"
 ```
 
@@ -130,11 +130,11 @@ git commit -m "refactor: add reusable session agent app builder"
 ### Task 2: Lock the Session Lifecycle API
 
 **Files:**
-- Modify: `crates/session-agent/src/api/mod.rs`
-- Modify: `crates/session-agent/src/api/sessions.rs`
-- Modify: `crates/session-agent/src/db/sessions.rs`
-- Modify: `crates/session-agent/src/models/session.rs`
-- Test: `crates/session-agent/tests/session_http_api.rs`
+- Modify: `crates/agent-runtime-service/src/api/mod.rs`
+- Modify: `crates/agent-runtime-service/src/api/sessions.rs`
+- Modify: `crates/agent-runtime-service/src/db/sessions.rs`
+- Modify: `crates/agent-runtime-service/src/models/session.rs`
+- Test: `crates/agent-runtime-service/tests/session_http_api.rs`
 
 - [ ] **Step 1: Write failing HTTP tests for session lifecycle**
 
@@ -156,7 +156,7 @@ async fn get_session_rejects_other_api_keys() {
 
 - [ ] **Step 2: Run the session API tests**
 
-Run: `cargo test -p session-agent session_http_api -- --nocapture`
+Run: `cargo test -p agent-runtime-service session_http_api -- --nocapture`
 
 Expected: FAIL because `GET /sessions` is not implemented and session-list querying is incomplete.
 
@@ -190,14 +190,14 @@ and never echo the stored API key.
 
 - [ ] **Step 5: Run the session API tests again**
 
-Run: `cargo test -p session-agent session_http_api -- --nocapture`
+Run: `cargo test -p agent-runtime-service session_http_api -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/session-agent/src/api/mod.rs crates/session-agent/src/api/sessions.rs crates/session-agent/src/db/sessions.rs crates/session-agent/src/models/session.rs crates/session-agent/tests/session_http_api.rs
+git add crates/agent-runtime-service/src/api/mod.rs crates/agent-runtime-service/src/api/sessions.rs crates/agent-runtime-service/src/db/sessions.rs crates/agent-runtime-service/src/models/session.rs crates/agent-runtime-service/tests/session_http_api.rs
 git commit -m "feat: add session lifecycle api"
 ```
 
@@ -206,11 +206,11 @@ git commit -m "feat: add session lifecycle api"
 ### Task 3: Lock the Streaming Chat Contract
 
 **Files:**
-- Modify: `crates/session-agent/src/api/messages.rs`
-- Modify: `crates/session-agent/src/agent/stream.rs`
-- Modify: `crates/session-agent/src/agent/runner.rs`
-- Test: `crates/session-agent/tests/chat_streaming_api.rs`
-- Test: `crates/session-agent/tests/agent_runner_tests.rs`
+- Modify: `crates/agent-runtime-service/src/api/messages.rs`
+- Modify: `crates/agent-runtime-service/src/agent/stream.rs`
+- Modify: `crates/agent-runtime-service/src/agent/runner.rs`
+- Test: `crates/agent-runtime-service/tests/chat_streaming_api.rs`
+- Test: `crates/agent-runtime-service/tests/agent_runner_tests.rs`
 
 - [ ] **Step 1: Write a failing runner test with a fake LLM**
 
@@ -237,7 +237,7 @@ async fn chat_endpoint_emits_start_chunk_and_done_events() {
 
 - [ ] **Step 3: Run both chat-related test files**
 
-Run: `cargo test -p session-agent chat_streaming_api agent_runner_tests -- --nocapture`
+Run: `cargo test -p agent-runtime-service chat_streaming_api agent_runner_tests -- --nocapture`
 
 Expected: FAIL because the current code does not emit a `start` event and is not yet cleanly testable end-to-end.
 
@@ -265,14 +265,14 @@ Make sure the runner:
 
 - [ ] **Step 6: Run the chat tests again**
 
-Run: `cargo test -p session-agent chat_streaming_api agent_runner_tests -- --nocapture`
+Run: `cargo test -p agent-runtime-service chat_streaming_api agent_runner_tests -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/session-agent/src/api/messages.rs crates/session-agent/src/agent/stream.rs crates/session-agent/src/agent/runner.rs crates/session-agent/tests/chat_streaming_api.rs crates/session-agent/tests/agent_runner_tests.rs
+git add crates/agent-runtime-service/src/api/messages.rs crates/agent-runtime-service/src/agent/stream.rs crates/agent-runtime-service/src/agent/runner.rs crates/agent-runtime-service/tests/chat_streaming_api.rs crates/agent-runtime-service/tests/agent_runner_tests.rs
 git commit -m "feat: lock session chat streaming contract"
 ```
 
@@ -281,11 +281,11 @@ git commit -m "feat: lock session chat streaming contract"
 ### Task 4: Harden Session Status and Error Handling
 
 **Files:**
-- Modify: `crates/session-agent/src/models/session.rs`
-- Modify: `crates/session-agent/src/db/sessions.rs`
-- Modify: `crates/session-agent/src/api/messages.rs`
-- Modify: `crates/session-agent/src/agent/runner.rs`
-- Test: `crates/session-agent/tests/agent_runner_tests.rs`
+- Modify: `crates/agent-runtime-service/src/models/session.rs`
+- Modify: `crates/agent-runtime-service/src/db/sessions.rs`
+- Modify: `crates/agent-runtime-service/src/api/messages.rs`
+- Modify: `crates/agent-runtime-service/src/agent/runner.rs`
+- Test: `crates/agent-runtime-service/tests/agent_runner_tests.rs`
 
 - [ ] **Step 1: Write failing tests for status transitions**
 
@@ -305,7 +305,7 @@ async fn chat_marks_session_error_on_runner_failure() {
 
 - [ ] **Step 2: Run the status-transition tests**
 
-Run: `cargo test -p session-agent status_transition -- --nocapture`
+Run: `cargo test -p agent-runtime-service status_transition -- --nocapture`
 
 Expected: FAIL because successful turns currently do not clearly drive `Running -> Completed`.
 
@@ -333,14 +333,14 @@ matches!(self.status, SessionStatus::Idle | SessionStatus::Completed)
 
 - [ ] **Step 5: Run the runner/status tests again**
 
-Run: `cargo test -p session-agent agent_runner_tests -- --nocapture`
+Run: `cargo test -p agent-runtime-service agent_runner_tests -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/session-agent/src/models/session.rs crates/session-agent/src/db/sessions.rs crates/session-agent/src/api/messages.rs crates/session-agent/src/agent/runner.rs crates/session-agent/tests/agent_runner_tests.rs
+git add crates/agent-runtime-service/src/models/session.rs crates/agent-runtime-service/src/db/sessions.rs crates/agent-runtime-service/src/api/messages.rs crates/agent-runtime-service/src/agent/runner.rs crates/agent-runtime-service/tests/agent_runner_tests.rs
 git commit -m "fix: enforce session turn status transitions"
 ```
 
@@ -349,9 +349,9 @@ git commit -m "fix: enforce session turn status transitions"
 ### Task 5: Bound Context Growth for Demo Stability
 
 **Files:**
-- Modify: `crates/session-agent/src/agent/context.rs`
-- Modify: `crates/session-agent/src/agent/runner.rs`
-- Test: `crates/session-agent/tests/context_window_tests.rs`
+- Modify: `crates/agent-runtime-service/src/agent/context.rs`
+- Modify: `crates/agent-runtime-service/src/agent/runner.rs`
+- Test: `crates/agent-runtime-service/tests/context_window_tests.rs`
 
 - [ ] **Step 1: Write failing context-window tests**
 
@@ -373,7 +373,7 @@ fn context_manager_preserves_recent_order() {
 
 - [ ] **Step 2: Run the context tests**
 
-Run: `cargo test -p session-agent context_window_tests -- --nocapture`
+Run: `cargo test -p agent-runtime-service context_window_tests -- --nocapture`
 
 Expected: FAIL if the current file lacks clear behavior coverage or if the order/window behavior drifts while refactoring.
 
@@ -399,14 +399,14 @@ Do not add a second hidden context path in `runner.rs`.
 
 - [ ] **Step 5: Run the context tests again**
 
-Run: `cargo test -p session-agent context_window_tests -- --nocapture`
+Run: `cargo test -p agent-runtime-service context_window_tests -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/session-agent/src/agent/context.rs crates/session-agent/src/agent/runner.rs crates/session-agent/tests/context_window_tests.rs
+git add crates/agent-runtime-service/src/agent/context.rs crates/agent-runtime-service/src/agent/runner.rs crates/agent-runtime-service/tests/context_window_tests.rs
 git commit -m "feat: bound session context window"
 ```
 
@@ -415,11 +415,11 @@ git commit -m "feat: bound session context window"
 ### Task 6: Reduce the Tool Surface to a Demo-Safe Whitelist
 
 **Files:**
-- Modify: `crates/session-agent/src/tools/builtin.rs`
-- Modify: `crates/session-agent/src/tools/registry.rs`
-- Modify: `crates/session-agent/src/agent/runner.rs`
-- Test: `crates/session-agent/tests/agent_runner_tests.rs`
-- Test: `crates/session-agent/tests/chat_streaming_api.rs`
+- Modify: `crates/agent-runtime-service/src/tools/builtin.rs`
+- Modify: `crates/agent-runtime-service/src/tools/registry.rs`
+- Modify: `crates/agent-runtime-service/src/agent/runner.rs`
+- Test: `crates/agent-runtime-service/tests/agent_runner_tests.rs`
+- Test: `crates/agent-runtime-service/tests/chat_streaming_api.rs`
 
 - [ ] **Step 1: Write a failing test that asserts only demo-safe tools are exposed**
 
@@ -435,7 +435,7 @@ async fn builtin_tool_registry_only_exposes_demo_safe_tools() {
 
 - [ ] **Step 2: Run the tool-surface tests**
 
-Run: `cargo test -p session-agent demo_safe_tools -- --nocapture`
+Run: `cargo test -p agent-runtime-service demo_safe_tools -- --nocapture`
 
 Expected: FAIL because the current built-ins include `file_read` and `code_execute`.
 
@@ -459,14 +459,14 @@ Use an existing fake-LLM test to prove:
 
 - [ ] **Step 5: Run the tool-related tests again**
 
-Run: `cargo test -p session-agent tool -- --nocapture`
+Run: `cargo test -p agent-runtime-service tool -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/session-agent/src/tools/builtin.rs crates/session-agent/src/tools/registry.rs crates/session-agent/src/agent/runner.rs crates/session-agent/tests/agent_runner_tests.rs crates/session-agent/tests/chat_streaming_api.rs
+git add crates/agent-runtime-service/src/tools/builtin.rs crates/agent-runtime-service/src/tools/registry.rs crates/agent-runtime-service/src/agent/runner.rs crates/agent-runtime-service/tests/agent_runner_tests.rs crates/agent-runtime-service/tests/chat_streaming_api.rs
 git commit -m "feat: restrict session agent to demo-safe tools"
 ```
 
@@ -475,7 +475,7 @@ git commit -m "feat: restrict session agent to demo-safe tools"
 ### Task 7: Refresh Demo Documentation
 
 **Files:**
-- Modify: `crates/session-agent/README.md`
+- Modify: `crates/agent-runtime-service/README.md`
 - Modify: `AGENTS.md`
 - Test: none
 
@@ -489,7 +489,7 @@ Capture the exact MVP promises:
 - bounded context
 - optional one-tool demo
 
-- [ ] **Step 2: Update `crates/session-agent/README.md`**
+- [ ] **Step 2: Update `crates/agent-runtime-service/README.md`**
 
 Add:
 
@@ -504,7 +504,7 @@ Add:
 Example:
 
 ```md
-The current product-facing MVP path lives in `crates/session-agent`.
+The current product-facing MVP path lives in `crates/agent-runtime-service`.
 ```
 
 Skip this step if the current `AGENTS.md` already makes the prototype-vs-target split clear enough.
@@ -522,7 +522,7 @@ Check that the README examples line up with the actual endpoints:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/session-agent/README.md AGENTS.md
+git add crates/agent-runtime-service/README.md AGENTS.md
 git commit -m "docs: refresh session agent mvp demo guide"
 ```
 
@@ -532,20 +532,20 @@ git commit -m "docs: refresh session agent mvp demo guide"
 
 **Files:**
 - Modify: none unless verification reveals issues
-- Test: `crates/session-agent/tests/session_http_api.rs`
-- Test: `crates/session-agent/tests/chat_streaming_api.rs`
-- Test: `crates/session-agent/tests/agent_runner_tests.rs`
-- Test: `crates/session-agent/tests/context_window_tests.rs`
+- Test: `crates/agent-runtime-service/tests/session_http_api.rs`
+- Test: `crates/agent-runtime-service/tests/chat_streaming_api.rs`
+- Test: `crates/agent-runtime-service/tests/agent_runner_tests.rs`
+- Test: `crates/agent-runtime-service/tests/context_window_tests.rs`
 
 - [ ] **Step 1: Run the focused crate test suite**
 
-Run: `cargo test -p session-agent -- --nocapture`
+Run: `cargo test -p agent-runtime-service -- --nocapture`
 
 Expected: PASS
 
 - [ ] **Step 2: Run the service locally**
 
-Run: `cargo run -p session-agent`
+Run: `cargo run -p agent-runtime-service`
 
 Expected: service boots, runs migrations, and listens on the configured bind address
 

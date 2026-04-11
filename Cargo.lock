@@ -3,6 +3,33 @@
 version = 4
 
 [[package]]
+name = "agent-runtime-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "chrono",
+ "futures",
+ "llm",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sqlx",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tower 0.4.13",
+ "tower 0.5.3",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1859,33 +1886,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "session-agent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "chrono",
- "futures",
- "llm",
- "serde",
- "serde_json",
- "serial_test",
- "sqlx",
- "subtle",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tower 0.4.13",
- "tower 0.5.3",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

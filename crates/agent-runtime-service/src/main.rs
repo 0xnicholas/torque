@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::env;
 use tracing::info;
 
-use session_agent::app;
-use session_agent::db::Database;
+use agent_runtime_service::app;
+use agent_runtime_service::db::Database;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,10 +12,10 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("Starting session-agent service...");
+    info!("Starting agent-runtime-service service...");
 
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/session_agent".to_string());
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/agent_runtime_service".to_string());
     
     let bind_addr = env::var("BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:3000".to_string());

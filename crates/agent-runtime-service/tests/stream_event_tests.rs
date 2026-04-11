@@ -1,4 +1,4 @@
-use session_agent::agent::StreamEvent;
+use agent_runtime_service::agent::StreamEvent;
 use serde_json::json;
 use uuid::Uuid;
 

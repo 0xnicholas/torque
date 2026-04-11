@@ -7,8 +7,8 @@ use common::setup_test_db_or_skip;
 use llm::OpenAiClient;
 use serde_json::{json, Value};
 use serial_test::serial;
-use session_agent::db::Database;
-use session_agent::models::{
+use agent_runtime_service::db::Database;
+use agent_runtime_service::models::{
     MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus, MemoryLayer,
 };
 use std::sync::Arc;
@@ -29,7 +29,7 @@ async fn setup_app() -> Option<(Database, axum::Router)> {
         "test-key".to_string(),
         "gpt-4o-mini".to_string(),
     ));
-    let app = session_agent::app::build_app(Database::new(db.pool().clone()), llm);
+    let app = agent_runtime_service::app::build_app(Database::new(db.pool().clone()), llm);
 
     Some((db, app))
 }
@@ -66,7 +66,7 @@ async fn memory_candidate_api_tests_create_memory_candidate_persists_project_sco
         rejected_at: None,
     };
 
-    let saved = session_agent::db::memory_candidates::create(db.pool(), &candidate)
+    let saved = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
         .await
         .expect("candidate should be saved");
 
@@ -118,15 +118,15 @@ async fn memory_candidate_api_tests_list_memory_candidates_is_project_scoped() {
         rejected_at: None,
     };
 
-    session_agent::db::memory_candidates::create(db.pool(), &candidate_one)
+    agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate_one)
         .await
         .expect("first candidate should save");
-    session_agent::db::memory_candidates::create(db.pool(), &candidate_two)
+    agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate_two)
         .await
         .expect("second candidate should save");
 
     let scoped =
-        session_agent::db::memory_candidates::list_by_project_scope(db.pool(), &scope_one, 10, 0)
+        agent_runtime_service::db::memory_candidates::list_by_project_scope(db.pool(), &scope_one, 10, 0)
             .await
             .expect("candidates should list");
 
@@ -148,7 +148,7 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
         MemoryLayer::L0,
         "Candidate for durable entry".to_string(),
     );
-    let saved_candidate = session_agent::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
         .await
         .expect("candidate should be saved");
 
@@ -167,7 +167,7 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
         invalidated_at: None,
     };
 
-    let saved = session_agent::db::memory_entries::create(db.pool(), &entry)
+    let saved = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
         .await
         .expect("entry should be saved");
 
@@ -177,7 +177,7 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
     assert!(matches!(saved.status, MemoryEntryStatus::Active));
 
     let scoped =
-        session_agent::db::memory_entries::list_by_project_scope(db.pool(), &project_scope, 10, 0)
+        agent_runtime_service::db::memory_entries::list_by_project_scope(db.pool(), &project_scope, 10, 0)
             .await
             .expect("entries should list");
 
@@ -200,7 +200,7 @@ async fn memory_candidate_api_tests_reject_cross_project_candidate_link_on_entry
         MemoryLayer::L0,
         "Candidate scoped to another project".to_string(),
     );
-    let saved_candidate = session_agent::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
         .await
         .expect("candidate should be saved");
 
@@ -219,7 +219,7 @@ async fn memory_candidate_api_tests_reject_cross_project_candidate_link_on_entry
         invalidated_at: None,
     };
 
-    let result = session_agent::db::memory_entries::create(db.pool(), &entry).await;
+    let result = agent_runtime_service::db::memory_entries::create(db.pool(), &entry).await;
 
     assert!(result.is_err(), "cross-project candidate linkage should be rejected");
 }
@@ -237,11 +237,11 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
         MemoryLayer::L1,
         "Candidate status timestamps should normalize".to_string(),
     );
-    let saved_candidate = session_agent::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
         .await
         .expect("candidate should be saved");
 
-    let accepted = session_agent::db::memory_candidates::update_status(
+    let accepted = agent_runtime_service::db::memory_candidates::update_status(
         db.pool(),
         &project_scope,
         saved_candidate.id,
@@ -254,7 +254,7 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
     assert!(accepted.accepted_at.is_some());
     assert!(accepted.rejected_at.is_none());
 
-    let rejected = session_agent::db::memory_candidates::update_status(
+    let rejected = agent_runtime_service::db::memory_candidates::update_status(
         db.pool(),
         &project_scope,
         saved_candidate.id,
@@ -267,7 +267,7 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
     assert!(rejected.accepted_at.is_none());
     assert!(rejected.rejected_at.is_some());
 
-    let pending = session_agent::db::memory_candidates::update_status(
+    let pending = agent_runtime_service::db::memory_candidates::update_status(
         db.pool(),
         &project_scope,
         saved_candidate.id,
@@ -294,11 +294,11 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
         MemoryLayer::L0,
         "Entry status timestamps should normalize".to_string(),
     );
-    let saved_entry = session_agent::db::memory_entries::create(db.pool(), &entry)
+    let saved_entry = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
         .await
         .expect("entry should be saved");
 
-    let invalidated = session_agent::db::memory_entries::update_status(
+    let invalidated = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &project_scope,
         saved_entry.id,
@@ -310,7 +310,7 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
 
     assert!(invalidated.invalidated_at.is_some());
 
-    let replaced = session_agent::db::memory_entries::update_status(
+    let replaced = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &project_scope,
         saved_entry.id,
@@ -322,7 +322,7 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
 
     assert!(replaced.invalidated_at.is_none());
 
-    let active = session_agent::db::memory_entries::update_status(
+    let active = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &project_scope,
         saved_entry.id,
@@ -343,7 +343,7 @@ async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry()
     };
 
     let api_key = "test-api-key";
-    let session = session_agent::db::sessions::create(db.pool(), api_key)
+    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -410,7 +410,7 @@ async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry()
         Value::String(candidate_id.to_string())
     );
 
-    let entries_after = session_agent::db::memory_entries::list_by_project_scope(
+    let entries_after = agent_runtime_service::db::memory_entries::list_by_project_scope(
         db.pool(),
         &session.project_scope,
         100,
@@ -434,7 +434,7 @@ async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries
     };
 
     let api_key = "test-api-key";
-    let session = session_agent::db::sessions::create(db.pool(), api_key)
+    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -449,7 +449,7 @@ async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries
         "Durable fact visible from memory endpoint".to_string(),
     );
     entry.source_type = Some("manual_seed".to_string());
-    session_agent::db::memory_entries::create(db.pool(), &entry)
+    agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
         .await
         .expect("entry should be created");
 
@@ -485,7 +485,7 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
     };
 
     let api_key = "test-api-key";
-    let session = session_agent::db::sessions::create(db.pool(), api_key)
+    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -499,7 +499,7 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
         MemoryLayer::L0,
         "Old durable fact".to_string(),
     );
-    let old_entry = session_agent::db::memory_entries::create(db.pool(), &entry)
+    let old_entry = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
         .await
         .expect("seed entry should save");
 
@@ -540,13 +540,13 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
     );
 
     let old_after =
-        session_agent::db::memory_entries::get_by_id(db.pool(), &session.project_scope, old_entry.id)
+        agent_runtime_service::db::memory_entries::get_by_id(db.pool(), &session.project_scope, old_entry.id)
             .await
             .expect("query should succeed")
             .expect("old entry should exist");
     assert!(matches!(old_after.status, MemoryEntryStatus::Replaced));
 
-    let all_entries = session_agent::db::memory_entries::list_by_project_scope(
+    let all_entries = agent_runtime_service::db::memory_entries::list_by_project_scope(
         db.pool(),
         &session.project_scope,
         100,
@@ -568,7 +568,7 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
     };
 
     let api_key = "test-api-key";
-    let session = session_agent::db::sessions::create(db.pool(), api_key)
+    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -582,7 +582,7 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
         MemoryLayer::L0,
         "Fact to invalidate".to_string(),
     );
-    let saved = session_agent::db::memory_entries::create(db.pool(), &entry)
+    let saved = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
         .await
         .expect("entry should save");
 
@@ -605,7 +605,7 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
     let invalidate_json = read_json(invalidate_response).await;
     assert_eq!(invalidate_json["status"], Value::String("Invalidated".to_string()));
 
-    let stored = session_agent::db::memory_entries::get_by_id(db.pool(), &session.project_scope, saved.id)
+    let stored = agent_runtime_service::db::memory_entries::get_by_id(db.pool(), &session.project_scope, saved.id)
         .await
         .expect("query should succeed")
         .expect("entry should exist");
@@ -621,7 +621,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     };
 
     let api_key = "test-api-key";
-    let session = session_agent::db::sessions::create(db.pool(), api_key)
+    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -630,7 +630,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
         .await
         .expect("entries cleanup should succeed");
 
-    let best = session_agent::db::memory_entries::create(
+    let best = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             session.project_scope.clone(),
@@ -641,7 +641,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .await
     .expect("best entry should save");
 
-    let weaker = session_agent::db::memory_entries::create(
+    let weaker = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             session.project_scope.clone(),
@@ -652,7 +652,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .await
     .expect("weaker entry should save");
 
-    let invalidated = session_agent::db::memory_entries::create(
+    let invalidated = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             session.project_scope.clone(),
@@ -662,7 +662,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     )
     .await
     .expect("invalidated entry should save");
-    let _ = session_agent::db::memory_entries::update_status(
+    let _ = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &session.project_scope,
         invalidated.id,
@@ -672,7 +672,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .expect("invalidating test entry should succeed");
 
     let other_scope = unique_project_scope();
-    let _ = session_agent::db::memory_entries::create(
+    let _ = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             other_scope,

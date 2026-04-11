@@ -1,4 +1,4 @@
-use session_agent::tools::builtin::create_builtin_tools;
+use agent_runtime_service::tools::builtin::create_builtin_tools;
 
 #[test]
 fn builtin_tools_are_demo_safe_and_minimal() {

@@ -2,7 +2,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use llm::OpenAiClient;
 use serde_json::json;
-use session_agent::db::Database;
+use agent_runtime_service::db::Database;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tower::util::ServiceExt;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn create_session_route_works_through_app_builder() {
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -20,7 +20,7 @@ async fn create_session_route_works_through_app_builder() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
 
     let response = app
         .oneshot(
@@ -39,7 +39,7 @@ async fn create_session_route_works_through_app_builder() {
 #[tokio::test]
 async fn list_sessions_route_is_wired_and_protected_by_auth() {
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -48,7 +48,7 @@ async fn list_sessions_route_is_wired_and_protected_by_auth() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
 
     let response = app
         .oneshot(
@@ -67,7 +67,7 @@ async fn list_sessions_route_is_wired_and_protected_by_auth() {
 #[tokio::test]
 async fn list_messages_route_is_wired_and_protected_by_auth() {
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -76,7 +76,7 @@ async fn list_messages_route_is_wired_and_protected_by_auth() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
     let session_id = Uuid::new_v4();
 
     let response = app
@@ -96,7 +96,7 @@ async fn list_messages_route_is_wired_and_protected_by_auth() {
 #[tokio::test]
 async fn chat_route_is_wired_and_protected_by_auth() {
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -105,7 +105,7 @@ async fn chat_route_is_wired_and_protected_by_auth() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
     let session_id = Uuid::new_v4();
     let body = Body::from(json!({ "message": "hello" }).to_string());
 
@@ -127,7 +127,7 @@ async fn chat_route_is_wired_and_protected_by_auth() {
 #[tokio::test]
 async fn metrics_route_is_wired_and_protected_by_auth() {
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -136,7 +136,7 @@ async fn metrics_route_is_wired_and_protected_by_auth() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
 
     let response = app
         .oneshot(
@@ -154,9 +154,9 @@ async fn metrics_route_is_wired_and_protected_by_auth() {
 
 #[tokio::test]
 async fn metrics_route_returns_session_gate_contention_counter() {
-    session_agent::metrics::reset_session_gate_contention_total_for_tests();
+    agent_runtime_service::metrics::reset_session_gate_contention_total_for_tests();
     let pool = PgPoolOptions::new()
-        .connect_lazy("postgres://postgres:postgres@localhost/session_agent_test")
+        .connect_lazy("postgres://postgres:postgres@localhost/agent_runtime_service_test")
         .expect("lazy pool should build");
     let db = Database::new(pool);
     let llm = Arc::new(OpenAiClient::new(
@@ -165,7 +165,7 @@ async fn metrics_route_returns_session_gate_contention_counter() {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(db, llm);
+    let app = agent_runtime_service::app::build_app(db, llm);
 
     let response = app
         .oneshot(

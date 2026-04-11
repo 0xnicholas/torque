@@ -70,13 +70,13 @@ The repository is in transition, so two truths must be held separately:
    defined by the spec set under `docs/superpowers/specs/`
 
 2. **Current implementation**
-   still centered on the early `session-agent` prototype and supporting crates
+   still centered on the early `agent-runtime-service` prototype and supporting crates
 
 Current code paths of interest:
 
 - `crates/llm`
   OpenAI-compatible client, streaming, and tool-call primitives
-- `crates/session-agent`
+- `crates/agent-runtime-service`
   the current product-facing MVP slice for a single persistent agent session
 - `crates/checkpointer`
   an emerging checkpoint abstraction
@@ -686,7 +686,7 @@ It does not yet demonstrate the full target architecture, especially around:
 
 The current MVP implementation path primarily lives in:
 
-- `crates/session-agent`
+- `crates/agent-runtime-service`
 - `crates/llm`
 
 ---

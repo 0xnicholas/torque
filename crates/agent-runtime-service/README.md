@@ -1,4 +1,4 @@
-# Session Agent MVP
+# Agent Runtime Service MVP
 
 Product-facing single-agent MVP for Torque.
 
@@ -33,7 +33,7 @@ Create a `.env` file from `.env.example`, then set:
 From repo root:
 
 ```bash
-cargo run -p session-agent
+cargo run -p agent-runtime-service
 ```
 
 The service runs SQLx migrations automatically at startup.

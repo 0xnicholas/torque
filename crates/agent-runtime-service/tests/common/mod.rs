@@ -1,4 +1,4 @@
-use session_agent::db::Database;
+use agent_runtime_service::db::Database;
 use sqlx::postgres::PgPoolOptions;
 
 #[allow(dead_code)]
@@ -6,7 +6,7 @@ pub mod fake_llm;
 
 pub async fn setup_test_db_or_skip() -> Option<Database> {
     let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/session_agent_test".to_string());
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/agent_runtime_service_test".to_string());
 
     let pool = match PgPoolOptions::new()
         .max_connections(5)

@@ -5,8 +5,8 @@ use axum::http::{Request, StatusCode};
 use llm::OpenAiClient;
 use serde_json::Value;
 use serial_test::serial;
-use session_agent::app::build_app;
-use session_agent::metrics;
+use agent_runtime_service::app::build_app;
+use agent_runtime_service::metrics;
 use tower::util::ServiceExt;
 use std::sync::Arc;
 

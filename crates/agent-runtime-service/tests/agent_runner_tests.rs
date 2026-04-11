@@ -4,9 +4,9 @@ use common::fake_llm::FakeLlm;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
 use serde_json::json;
-use session_agent::agent::{AgentRunner, StreamEvent};
-use session_agent::models::{Message, MessageRole};
-use session_agent::tools::ToolRegistry;
+use agent_runtime_service::agent::{AgentRunner, StreamEvent};
+use agent_runtime_service::models::{Message, MessageRole};
+use agent_runtime_service::tools::ToolRegistry;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -17,7 +17,7 @@ async fn runner_persists_messages_and_emits_start_chunk_done() {
         return;
     };
 
-    let session = session_agent::db::sessions::create(db.pool(), "runner-key")
+    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-key")
         .await
         .expect("session should be created");
     let user_message = Message::user(session.id, "hello".to_string());
@@ -34,7 +34,7 @@ async fn runner_persists_messages_and_emits_start_chunk_done() {
     assert_eq!(saved.content, "hello from fake model");
     assert!(matches!(saved.role, MessageRole::Assistant));
 
-    let messages = session_agent::db::messages::list_by_session(db.pool(), session.id, 10)
+    let messages = agent_runtime_service::db::messages::list_by_session(db.pool(), session.id, 10)
         .await
         .expect("messages should be listed");
     assert_eq!(messages.len(), 2);
@@ -66,7 +66,7 @@ async fn runner_handles_tool_call_and_records_tool_log() {
         return;
     };
 
-    let session = session_agent::db::sessions::create(db.pool(), "runner-key")
+    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-key")
         .await
         .expect("session should be created");
     let user_message = Message::user(session.id, "search torque".to_string());
@@ -76,7 +76,7 @@ async fn runner_handles_tool_call_and_records_tool_log() {
         "final tool-assisted answer",
     ));
     let tools = Arc::new(ToolRegistry::new());
-    for tool in session_agent::tools::builtin::create_builtin_tools() {
+    for tool in agent_runtime_service::tools::builtin::create_builtin_tools() {
         tools.register(Arc::from(tool)).await;
     }
     let runner = AgentRunner::new(llm, db.clone(), tools);

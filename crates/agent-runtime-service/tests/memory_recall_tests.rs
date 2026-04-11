@@ -3,9 +3,9 @@ mod common;
 use common::fake_llm::FakeLlm;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
-use session_agent::agent::{AgentRunner, StreamEvent};
-use session_agent::models::{MemoryEntry, MemoryEntryStatus, MemoryLayer, Message};
-use session_agent::tools::ToolRegistry;
+use agent_runtime_service::agent::{AgentRunner, StreamEvent};
+use agent_runtime_service::models::{MemoryEntry, MemoryEntryStatus, MemoryLayer, Message};
+use agent_runtime_service::tools::ToolRegistry;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -18,7 +18,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
 
     let project_scope = format!("memory-recall-test-{}", uuid::Uuid::new_v4());
 
-    let matching = session_agent::db::memory_entries::create(
+    let matching = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             project_scope.clone(),
@@ -29,7 +29,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("matching active entry should be created");
 
-    let stale = session_agent::db::memory_entries::create(
+    let stale = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             project_scope.clone(),
@@ -40,7 +40,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("stale entry should be created");
 
-    let _ = session_agent::db::memory_entries::update_status(
+    let _ = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &project_scope,
         stale.id,
@@ -49,7 +49,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("stale memory should be invalidated");
 
-    let non_matching = session_agent::db::memory_entries::create(
+    let non_matching = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             project_scope.clone(),
@@ -60,7 +60,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("non matching active entry should be created");
 
-    let recalled = session_agent::db::memory_entries::recall_for_prompt(
+    let recalled = agent_runtime_service::db::memory_entries::recall_for_prompt(
         db.pool(),
         &project_scope,
         "torque runtime memory",
@@ -88,7 +88,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
         return;
     };
 
-    let session = session_agent::db::sessions::create(db.pool(), "runner-memory-key")
+    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-memory-key")
         .await
         .expect("session should be created");
 
@@ -98,7 +98,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
         .await
         .expect("project memory entries should be cleaned");
 
-    let active = session_agent::db::memory_entries::create(
+    let active = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             session.project_scope.clone(),
@@ -109,7 +109,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
     .await
     .expect("active memory entry should be created");
 
-    let invalidated = session_agent::db::memory_entries::create(
+    let invalidated = agent_runtime_service::db::memory_entries::create(
         db.pool(),
         &MemoryEntry::new(
             session.project_scope.clone(),
@@ -120,7 +120,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
     .await
     .expect("second memory entry should be created");
 
-    let _ = session_agent::db::memory_entries::update_status(
+    let _ = agent_runtime_service::db::memory_entries::update_status(
         db.pool(),
         &session.project_scope,
         invalidated.id,

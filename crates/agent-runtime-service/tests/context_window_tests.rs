@@ -1,5 +1,5 @@
-use session_agent::agent::context::{ContextManager, DEFAULT_WINDOW_SIZE};
-use session_agent::models::Message;
+use agent_runtime_service::agent::context::{ContextManager, DEFAULT_WINDOW_SIZE};
+use agent_runtime_service::models::Message;
 use uuid::Uuid;
 
 fn build_history(count: usize) -> Vec<Message> {

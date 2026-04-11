@@ -6,7 +6,7 @@ use common::{setup_test_db_or_skip, test_api_key};
 use llm::OpenAiClient;
 use serde_json::Value;
 use serial_test::serial;
-use session_agent::db::Database;
+use agent_runtime_service::db::Database;
 use std::sync::Arc;
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -22,7 +22,7 @@ async fn setup_app() -> Option<(Database, axum::Router)> {
         "gpt-4o-mini".to_string(),
     ));
 
-    let app = session_agent::app::build_app(Database::new(db.pool().clone()), llm);
+    let app = agent_runtime_service::app::build_app(Database::new(db.pool().clone()), llm);
 
     Some((db, app))
 }
