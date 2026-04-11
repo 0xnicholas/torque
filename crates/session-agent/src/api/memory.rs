@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -35,6 +35,12 @@ pub struct ReplaceEntryRequest {
     pub source_type: Option<String>,
     pub source_ref: Option<String>,
     pub proposer: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchMemoryQuery {
+    pub q: Option<String>,
+    pub limit: Option<i64>,
 }
 
 async fn load_session_for_api_key(
@@ -116,6 +122,24 @@ pub async fn list_entries(
     )
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(entries))
+}
+
+pub async fn search_entries(
+    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    Path(session_id): Path<Uuid>,
+    Query(query): Query<SearchMemoryQuery>,
+    Extension(api_key): Extension<String>,
+) -> Result<Json<Vec<MemoryEntry>>, StatusCode> {
+    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let q = query.q.unwrap_or_default();
+    let limit = query.limit.unwrap_or(10).clamp(1, 50);
+
+    let entries =
+        crate::db::memory_entries::recall_for_prompt(db.pool(), &session.project_scope, &q, limit)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(entries))
 }

@@ -612,3 +612,111 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
     assert!(matches!(stored.status, MemoryEntryStatus::Invalidated));
     assert!(stored.invalidated_at.is_some());
 }
+
+#[tokio::test]
+#[serial]
+async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active_entries() {
+    let Some((db, app)) = setup_app().await else {
+        return;
+    };
+
+    let api_key = "test-api-key";
+    let session = session_agent::db::sessions::create(db.pool(), api_key)
+        .await
+        .expect("session should be created");
+    sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
+        .bind(&session.project_scope)
+        .execute(db.pool())
+        .await
+        .expect("entries cleanup should succeed");
+
+    let best = session_agent::db::memory_entries::create(
+        db.pool(),
+        &MemoryEntry::new(
+            session.project_scope.clone(),
+            MemoryLayer::L1,
+            "Torque context memory is project scoped and durable".to_string(),
+        ),
+    )
+    .await
+    .expect("best entry should save");
+
+    let weaker = session_agent::db::memory_entries::create(
+        db.pool(),
+        &MemoryEntry::new(
+            session.project_scope.clone(),
+            MemoryLayer::L0,
+            "Torque runtime note".to_string(),
+        ),
+    )
+    .await
+    .expect("weaker entry should save");
+
+    let invalidated = session_agent::db::memory_entries::create(
+        db.pool(),
+        &MemoryEntry::new(
+            session.project_scope.clone(),
+            MemoryLayer::L0,
+            "Torque context memory stale record".to_string(),
+        ),
+    )
+    .await
+    .expect("invalidated entry should save");
+    let _ = session_agent::db::memory_entries::update_status(
+        db.pool(),
+        &session.project_scope,
+        invalidated.id,
+        MemoryEntryStatus::Invalidated,
+    )
+    .await
+    .expect("invalidating test entry should succeed");
+
+    let other_scope = unique_project_scope();
+    let _ = session_agent::db::memory_entries::create(
+        db.pool(),
+        &MemoryEntry::new(
+            other_scope,
+            MemoryLayer::L1,
+            "Torque context memory from another scope".to_string(),
+        ),
+    )
+    .await
+    .expect("cross scope entry should save");
+
+    let search_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/sessions/{}/memory/search?q=torque%20context%20memory&limit=10",
+                    session.id
+                ))
+                .header("x-api-key", api_key)
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("app should respond");
+
+    assert_eq!(search_response.status(), StatusCode::OK);
+    let search_json = read_json(search_response).await;
+    let entries = search_json.as_array().expect("response should be an array");
+    assert_eq!(entries.len(), 2, "should only include active entries in scope");
+    assert_eq!(
+        entries[0]["id"],
+        Value::String(best.id.to_string()),
+        "best matching entry should be first"
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry_json| entry_json["id"] == Value::String(weaker.id.to_string())),
+        "weaker but active scoped entry should be returned"
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|entry_json| entry_json["id"] != Value::String(invalidated.id.to_string())),
+        "invalidated entries should not appear in search results"
+    );
+}
