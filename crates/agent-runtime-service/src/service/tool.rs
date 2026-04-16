@@ -1,14 +1,17 @@
 use crate::infra::tool_registry::ToolRegistry;
 use std::sync::Arc;
 
-pub struct ToolService;
+pub struct ToolService {
+    registry: Arc<ToolRegistry>,
+}
 
 impl ToolService {
     pub async fn new() -> Self {
-        todo!("implemented in Task 2.1")
+        let registry = Arc::new(ToolRegistry::new());
+        Self { registry }
     }
 
     pub fn registry(&self) -> Arc<ToolRegistry> {
-        todo!("implemented in Task 2.1")
+        self.registry.clone()
     }
 }

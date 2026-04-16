@@ -2,11 +2,15 @@ use crate::repository::MemoryRepository;
 use std::sync::Arc;
 
 pub struct MemoryService {
-    _repo: Arc<dyn MemoryRepository>,
+    repo: Arc<dyn MemoryRepository>,
 }
 
 impl MemoryService {
-    pub fn new(_repo: Arc<dyn MemoryRepository>) -> Self {
-        todo!("implemented in Task 4.2")
+    pub fn new(repo: Arc<dyn MemoryRepository>) -> Self {
+        Self { repo }
+    }
+
+    pub fn repo(&self) -> &Arc<dyn MemoryRepository> {
+        &self.repo
     }
 }
