@@ -189,7 +189,7 @@ impl LlmClient for OpenAiClient {
     async fn chat_streaming(
         &self,
         request: ChatRequest,
-        callback: impl Fn(Chunk) + Send + 'static,
+        callback: Box<dyn Fn(Chunk) + Send + 'static>,
     ) -> Result<ChatResponse> {
         let mut request = request;
         request.stream = Some(true);

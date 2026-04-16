@@ -134,7 +134,7 @@ pub trait LlmClient: Send + Sync {
     async fn chat_streaming(
         &self,
         request: ChatRequest,
-        callback: impl Fn(Chunk) + Send + 'static,
+        callback: Box<dyn Fn(Chunk) + Send + 'static>,
     ) -> super::Result<ChatResponse>;
 
     fn max_tokens(&self) -> usize;

@@ -4,7 +4,7 @@ use sha2::{Sha256, Digest};
 use uuid::Uuid;
 
 use crate::error::{CheckpointerError, Result};
-use crate::trait::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
+use crate::trait_def::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
 
 pub struct HybridCheckpointer {
     pool: sqlx::PgPool,

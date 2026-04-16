@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::db::Database;
 use crate::models::{MemoryCandidate, MemoryEntry, MemoryLayer};
+use crate::service::ServiceContainer;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateCandidateRequest {
@@ -61,7 +62,7 @@ async fn load_session_for_api_key(
 }
 
 pub async fn create_candidate(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Extension(api_key): Extension<String>,
     Json(req): Json<CreateCandidateRequest>,
@@ -86,7 +87,7 @@ pub async fn create_candidate(
 }
 
 pub async fn accept_candidate(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, candidate_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<AcceptCandidateResponse>, StatusCode> {
@@ -108,7 +109,7 @@ pub async fn accept_candidate(
 }
 
 pub async fn list_entries(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<Vec<MemoryEntry>>, StatusCode> {
@@ -127,7 +128,7 @@ pub async fn list_entries(
 }
 
 pub async fn search_entries(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Query(query): Query<SearchMemoryQuery>,
     Extension(api_key): Extension<String>,
@@ -145,7 +146,7 @@ pub async fn search_entries(
 }
 
 pub async fn replace_entry(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
     Json(req): Json<ReplaceEntryRequest>,
@@ -189,7 +190,7 @@ pub async fn replace_entry(
 }
 
 pub async fn invalidate_entry(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<MemoryEntry>, StatusCode> {

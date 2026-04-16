@@ -5,3 +5,7 @@ pub mod db;
 pub mod metrics;
 pub mod models;
 pub mod tools;
+pub mod repository;
+pub mod service;
+pub mod kernel_bridge;
+pub mod infra;

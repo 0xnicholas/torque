@@ -103,7 +103,7 @@ impl LlmClient for FakeLlm {
     async fn chat_streaming(
         &self,
         request: ChatRequest,
-        callback: impl Fn(Chunk) + Send + 'static,
+        callback: Box<dyn Fn(Chunk) + Send + 'static>,
     ) -> llm::Result<ChatResponse> {
         if let Ok(mut requests) = self.requests.lock() {
             requests.push(request.clone());

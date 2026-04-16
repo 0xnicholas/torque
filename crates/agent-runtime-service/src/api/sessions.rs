@@ -5,12 +5,12 @@ use axum::{
 };
 use serde::Serialize;
 use std::sync::Arc;
-use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 use crate::api::middleware::extract_api_key;
 use crate::db::Database;
 use crate::models::SessionStatus;
+use crate::service::ServiceContainer;
 use llm::OpenAiClient;
 
 #[derive(Debug, Serialize)]
@@ -46,13 +46,12 @@ fn to_get_session_response(session: crate::models::Session) -> GetSessionRespons
 }
 
 pub async fn create(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     request: axum::extract::Request,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
     let api_key = extract_api_key(&request).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let session = crate::db::sessions::create(db.pool(), &api_key)
-        .await
+    let session = services.session.create(&api_key, "default").await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(CreateSessionResponse {
@@ -64,13 +63,12 @@ pub async fn create(
 }
 
 pub async fn list(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     request: axum::extract::Request,
 ) -> Result<Json<ListSessionsResponse>, StatusCode> {
     let api_key = extract_api_key(&request).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let sessions = crate::db::sessions::list_by_api_key(db.pool(), &api_key, 50, 0)
-        .await
+    let sessions = services.session.list(&api_key, 50).await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let sessions = sessions.into_iter().map(to_get_session_response).collect();
@@ -79,20 +77,16 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((db, _)): State<(Database, Arc<OpenAiClient>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     request: axum::extract::Request,
 ) -> Result<Json<GetSessionResponse>, StatusCode> {
     let api_key = extract_api_key(&request).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let session = crate::db::sessions::get_by_id(db.pool(), id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    if !bool::from(session.api_key.as_bytes().ct_eq(api_key.as_bytes())) {
-        return Err(StatusCode::FORBIDDEN);
+    match services.session.get_by_id(id, &api_key).await {
+        Ok(session) => Ok(Json(to_get_session_response(session))),
+        Err(crate::service::session::SessionServiceError::NotFound) => Err(StatusCode::NOT_FOUND),
+        Err(crate::service::session::SessionServiceError::Forbidden) => Err(StatusCode::FORBIDDEN),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-
-    Ok(Json(to_get_session_response(session)))
 }
