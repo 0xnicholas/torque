@@ -11,6 +11,9 @@ use agent_runtime_service::db::Database;
 use agent_runtime_service::models::{
     MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus, MemoryLayer,
 };
+use agent_runtime_service::repository::{
+    MemoryRepository, PostgresMemoryRepository, PostgresSessionRepository, SessionRepository,
+};
 use std::sync::Arc;
 use tower::util::ServiceExt;
 use uuid::Uuid;
@@ -49,6 +52,7 @@ async fn memory_candidate_api_tests_create_memory_candidate_persists_project_sco
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let project_scope = unique_project_scope();
     let candidate = MemoryCandidate {
         id: Uuid::new_v4(),
@@ -66,7 +70,7 @@ async fn memory_candidate_api_tests_create_memory_candidate_persists_project_sco
         rejected_at: None,
     };
 
-    let saved = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
+    let saved = repo.create_candidate(&candidate)
         .await
         .expect("candidate should be saved");
 
@@ -83,6 +87,7 @@ async fn memory_candidate_api_tests_list_memory_candidates_is_project_scoped() {
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let scope_one = unique_project_scope();
     let scope_two = unique_project_scope();
 
@@ -118,17 +123,16 @@ async fn memory_candidate_api_tests_list_memory_candidates_is_project_scoped() {
         rejected_at: None,
     };
 
-    agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate_one)
+    repo.create_candidate(&candidate_one)
         .await
         .expect("first candidate should save");
-    agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate_two)
+    repo.create_candidate(&candidate_two)
         .await
         .expect("second candidate should save");
 
-    let scoped =
-        agent_runtime_service::db::memory_candidates::list_by_project_scope(db.pool(), &scope_one, 10, 0)
-            .await
-            .expect("candidates should list");
+    let scoped = repo.list_candidates(&scope_one, 10, 0)
+        .await
+        .expect("candidates should list");
 
     assert_eq!(scoped.len(), 1);
     assert_eq!(scoped[0].id, candidate_one.id);
@@ -142,13 +146,14 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let project_scope = unique_project_scope();
     let candidate = MemoryCandidate::new(
         project_scope.clone(),
         MemoryLayer::L0,
         "Candidate for durable entry".to_string(),
     );
-    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = repo.create_candidate(&candidate)
         .await
         .expect("candidate should be saved");
 
@@ -167,7 +172,7 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
         invalidated_at: None,
     };
 
-    let saved = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
+    let saved = repo.create_entry(&entry)
         .await
         .expect("entry should be saved");
 
@@ -176,10 +181,9 @@ async fn memory_candidate_api_tests_create_memory_entry_persists_project_scope_a
     assert_eq!(saved.content, entry.content);
     assert!(matches!(saved.status, MemoryEntryStatus::Active));
 
-    let scoped =
-        agent_runtime_service::db::memory_entries::list_by_project_scope(db.pool(), &project_scope, 10, 0)
-            .await
-            .expect("entries should list");
+    let scoped = repo.list_entries(&project_scope, 10, 0)
+        .await
+        .expect("entries should list");
 
     assert_eq!(scoped.len(), 1);
     assert_eq!(scoped[0].id, entry.id);
@@ -192,6 +196,7 @@ async fn memory_candidate_api_tests_reject_cross_project_candidate_link_on_entry
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let candidate_scope = unique_project_scope();
     let entry_scope = unique_project_scope();
 
@@ -200,7 +205,7 @@ async fn memory_candidate_api_tests_reject_cross_project_candidate_link_on_entry
         MemoryLayer::L0,
         "Candidate scoped to another project".to_string(),
     );
-    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = repo.create_candidate(&candidate)
         .await
         .expect("candidate should be saved");
 
@@ -219,7 +224,7 @@ async fn memory_candidate_api_tests_reject_cross_project_candidate_link_on_entry
         invalidated_at: None,
     };
 
-    let result = agent_runtime_service::db::memory_entries::create(db.pool(), &entry).await;
+    let result = repo.create_entry(&entry).await;
 
     assert!(result.is_err(), "cross-project candidate linkage should be rejected");
 }
@@ -231,18 +236,18 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let project_scope = unique_project_scope();
     let candidate = MemoryCandidate::new(
         project_scope.clone(),
         MemoryLayer::L1,
         "Candidate status timestamps should normalize".to_string(),
     );
-    let saved_candidate = agent_runtime_service::db::memory_candidates::create(db.pool(), &candidate)
+    let saved_candidate = repo.create_candidate(&candidate)
         .await
         .expect("candidate should be saved");
 
-    let accepted = agent_runtime_service::db::memory_candidates::update_status(
-        db.pool(),
+    let accepted = repo.update_candidate_status(
         &project_scope,
         saved_candidate.id,
         MemoryCandidateStatus::Accepted,
@@ -254,8 +259,7 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
     assert!(accepted.accepted_at.is_some());
     assert!(accepted.rejected_at.is_none());
 
-    let rejected = agent_runtime_service::db::memory_candidates::update_status(
-        db.pool(),
+    let rejected = repo.update_candidate_status(
         &project_scope,
         saved_candidate.id,
         MemoryCandidateStatus::Rejected,
@@ -267,8 +271,7 @@ async fn memory_candidate_api_tests_candidate_status_transition_clears_stale_tim
     assert!(rejected.accepted_at.is_none());
     assert!(rejected.rejected_at.is_some());
 
-    let pending = agent_runtime_service::db::memory_candidates::update_status(
-        db.pool(),
+    let pending = repo.update_candidate_status(
         &project_scope,
         saved_candidate.id,
         MemoryCandidateStatus::Pending,
@@ -288,18 +291,18 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db);
     let project_scope = unique_project_scope();
     let entry = MemoryEntry::new(
         project_scope.clone(),
         MemoryLayer::L0,
         "Entry status timestamps should normalize".to_string(),
     );
-    let saved_entry = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
+    let saved_entry = repo.create_entry(&entry)
         .await
         .expect("entry should be saved");
 
-    let invalidated = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    let invalidated = repo.update_entry_status(
         &project_scope,
         saved_entry.id,
         MemoryEntryStatus::Invalidated,
@@ -310,8 +313,7 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
 
     assert!(invalidated.invalidated_at.is_some());
 
-    let replaced = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    let replaced = repo.update_entry_status(
         &project_scope,
         saved_entry.id,
         MemoryEntryStatus::Replaced,
@@ -322,8 +324,7 @@ async fn memory_candidate_api_tests_entry_status_transition_clears_invalidated_t
 
     assert!(replaced.invalidated_at.is_none());
 
-    let active = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    let active = repo.update_entry_status(
         &project_scope,
         saved_entry.id,
         MemoryEntryStatus::Active,
@@ -342,8 +343,11 @@ async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry()
         return;
     };
 
+    let session_repo = PostgresSessionRepository::new(db.clone());
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
+
     let api_key = "test-api-key";
-    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
+    let session = session_repo.create(api_key, "test-scope")
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -410,8 +414,7 @@ async fn memory_candidate_api_tests_accept_candidate_api_creates_durable_entry()
         Value::String(candidate_id.to_string())
     );
 
-    let entries_after = agent_runtime_service::db::memory_entries::list_by_project_scope(
-        db.pool(),
+    let entries_after = memory_repo.list_entries(
         &session.project_scope,
         100,
         0,
@@ -433,8 +436,11 @@ async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries
         return;
     };
 
+    let session_repo = PostgresSessionRepository::new(db.clone());
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
+
     let api_key = "test-api-key";
-    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
+    let session = session_repo.create(api_key, "test-scope")
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -449,7 +455,7 @@ async fn memory_candidate_api_tests_list_memory_endpoint_returns_project_entries
         "Durable fact visible from memory endpoint".to_string(),
     );
     entry.source_type = Some("manual_seed".to_string());
-    agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
+    memory_repo.create_entry(&entry)
         .await
         .expect("entry should be created");
 
@@ -484,8 +490,11 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
         return;
     };
 
+    let session_repo = PostgresSessionRepository::new(db.clone());
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
+
     let api_key = "test-api-key";
-    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
+    let session = session_repo.create(api_key, "test-scope")
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -499,7 +508,7 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
         MemoryLayer::L0,
         "Old durable fact".to_string(),
     );
-    let old_entry = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
+    let old_entry = memory_repo.create_entry(&entry)
         .await
         .expect("seed entry should save");
 
@@ -539,15 +548,13 @@ async fn memory_candidate_api_tests_replace_entry_marks_old_replaced_and_creates
         Value::String("New durable fact".to_string())
     );
 
-    let old_after =
-        agent_runtime_service::db::memory_entries::get_by_id(db.pool(), &session.project_scope, old_entry.id)
-            .await
-            .expect("query should succeed")
-            .expect("old entry should exist");
+    let old_after = memory_repo.get_entry_by_id(&session.project_scope, old_entry.id)
+        .await
+        .expect("query should succeed")
+        .expect("old entry should exist");
     assert!(matches!(old_after.status, MemoryEntryStatus::Replaced));
 
-    let all_entries = agent_runtime_service::db::memory_entries::list_by_project_scope(
-        db.pool(),
+    let all_entries = memory_repo.list_entries(
         &session.project_scope,
         100,
         0,
@@ -567,8 +574,11 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
         return;
     };
 
+    let session_repo = PostgresSessionRepository::new(db.clone());
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
+
     let api_key = "test-api-key";
-    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
+    let session = session_repo.create(api_key, "test-scope")
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -582,7 +592,7 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
         MemoryLayer::L0,
         "Fact to invalidate".to_string(),
     );
-    let saved = agent_runtime_service::db::memory_entries::create(db.pool(), &entry)
+    let saved = memory_repo.create_entry(&entry)
         .await
         .expect("entry should save");
 
@@ -605,7 +615,7 @@ async fn memory_candidate_api_tests_invalidate_entry_marks_entry_invalidated() {
     let invalidate_json = read_json(invalidate_response).await;
     assert_eq!(invalidate_json["status"], Value::String("Invalidated".to_string()));
 
-    let stored = agent_runtime_service::db::memory_entries::get_by_id(db.pool(), &session.project_scope, saved.id)
+    let stored = memory_repo.get_entry_by_id(&session.project_scope, saved.id)
         .await
         .expect("query should succeed")
         .expect("entry should exist");
@@ -620,8 +630,11 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
         return;
     };
 
+    let session_repo = PostgresSessionRepository::new(db.clone());
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
+
     let api_key = "test-api-key";
-    let session = agent_runtime_service::db::sessions::create(db.pool(), api_key)
+    let session = session_repo.create(api_key, "test-scope")
         .await
         .expect("session should be created");
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
@@ -630,8 +643,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
         .await
         .expect("entries cleanup should succeed");
 
-    let best = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let best = memory_repo.create_entry(
         &MemoryEntry::new(
             session.project_scope.clone(),
             MemoryLayer::L1,
@@ -641,8 +653,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .await
     .expect("best entry should save");
 
-    let weaker = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let weaker = memory_repo.create_entry(
         &MemoryEntry::new(
             session.project_scope.clone(),
             MemoryLayer::L0,
@@ -652,8 +663,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .await
     .expect("weaker entry should save");
 
-    let invalidated = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let invalidated = memory_repo.create_entry(
         &MemoryEntry::new(
             session.project_scope.clone(),
             MemoryLayer::L0,
@@ -662,8 +672,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     )
     .await
     .expect("invalidated entry should save");
-    let _ = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    memory_repo.update_entry_status(
         &session.project_scope,
         invalidated.id,
         MemoryEntryStatus::Invalidated,
@@ -672,8 +681,7 @@ async fn memory_candidate_api_tests_search_memory_endpoint_returns_ranked_active
     .expect("invalidating test entry should succeed");
 
     let other_scope = unique_project_scope();
-    let _ = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    memory_repo.create_entry(
         &MemoryEntry::new(
             other_scope,
             MemoryLayer::L1,

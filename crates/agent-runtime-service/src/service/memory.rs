@@ -1,4 +1,4 @@
-use crate::models::{MemoryCandidate, MemoryEntry, MemoryEntryStatus};
+use crate::models::{MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus};
 use crate::repository::MemoryRepository;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -38,6 +38,15 @@ impl MemoryService {
         self.repo.create_entry(entry).await
     }
 
+    pub async fn list_candidates(
+        &self,
+        project_scope: &str,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryCandidate>> {
+        self.repo.list_candidates(project_scope, limit, offset).await
+    }
+
     pub async fn list_entries(
         &self,
         project_scope: &str,
@@ -62,6 +71,15 @@ impl MemoryService {
         id: Uuid,
     ) -> anyhow::Result<Option<MemoryEntry>> {
         self.repo.get_entry_by_id(project_scope, id).await
+    }
+
+    pub async fn update_candidate_status(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+        status: MemoryCandidateStatus,
+    ) -> anyhow::Result<Option<MemoryCandidate>> {
+        self.repo.update_candidate_status(project_scope, id, status).await
     }
 
     pub async fn update_entry_status(

@@ -51,9 +51,28 @@ impl EventRepository for PostgresEventRepository {
 
     async fn create_batch(
         &self,
-        _events: Vec<Event>,
+        events: Vec<Event>,
     ) -> anyhow::Result<()> {
-        todo!("optimize with UNNEST or COPY")
+        let mut tx = self.db.pool().begin().await?;
+        for event in events {
+            sqlx::query(
+                r#"
+                INSERT INTO v1_events (event_id, event_type, timestamp, resource_type, resource_id, payload, sequence_number)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                "#
+            )
+            .bind(event.event_id)
+            .bind(event.event_type)
+            .bind(event.timestamp)
+            .bind(event.resource_type)
+            .bind(event.resource_id)
+            .bind(event.payload)
+            .bind(event.sequence_number)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 
     async fn list_by_resource(

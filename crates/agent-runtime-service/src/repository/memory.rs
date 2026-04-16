@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use crate::db::Database;
-use crate::models::{MemoryCandidate, MemoryEntry, MemoryEntryStatus};
+use crate::models::{MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus};
 use uuid::Uuid;
 
 #[async_trait]
@@ -18,6 +18,12 @@ pub trait MemoryRepository: Send + Sync {
         &self,
         entry: &MemoryEntry,
     ) -> anyhow::Result<MemoryEntry>;
+    async fn list_candidates(
+        &self,
+        project_scope: &str,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryCandidate>>;
     async fn list_entries(
         &self,
         project_scope: &str,
@@ -35,6 +41,12 @@ pub trait MemoryRepository: Send + Sync {
         project_scope: &str,
         id: Uuid,
     ) -> anyhow::Result<Option<MemoryEntry>>;
+    async fn update_candidate_status(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+        status: MemoryCandidateStatus,
+    ) -> anyhow::Result<Option<MemoryCandidate>>;
     async fn update_entry_status(
         &self,
         project_scope: &str,
@@ -280,6 +292,30 @@ impl MemoryRepository for PostgresMemoryRepository {
         Ok(row)
     }
 
+    async fn list_candidates(
+        &self,
+        project_scope: &str,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryCandidate>> {
+        let rows = sqlx::query_as::<_, MemoryCandidate>(
+            r#"
+            SELECT *
+            FROM memory_candidates
+            WHERE project_scope = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(project_scope)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(rows)
+    }
+
     async fn list_entries(
         &self,
         project_scope: &str,
@@ -366,6 +402,38 @@ impl MemoryRepository for PostgresMemoryRepository {
             WHERE project_scope = $1 AND id = $2
             "#,
         )
+        .bind(project_scope)
+        .bind(id)
+        .fetch_optional(self.db.pool())
+        .await?;
+
+        Ok(row)
+    }
+
+    async fn update_candidate_status(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+        status: MemoryCandidateStatus,
+    ) -> anyhow::Result<Option<MemoryCandidate>> {
+        let row = sqlx::query_as::<_, MemoryCandidate>(
+            r#"
+            UPDATE memory_candidates
+            SET status = $1,
+                updated_at = NOW(),
+                accepted_at = CASE
+                    WHEN $1::TEXT = 'accepted' THEN COALESCE(accepted_at, NOW())
+                    ELSE NULL
+                END,
+                rejected_at = CASE
+                    WHEN $1::TEXT = 'rejected' THEN COALESCE(rejected_at, NOW())
+                    ELSE NULL
+                END
+            WHERE project_scope = $2 AND id = $3
+            RETURNING *
+            "#,
+        )
+        .bind(status)
         .bind(project_scope)
         .bind(id)
         .fetch_optional(self.db.pool())
