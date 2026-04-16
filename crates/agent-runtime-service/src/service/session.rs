@@ -97,6 +97,10 @@ impl SessionService {
         Ok(session)
     }
 
+    pub fn tools(&self) -> &Arc<ToolService> {
+        &self.tools
+    }
+
     pub async fn chat(
         &self,
         session_id: Uuid,

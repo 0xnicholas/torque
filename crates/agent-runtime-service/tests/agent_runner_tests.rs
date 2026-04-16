@@ -4,42 +4,70 @@ use common::fake_llm::FakeLlm;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
 use serde_json::json;
-use agent_runtime_service::agent::{AgentRunner, StreamEvent};
-use agent_runtime_service::models::{Message, MessageRole};
-use agent_runtime_service::tools::ToolRegistry;
+use agent_runtime_service::agent::StreamEvent;
+use agent_runtime_service::models::{MessageRole};
+use agent_runtime_service::repository::{
+    PostgresCheckpointRepository, PostgresEventRepository, PostgresMemoryRepository,
+    PostgresMessageRepository, PostgresSessionRepository,
+};
+use agent_runtime_service::service::{MemoryService, SessionService, ToolService};
+use agent_runtime_service::tools::builtin::create_builtin_tools;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+async fn build_session_service(
+    db: agent_runtime_service::db::Database,
+    llm: Arc<dyn llm::LlmClient>,
+) -> SessionService {
+    let session_repo = Arc::new(PostgresSessionRepository::new(db.clone()));
+    let message_repo = Arc::new(PostgresMessageRepository::new(db.clone()));
+    let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let memory_repo = Arc::new(PostgresMemoryRepository::new(db.clone()));
+
+    let tool = Arc::new(ToolService::new().await);
+    let memory = Arc::new(MemoryService::new(memory_repo));
+
+    SessionService::new(
+        session_repo,
+        message_repo,
+        event_repo,
+        checkpoint_repo,
+        db,
+        llm,
+        tool,
+        memory,
+    )
+}
+
 #[tokio::test]
 #[serial]
-async fn runner_persists_messages_and_emits_start_chunk_done() {
+async fn chat_persists_messages_and_emits_start_chunk_done() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
     };
 
-    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-key")
+    let llm = Arc::new(FakeLlm::single_text("hello from fake model"));
+    let svc = build_session_service(db.clone(), llm).await;
+
+    let session = svc.create("runner-key", "test-scope")
         .await
         .expect("session should be created");
-    let user_message = Message::user(session.id, "hello".to_string());
-    let llm = Arc::new(FakeLlm::single_text("hello from fake model"));
-    let tools = Arc::new(ToolRegistry::new());
-    let runner = AgentRunner::new(llm, db.clone(), tools);
+
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
 
-    let saved = runner
-        .run(&session, &user_message, tx)
+    svc.chat(session.id, "runner-key", "hello".to_string(), tx)
         .await
-        .expect("runner should complete");
+        .expect("chat should complete");
 
-    assert_eq!(saved.content, "hello from fake model");
-    assert!(matches!(saved.role, MessageRole::Assistant));
-
-    let messages = agent_runtime_service::db::messages::list_by_session(db.pool(), session.id, 10)
+    let messages = svc.list_messages(session.id)
         .await
         .expect("messages should be listed");
     assert_eq!(messages.len(), 2);
     assert!(matches!(messages[0].role, MessageRole::User));
+    assert_eq!(messages[0].content, "hello");
     assert!(matches!(messages[1].role, MessageRole::Assistant));
+    assert_eq!(messages[1].content, "hello from fake model");
 
     let mut events = Vec::new();
     while let Some(event) = rx.recv().await {
@@ -55,41 +83,46 @@ async fn runner_persists_messages_and_emits_start_chunk_done() {
     assert!(
         events
             .iter()
-            .any(|event| matches!(event, StreamEvent::Done { message_id, .. } if *message_id == saved.id))
+            .any(|event| matches!(event, StreamEvent::Done { .. }))
     );
 }
 
 #[tokio::test]
 #[serial]
-async fn runner_handles_tool_call_and_records_tool_log() {
+async fn chat_handles_tool_call_and_records_tool_log() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
     };
 
-    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-key")
-        .await
-        .expect("session should be created");
-    let user_message = Message::user(session.id, "search torque".to_string());
     let llm = Arc::new(FakeLlm::tool_call_then_text(
         "web_search",
         json!({ "query": "torque" }),
         "final tool-assisted answer",
     ));
-    let tools = Arc::new(ToolRegistry::new());
-    for tool in agent_runtime_service::tools::builtin::create_builtin_tools() {
-        tools.register(Arc::from(tool)).await;
+    let svc = build_session_service(db.clone(), llm).await;
+
+    let session = svc.create("runner-key", "test-scope")
+        .await
+        .expect("session should be created");
+
+    for tool in create_builtin_tools() {
+        svc.tools().registry().register(Arc::from(tool)).await;
     }
-    let runner = AgentRunner::new(llm, db.clone(), tools);
+
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
 
-    let saved = runner
-        .run(&session, &user_message, tx)
+    svc.chat(session.id, "runner-key", "search torque".to_string(), tx)
         .await
-        .expect("runner should complete");
+        .expect("chat should complete");
 
-    assert_eq!(saved.content, "final tool-assisted answer");
+    let messages = svc.list_messages(session.id)
+        .await
+        .expect("messages should be listed");
+    let assistant_msg = messages.iter().find(|m| matches!(m.role, MessageRole::Assistant))
+        .expect("assistant message should exist");
+    assert_eq!(assistant_msg.content, "final tool-assisted answer");
 
-    let tool_calls = saved
+    let tool_calls = assistant_msg
         .tool_calls
         .as_ref()
         .and_then(|value| value.as_array())

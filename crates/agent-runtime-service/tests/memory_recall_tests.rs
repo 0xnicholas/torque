@@ -3,11 +3,40 @@ mod common;
 use common::fake_llm::FakeLlm;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
-use agent_runtime_service::agent::{AgentRunner, StreamEvent};
-use agent_runtime_service::models::{MemoryEntry, MemoryEntryStatus, MemoryLayer, Message};
-use agent_runtime_service::tools::ToolRegistry;
+use agent_runtime_service::agent::StreamEvent;
+use agent_runtime_service::models::{MemoryEntry, MemoryEntryStatus, MemoryLayer};
+use agent_runtime_service::repository::{
+    PostgresCheckpointRepository, PostgresEventRepository, PostgresMemoryRepository,
+    PostgresMessageRepository, PostgresSessionRepository, MemoryRepository,
+};
+use agent_runtime_service::service::{MemoryService, SessionService, ToolService};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+
+async fn build_session_service(
+    db: agent_runtime_service::db::Database,
+    llm: Arc<dyn llm::LlmClient>,
+) -> SessionService {
+    let session_repo = Arc::new(PostgresSessionRepository::new(db.clone()));
+    let message_repo = Arc::new(PostgresMessageRepository::new(db.clone()));
+    let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let memory_repo = Arc::new(PostgresMemoryRepository::new(db.clone()));
+
+    let tool = Arc::new(ToolService::new().await);
+    let memory = Arc::new(MemoryService::new(memory_repo));
+
+    SessionService::new(
+        session_repo,
+        message_repo,
+        event_repo,
+        checkpoint_repo,
+        db,
+        llm,
+        tool,
+        memory,
+    )
+}
 
 #[tokio::test]
 #[serial]
@@ -16,10 +45,10 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
         return;
     };
 
+    let repo = PostgresMemoryRepository::new(db.clone());
     let project_scope = format!("memory-recall-test-{}", uuid::Uuid::new_v4());
 
-    let matching = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let matching = repo.create_entry(
         &MemoryEntry::new(
             project_scope.clone(),
             MemoryLayer::L1,
@@ -29,8 +58,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("matching active entry should be created");
 
-    let stale = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let stale = repo.create_entry(
         &MemoryEntry::new(
             project_scope.clone(),
             MemoryLayer::L1,
@@ -40,8 +68,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("stale entry should be created");
 
-    let _ = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    repo.update_entry_status(
         &project_scope,
         stale.id,
         MemoryEntryStatus::Invalidated,
@@ -49,8 +76,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("stale memory should be invalidated");
 
-    let non_matching = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let non_matching = repo.create_entry(
         &MemoryEntry::new(
             project_scope.clone(),
             MemoryLayer::L0,
@@ -60,8 +86,7 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
     .await
     .expect("non matching active entry should be created");
 
-    let recalled = agent_runtime_service::db::memory_entries::recall_for_prompt(
-        db.pool(),
+    let recalled = repo.search_entries(
         &project_scope,
         "torque runtime memory",
         10,
@@ -83,14 +108,19 @@ async fn memory_recall_tests_recall_for_prompt_filters_status_and_prefers_match(
 
 #[tokio::test]
 #[serial]
-async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
+async fn memory_recall_tests_chat_injects_memory_slice_into_prompt() {
     let Some(db) = setup_test_db_or_skip().await else {
         return;
     };
 
-    let session = agent_runtime_service::db::sessions::create(db.pool(), "runner-memory-key")
+    let llm = Arc::new(FakeLlm::single_text("ack"));
+    let svc = build_session_service(db.clone(), llm.clone()).await;
+
+    let session = svc.create("runner-memory-key", "memory-chat-scope")
         .await
         .expect("session should be created");
+
+    let memory_repo = PostgresMemoryRepository::new(db.clone());
 
     sqlx::query("DELETE FROM memory_entries WHERE project_scope = $1")
         .bind(&session.project_scope)
@@ -98,8 +128,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
         .await
         .expect("project memory entries should be cleaned");
 
-    let active = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let active = memory_repo.create_entry(
         &MemoryEntry::new(
             session.project_scope.clone(),
             MemoryLayer::L1,
@@ -109,8 +138,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
     .await
     .expect("active memory entry should be created");
 
-    let invalidated = agent_runtime_service::db::memory_entries::create(
-        db.pool(),
+    let invalidated = memory_repo.create_entry(
         &MemoryEntry::new(
             session.project_scope.clone(),
             MemoryLayer::L1,
@@ -120,8 +148,7 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
     .await
     .expect("second memory entry should be created");
 
-    let _ = agent_runtime_service::db::memory_entries::update_status(
-        db.pool(),
+    memory_repo.update_entry_status(
         &session.project_scope,
         invalidated.id,
         MemoryEntryStatus::Invalidated,
@@ -129,46 +156,38 @@ async fn memory_recall_tests_runner_injects_memory_slice_into_prompt() {
     .await
     .expect("entry should be invalidated");
 
-    let llm = Arc::new(FakeLlm::single_text("ack"));
-    let tools = Arc::new(ToolRegistry::new());
-    let runner = AgentRunner::new(llm.clone(), db.clone(), tools);
-    let user_message = Message::user(
-        session.id,
-        "remind me what Torque says about context".to_string(),
-    );
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(16);
 
-    let _ = runner
-        .run(&session, &user_message, tx)
+    svc.chat(session.id, "runner-memory-key", "remind me what Torque says about context".to_string(), tx)
         .await
-        .expect("runner should complete");
+        .expect("chat should complete");
     while rx.recv().await.is_some() {}
 
     let requests = llm.recorded_requests();
     let first = requests
         .first()
-        .expect("runner should send at least one llm request");
-    let system_messages: Vec<&str> = first
+        .expect("chat should send at least one llm request");
+    let user_messages: Vec<&str> = first
         .messages
         .iter()
-        .filter(|m| m.role == "system")
+        .filter(|m| m.role == "user")
         .map(|m| m.content.as_str())
         .collect();
 
     assert!(
-        system_messages
+        user_messages
             .iter()
             .any(|text| text.contains("Project memory")),
         "prompt should contain a project memory section"
     );
     assert!(
-        system_messages
+        user_messages
             .iter()
             .any(|text| text.contains(&active.content)),
         "active memory should be injected into prompt"
     );
     assert!(
-        system_messages
+        user_messages
             .iter()
             .all(|text| !text.contains("old rule should not be recalled")),
         "invalidated memory must not be injected"
