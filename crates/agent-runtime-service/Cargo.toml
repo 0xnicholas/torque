@@ -24,6 +24,7 @@ subtle = "2"
 
 # Internal dependencies
 llm = { path = "../llm" }
+torque-kernel = { path = "../torque-kernel" }
 
 [dev-dependencies]
 tokio-test = "0.4"
