@@ -14,6 +14,10 @@ pub trait MemoryRepository: Send + Sync {
         project_scope: &str,
         candidate_id: Uuid,
     ) -> anyhow::Result<Option<(MemoryCandidate, MemoryEntry)>>;
+    async fn create_entry(
+        &self,
+        entry: &MemoryEntry,
+    ) -> anyhow::Result<MemoryEntry>;
     async fn list_entries(
         &self,
         project_scope: &str,
@@ -214,6 +218,66 @@ impl MemoryRepository for PostgresMemoryRepository {
 
         tx.commit().await?;
         Ok(Some((accepted_candidate, entry)))
+    }
+
+    async fn create_entry(&self, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry> {
+        if let Some(source_candidate_id) = entry.source_candidate_id {
+            let candidate_exists = sqlx::query_scalar::<_, bool>(
+                r#"
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM memory_candidates
+                    WHERE project_scope = $1 AND id = $2
+                )
+                "#,
+            )
+            .bind(&entry.project_scope)
+            .bind(source_candidate_id)
+            .fetch_one(self.db.pool())
+            .await?;
+
+            anyhow::ensure!(
+                candidate_exists,
+                "memory entry source_candidate_id must reference a candidate in the same project_scope"
+            );
+        }
+
+        let row = sqlx::query_as::<_, MemoryEntry>(
+            r#"
+            INSERT INTO memory_entries (
+                id,
+                project_scope,
+                layer,
+                content,
+                source_candidate_id,
+                source_type,
+                source_ref,
+                proposer,
+                status,
+                created_at,
+                updated_at,
+                invalidated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *
+            "#,
+        )
+        .bind(entry.id)
+        .bind(&entry.project_scope)
+        .bind(&entry.layer)
+        .bind(&entry.content)
+        .bind(entry.source_candidate_id)
+        .bind(&entry.source_type)
+        .bind(&entry.source_ref)
+        .bind(&entry.proposer)
+        .bind(&entry.status)
+        .bind(entry.created_at)
+        .bind(entry.updated_at)
+        .bind(entry.invalidated_at)
+        .fetch_one(self.db.pool())
+        .await?;
+
+        Ok(row)
     }
 
     async fn list_entries(

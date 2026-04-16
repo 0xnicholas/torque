@@ -6,7 +6,6 @@ use axum::{
 use llm::OpenAiClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 use crate::db::Database;
@@ -44,30 +43,21 @@ pub struct SearchMemoryQuery {
     pub limit: Option<i64>,
 }
 
-async fn load_session_for_api_key(
-    db: &Database,
-    session_id: Uuid,
-    api_key: &str,
-) -> Result<crate::models::Session, StatusCode> {
-    let session = crate::db::sessions::get_by_id(db.pool(), session_id)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    if !bool::from(session.api_key.as_bytes().ct_eq(api_key.as_bytes())) {
-        return Err(StatusCode::FORBIDDEN);
-    }
-
-    Ok(session)
-}
-
 pub async fn create_candidate(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Extension(api_key): Extension<String>,
     Json(req): Json<CreateCandidateRequest>,
 ) -> Result<Json<MemoryCandidate>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
     let mut candidate = MemoryCandidate::new(
         session.project_scope.clone(),
@@ -79,7 +69,9 @@ pub async fn create_candidate(
     candidate.proposer = req.proposer;
     candidate.confidence = req.confidence;
 
-    let saved = crate::db::memory_candidates::create(db.pool(), &candidate)
+    let saved = services
+        .memory
+        .create_candidate(&candidate)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -87,19 +79,25 @@ pub async fn create_candidate(
 }
 
 pub async fn accept_candidate(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, candidate_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<AcceptCandidateResponse>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
-    let accepted = crate::db::memory_candidates::accept_candidate_to_entry(
-        db.pool(),
-        &session.project_scope,
-        candidate_id,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let accepted = services
+        .memory
+        .accept_candidate(&session.project_scope, candidate_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let Some((candidate, entry)) = accepted else {
         return Err(StatusCode::NOT_FOUND);
@@ -109,63 +107,89 @@ pub async fn accept_candidate(
 }
 
 pub async fn list_entries(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<Vec<MemoryEntry>>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
-    let entries = crate::db::memory_entries::list_by_project_scope(
-        db.pool(),
-        &session.project_scope,
-        100,
-        0,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let entries = services
+        .memory
+        .list_entries(&session.project_scope, 100, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(entries))
 }
 
 pub async fn search_entries(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(session_id): Path<Uuid>,
     Query(query): Query<SearchMemoryQuery>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<Vec<MemoryEntry>>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
     let q = query.q.unwrap_or_default();
     let limit = query.limit.unwrap_or(10).clamp(1, 50);
 
-    let entries =
-        crate::db::memory_entries::recall_for_prompt(db.pool(), &session.project_scope, &q, limit)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let entries = services
+        .memory
+        .search_entries(&session.project_scope, &q, limit)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(entries))
 }
 
 pub async fn replace_entry(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
     Json(req): Json<ReplaceEntryRequest>,
 ) -> Result<Json<MemoryEntry>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
-    let old_entry = crate::db::memory_entries::get_by_id(db.pool(), &session.project_scope, entry_id)
+    let old_entry = services
+        .memory
+        .get_entry_by_id(&session.project_scope, entry_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let replaced = crate::db::memory_entries::update_status(
-        db.pool(),
-        &session.project_scope,
-        old_entry.id,
-        crate::models::MemoryEntryStatus::Replaced,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let replaced = services
+        .memory
+        .update_entry_status(
+            &session.project_scope,
+            old_entry.id,
+            crate::models::MemoryEntryStatus::Replaced,
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if replaced.is_none() {
         return Err(StatusCode::NOT_FOUND);
@@ -182,7 +206,9 @@ pub async fn replace_entry(
         .or(Some(format!("memory-entry://{}", old_entry.id)));
     new_entry.proposer = req.proposer;
 
-    let saved = crate::db::memory_entries::create(db.pool(), &new_entry)
+    let saved = services
+        .memory
+        .create_entry(&new_entry)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -190,20 +216,29 @@ pub async fn replace_entry(
 }
 
 pub async fn invalidate_entry(
-    State((db, _, _)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path((session_id, entry_id)): Path<(Uuid, Uuid)>,
     Extension(api_key): Extension<String>,
 ) -> Result<Json<MemoryEntry>, StatusCode> {
-    let session = load_session_for_api_key(&db, session_id, &api_key).await?;
+    let session = services
+        .session
+        .get_by_id(session_id, &api_key)
+        .await
+        .map_err(|e| match e {
+            crate::service::session::SessionServiceError::NotFound => StatusCode::NOT_FOUND,
+            crate::service::session::SessionServiceError::Forbidden => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
 
-    let updated = crate::db::memory_entries::update_status(
-        db.pool(),
-        &session.project_scope,
-        entry_id,
-        crate::models::MemoryEntryStatus::Invalidated,
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let updated = services
+        .memory
+        .update_entry_status(
+            &session.project_scope,
+            entry_id,
+            crate::models::MemoryEntryStatus::Invalidated,
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let Some(updated) = updated else {
         return Err(StatusCode::NOT_FOUND);
