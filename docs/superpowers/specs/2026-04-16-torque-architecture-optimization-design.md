@@ -276,7 +276,7 @@ pub struct ServiceContainer {
 impl ServiceContainer {
     pub async fn new(
         repos: RepositoryContainer,
-        kernel: KernelRuntimeHandle,
+        checkpointer: Arc<dyn Checkpointer>,
         llm: Arc<dyn LlmClient>,
     ) -> Self {
         let tool = Arc::new(ToolService::new().await);
@@ -284,14 +284,18 @@ impl ServiceContainer {
         let session = Arc::new(SessionService::new(
             repos.session.clone(),
             repos.message.clone(),
-            kernel,
+            repos.event_repo.clone(),
+            repos.checkpoint_repo.clone(),
+            checkpointer.clone(),
             llm,
             tool.clone(),
             memory.clone(),
         ));
         let agent_instance = Arc::new(AgentInstanceService::new(
             repos.agent_definition.clone(),
-            kernel,
+            repos.event_repo.clone(),
+            repos.checkpoint_repo.clone(),
+            checkpointer.clone(),
         ));
 
         Self { session, memory, tool, agent_instance }
@@ -305,7 +309,9 @@ impl ServiceContainer {
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
     message_repo: Arc<dyn MessageRepository>,
-    kernel: Mutex<KernelRuntimeHandle>,
+    event_repo: Arc<dyn EventRepository>,
+    checkpoint_repo: Arc<dyn CheckpointRepository>,
+    checkpointer: Arc<dyn Checkpointer>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     memory: Arc<MemoryService>,
@@ -327,7 +333,19 @@ impl SessionService {
 
         let request = crate::kernel_bridge::session_to_execution_request(&session, &message)?;
 
-        let mut kernel = self.kernel.lock().await;
+        // Create a fresh KernelRuntimeHandle per request to avoid global lock
+        let mut kernel = KernelRuntimeHandle::new(
+            vec![], // agent_definitions loaded on-demand or preloaded
+            self.event_repo.clone(),
+            self.checkpoint_repo.clone(),
+            self.checkpointer.clone(),
+        );
+
+        // Hydrate instance state from DB if it exists
+        if let Some(instance_id) = session.agent_instance_id {
+            kernel.hydrate_runtime(instance_id, self.session_repo.as_ref()).await?;
+        }
+
         let result = kernel.execute_chat(
             request,
             self.llm.clone(),
@@ -672,7 +690,8 @@ crates/agent-runtime-service/src/
 │   ├── message.rs
 │   ├── memory.rs
 │   ├── event.rs
-│   └── checkpoint.rs
+│   ├── checkpoint.rs
+│   └── agent_definition.rs
 ├── kernel_bridge/
 │   ├── mod.rs
 │   ├── runtime.rs
