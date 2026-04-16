@@ -25,11 +25,12 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         )),
     };
 
+    let llm_dyn: Arc<dyn llm::LlmClient> = llm.clone();
     let services = tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(ServiceContainer::new(
             repos,
             db.clone(),
-            llm.clone(),
+            llm_dyn,
         ))
     });
 

@@ -46,6 +46,10 @@ impl AgentInstance {
         self.id
     }
 
+    pub fn agent_definition_id(&self) -> AgentDefinitionId {
+        self.agent_definition_id
+    }
+
     pub fn state(&self) -> AgentInstanceState {
         self.state
     }

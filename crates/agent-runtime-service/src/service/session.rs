@@ -1,6 +1,9 @@
 use crate::agent::stream::StreamEvent;
-use crate::infra::llm::OpenAiClient;
-use crate::repository::{MessageRepository, SessionRepository};
+use crate::infra::llm::{LlmClient, LlmMessage};
+use crate::kernel_bridge::{session_to_execution_request, KernelRuntimeHandle};
+use crate::repository::{
+    CheckpointRepository, EventRepository, MessageRepository, SessionRepository,
+};
 use crate::service::{MemoryService, ToolService};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -21,20 +24,35 @@ pub enum SessionServiceError {
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
     message_repo: Arc<dyn MessageRepository>,
-    _llm: Arc<OpenAiClient>,
-    _tools: Arc<ToolService>,
-    _memory: Arc<MemoryService>,
+    event_repo: Arc<dyn EventRepository>,
+    checkpoint_repo: Arc<dyn CheckpointRepository>,
+    db: crate::db::Database,
+    llm: Arc<dyn LlmClient>,
+    tools: Arc<ToolService>,
+    memory: Arc<MemoryService>,
 }
 
 impl SessionService {
     pub fn new(
         session_repo: Arc<dyn SessionRepository>,
         message_repo: Arc<dyn MessageRepository>,
-        llm: Arc<OpenAiClient>,
+        event_repo: Arc<dyn EventRepository>,
+        checkpoint_repo: Arc<dyn CheckpointRepository>,
+        db: crate::db::Database,
+        llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         memory: Arc<MemoryService>,
     ) -> Self {
-        Self { session_repo, message_repo, _llm: llm, _tools: tools, _memory: memory }
+        Self {
+            session_repo,
+            message_repo,
+            event_repo,
+            checkpoint_repo,
+            db,
+            llm,
+            tools,
+            memory,
+        }
     }
 
     pub async fn create(
@@ -42,7 +60,9 @@ impl SessionService {
         api_key: &str,
         project_scope: &str,
     ) -> Result<crate::models::Session, SessionServiceError> {
-        self.session_repo.create(api_key, project_scope).await
+        self.session_repo
+            .create(api_key, project_scope)
+            .await
             .map_err(SessionServiceError::Other)
     }
 
@@ -51,7 +71,9 @@ impl SessionService {
         api_key: &str,
         limit: i64,
     ) -> Result<Vec<crate::models::Session>, SessionServiceError> {
-        self.session_repo.list(api_key, limit).await
+        self.session_repo
+            .list(api_key, limit)
+            .await
             .map_err(SessionServiceError::Other)
     }
 
@@ -60,7 +82,10 @@ impl SessionService {
         session_id: Uuid,
         api_key: &str,
     ) -> Result<crate::models::Session, SessionServiceError> {
-        let session = self.session_repo.get_by_id(session_id).await
+        let session = self
+            .session_repo
+            .get_by_id(session_id)
+            .await
             .map_err(SessionServiceError::Other)?
             .ok_or(SessionServiceError::NotFound)?;
 
@@ -74,11 +99,147 @@ impl SessionService {
 
     pub async fn chat(
         &self,
-        _session_id: Uuid,
-        _api_key: &str,
-        _message: String,
-        _event_sink: mpsc::Sender<StreamEvent>,
+        session_id: Uuid,
+        api_key: &str,
+        message: String,
+        event_sink: mpsc::Sender<StreamEvent>,
     ) -> Result<(), SessionServiceError> {
+        let session = self.get_by_id(session_id, api_key).await?;
+
+        if !self
+            .session_repo
+            .try_mark_running(session_id)
+            .await
+            .map_err(SessionServiceError::Other)?
+        {
+            return Err(SessionServiceError::Conflict);
+        }
+
+        let user_msg = crate::models::Message::user(session_id, message.clone());
+        self.message_repo
+            .create(&user_msg)
+            .await
+            .map_err(SessionServiceError::Other)?;
+
+        let request = session_to_execution_request(&session, &message,
+        )
+        .map_err(|e| SessionServiceError::Other(anyhow::anyhow!("kernel mapping error: {e}")))?;
+
+        let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(
+            self.db.clone(),
+        ));
+
+        let mut kernel = KernelRuntimeHandle::new(
+            vec![],
+            self.event_repo.clone(),
+            self.checkpoint_repo.clone(),
+            checkpointer,
+        );
+
+        let history = self
+            .message_repo
+            .get_recent_by_session(session_id, 50)
+            .await
+            .map_err(SessionServiceError::Other)?;
+
+        let recalled_memory = self
+            .memory
+            .repo()
+            .search_entries(&session.project_scope,
+                &message,
+                10,
+            )
+            .await
+            .unwrap_or_default();
+
+        let tool_defs = self.tools.registry().to_llm_tools().await;
+
+        let system_prompt = format!(
+            "You are a helpful assistant. You have access to tools: {}. \
+             Use tools when needed. When you're done, provide a final response.",
+            tool_defs
+                .iter()
+                .map(|t| t.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let mut llm_messages = vec![LlmMessage::system(&system_prompt)];
+        if !recalled_memory.is_empty() {
+            let memory_text = recalled_memory
+                .iter()
+                .map(|e| format!("[{:?}] {}", e.layer, e.content))
+                .collect::<Vec<_>>()
+                .join("\n");
+            llm_messages.push(LlmMessage::user(format!("Project memory:\n{}", memory_text)));
+        }
+        for msg in history {
+            let role = msg.role.clone();
+            let content = msg.content.clone();
+            llm_messages.push(match role {
+                crate::models::MessageRole::System => LlmMessage::system(content),
+                crate::models::MessageRole::Assistant => LlmMessage::assistant(content),
+                _ => LlmMessage::user(content),
+            });
+        }
+
+        let result = kernel
+            .execute_chat(
+                request,
+                self.llm.clone(),
+                self.tools.registry().clone(),
+                event_sink.clone(),
+                llm_messages,
+            )
+            .await;
+
+        match result {
+            Ok(exec) => {
+                let content = exec.summary.unwrap_or_default();
+                let assistant_msg = crate::models::Message::assistant(
+                    session_id,
+                    content,
+                    None,
+                    None,
+                );
+                let saved = self
+                    .message_repo
+                    .create(&assistant_msg)
+                    .await
+                    .map_err(SessionServiceError::Other)?;
+                self.session_repo
+                    .update_status(
+                        session_id,
+                        crate::models::SessionStatus::Completed,
+                        None,
+                    )
+                    .await
+                    .map_err(SessionServiceError::Other)?;
+                let _ = event_sink
+                    .send(StreamEvent::Done {
+                        message_id: saved.id,
+                        artifacts: None,
+                    })
+                    .await;
+            }
+            Err(e) => {
+                self.session_repo
+                    .update_status(
+                        session_id,
+                        crate::models::SessionStatus::Error,
+                        Some(&e.to_string()),
+                    )
+                    .await
+                    .map_err(SessionServiceError::Other)?;
+                let _ = event_sink
+                    .send(StreamEvent::Error {
+                        code: "AGENT_ERROR".to_string(),
+                        message: e.to_string(),
+                    })
+                    .await;
+            }
+        }
+
         Ok(())
     }
 
@@ -86,7 +247,9 @@ impl SessionService {
         &self,
         session_id: Uuid,
     ) -> Result<Vec<crate::models::Message>, SessionServiceError> {
-        self.message_repo.list_by_session(session_id, 100).await
+        self.message_repo
+            .list_by_session(session_id, 100)
+            .await
             .map_err(SessionServiceError::Other)
     }
 }
