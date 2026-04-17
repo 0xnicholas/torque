@@ -1,7 +1,6 @@
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 use crate::db::Database;
 use crate::models::v1::common::{ListQuery};

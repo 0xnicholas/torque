@@ -5,7 +5,7 @@ use axum::{
 };
 use crate::db::Database;
 use crate::models::v1::checkpoint::Checkpoint;
-use crate::models::v1::common::{ListQuery, ListResponse, Pagination, ErrorBody};
+use crate::models::v1::common::ListQuery;
 use crate::service::ServiceContainer;
 use llm::OpenAiClient;
 use std::sync::Arc;
