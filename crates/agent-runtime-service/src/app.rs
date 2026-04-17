@@ -25,12 +25,18 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         )),
     };
 
+    let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(db.clone()));
+    let idempotency = Arc::new(crate::v1_guards::IdempotencyStore::new());
+    let run_gate = Arc::new(crate::v1_guards::RunGate::new());
     let llm_dyn: Arc<dyn llm::LlmClient> = llm.clone();
+
     let services = tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(ServiceContainer::new(
             repos,
-            db.clone(),
+            checkpointer,
             llm_dyn,
+            idempotency,
+            run_gate,
         ))
     });
 

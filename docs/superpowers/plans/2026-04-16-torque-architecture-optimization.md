@@ -185,6 +185,15 @@ pub struct RepositoryContainer {
 }
 ```
 
+- [ ] **Step 1b: Create agent_definition stub**
+
+Create `crates/agent-runtime-service/src/repository/agent_definition.rs`:
+```rust
+// Stub: full trait and Postgres impl added during Platform API v1 implementation
+#[async_trait::async_trait]
+pub trait AgentDefinitionRepository: Send + Sync {}
+```
+
 - [ ] **Step 2: Write SessionRepository trait and Postgres impl**
 
 ```rust
@@ -323,6 +332,7 @@ Actually, to keep the plan clean, I'll add it as part of Task 0.1 or Task 1.1. L
 Create `crates/agent-runtime-service/migrations/20260416000005_add_session_kernel_columns.up.sql`:
 ```sql
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_definition_id UUID;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_instance_id UUID;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS active_task_id UUID;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS checkpoint_id UUID;
 ```
@@ -330,6 +340,7 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS checkpoint_id UUID;
 Down:
 ```sql
 ALTER TABLE sessions DROP COLUMN IF EXISTS agent_definition_id;
+ALTER TABLE sessions DROP COLUMN IF EXISTS agent_instance_id;
 ALTER TABLE sessions DROP COLUMN IF EXISTS active_task_id;
 ALTER TABLE sessions DROP COLUMN IF EXISTS checkpoint_id;
 ```
@@ -830,7 +841,44 @@ git commit -m "feat(infra): move ToolRegistry to infra and add ToolService singl
 **Files:**
 - Create: `crates/agent-runtime-service/src/service/mod.rs`
 - Create: `crates/agent-runtime-service/src/service/session.rs`
+- Create: `crates/agent-runtime-service/src/service/agent_instance.rs`
+- Create: `crates/agent-runtime-service/src/service/memory.rs`
 - Modify: `crates/agent-runtime-service/src/api/sessions.rs`
+
+- [ ] **Step 0: Create service stubs**
+
+Create `crates/agent-runtime-service/src/service/agent_instance.rs`:
+```rust
+use std::sync::Arc;
+
+pub struct AgentInstanceService;
+impl AgentInstanceService {
+    pub fn new(
+        _session_repo: Arc<dyn crate::repository::SessionRepository>,
+        _event_repo: Arc<dyn crate::repository::EventRepository>,
+        _checkpoint_repo: Arc<dyn crate::repository::CheckpointRepository>,
+        _checkpointer: Arc<dyn crate::repository::Checkpointer>,
+    ) -> Self {
+        Self
+    }
+}
+```
+
+Create `crates/agent-runtime-service/src/service/memory.rs`:
+```rust
+use crate::repository::MemoryRepository;
+use std::sync::Arc;
+
+pub struct MemoryService {
+    _repo: Arc<dyn MemoryRepository>,
+}
+
+impl MemoryService {
+    pub fn new(repo: Arc<dyn MemoryRepository>) -> Self {
+        Self { _repo: repo }
+    }
+}
+```
 
 - [ ] **Step 1: Write ServiceContainer**
 
@@ -851,13 +899,17 @@ pub struct ServiceContainer {
     pub memory: Arc<memory::MemoryService>,
     pub tool: Arc<ToolService>,
     pub agent_instance: Arc<agent_instance::AgentInstanceService>,
+    pub idempotency: Arc<crate::v1_guards::IdempotencyStore>,
+    pub run_gate: Arc<crate::v1_guards::RunGate>,
 }
 
 impl ServiceContainer {
     pub async fn new(
         repos: crate::repository::RepositoryContainer,
-        db: crate::db::Database,
+        checkpointer: Arc<dyn crate::repository::Checkpointer>,
         llm: Arc<dyn crate::infra::llm::LlmClient>,
+        idempotency: Arc<crate::v1_guards::IdempotencyStore>,
+        run_gate: Arc<crate::v1_guards::RunGate>,
     ) -> Self {
         let tool = Arc::new(ToolService::new().await);
         let memory = Arc::new(memory::MemoryService::new(repos.memory.clone()));
@@ -866,16 +918,19 @@ impl ServiceContainer {
             repos.message.clone(),
             repos.event.clone(),
             repos.checkpoint.clone(),
-            db,
+            checkpointer.clone(),
             llm,
             tool.clone(),
             memory.clone(),
         ));
         let agent_instance = Arc::new(agent_instance::AgentInstanceService::new(
             repos.session.clone(),
+            repos.event.clone(),
+            repos.checkpoint.clone(),
+            checkpointer.clone(),
         ));
 
-        Self { session, memory, tool, agent_instance }
+        Self { session, memory, tool, agent_instance, idempotency, run_gate }
     }
 }
 ```
@@ -908,6 +963,9 @@ pub enum SessionServiceError {
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
     message_repo: Arc<dyn MessageRepository>,
+    event_repo: Arc<dyn crate::repository::EventRepository>,
+    checkpoint_repo: Arc<dyn crate::repository::CheckpointRepository>,
+    checkpointer: Arc<dyn crate::repository::Checkpointer>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     memory: Arc<MemoryService>,
@@ -917,6 +975,9 @@ impl SessionService {
     pub fn new(
         session_repo: Arc<dyn SessionRepository>,
         message_repo: Arc<dyn MessageRepository>,
+        event_repo: Arc<dyn crate::repository::EventRepository>,
+        checkpoint_repo: Arc<dyn crate::repository::CheckpointRepository>,
+        checkpointer: Arc<dyn crate::repository::Checkpointer>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         memory: Arc<MemoryService>,
@@ -924,6 +985,9 @@ impl SessionService {
         Self {
             session_repo,
             message_repo,
+            event_repo,
+            checkpoint_repo,
+            checkpointer,
             llm,
             tools,
             memory,
@@ -1040,8 +1104,12 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         checkpoint: Arc::new(crate::repository::PostgresCheckpointRepository::new(db.clone())),
     };
 
+    let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(db.clone()));
+    let idempotency = Arc::new(crate::v1_guards::IdempotencyStore::new());
+    let run_gate = Arc::new(crate::v1_guards::RunGate::new());
+
     let services = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(ServiceContainer::new(repos, llm.clone()))
+        tokio::runtime::Handle::current().block_on(ServiceContainer::new(repos, checkpointer, llm.clone(), idempotency, run_gate))
     });
 
     api::router(db, llm, Arc::new(services))
@@ -1148,8 +1216,11 @@ pub fn session_to_execution_request(
     session: &Session,
     user_message: &str,
 ) -> Result<ExecutionRequest, KernelError> {
+    let agent_def_id = session.agent_definition_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| session.id.to_string());
     let agent_def = AgentDefinition::new(
-        &session.id.to_string(),
+        &agent_def_id,
         "MVP session adapter",
     );
 

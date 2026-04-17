@@ -12,13 +12,17 @@ pub struct ServiceContainer {
     pub memory: std::sync::Arc<memory::MemoryService>,
     pub tool: std::sync::Arc<ToolService>,
     pub agent_instance: std::sync::Arc<agent_instance::AgentInstanceService>,
+    pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
+    pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
 }
 
 impl ServiceContainer {
     pub async fn new(
         repos: crate::repository::RepositoryContainer,
-        db: crate::db::Database,
+        checkpointer: std::sync::Arc<dyn checkpointer::Checkpointer>,
         llm: std::sync::Arc<dyn llm::LlmClient>,
+        idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
+        run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
     ) -> Self {
         let tool = std::sync::Arc::new(ToolService::new().await);
         let memory = std::sync::Arc::new(memory::MemoryService::new(repos.memory.clone()));
@@ -27,15 +31,18 @@ impl ServiceContainer {
             repos.message.clone(),
             repos.event.clone(),
             repos.checkpoint.clone(),
-            db,
+            checkpointer,
             llm,
             tool.clone(),
             memory.clone(),
         ));
         let agent_instance = std::sync::Arc::new(agent_instance::AgentInstanceService::new(
             repos.session.clone(),
+            repos.event.clone(),
+            repos.checkpoint.clone(),
+            repos.agent_definition.clone(),
         ));
 
-        Self { session, memory, tool, agent_instance }
+        Self { session, memory, tool, agent_instance, idempotency, run_gate }
     }
 }

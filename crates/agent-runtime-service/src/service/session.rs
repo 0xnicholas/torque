@@ -26,7 +26,7 @@ pub struct SessionService {
     message_repo: Arc<dyn MessageRepository>,
     event_repo: Arc<dyn EventRepository>,
     checkpoint_repo: Arc<dyn CheckpointRepository>,
-    db: crate::db::Database,
+        checkpointer: Arc<dyn checkpointer::Checkpointer>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     memory: Arc<MemoryService>,
@@ -38,7 +38,7 @@ impl SessionService {
         message_repo: Arc<dyn MessageRepository>,
         event_repo: Arc<dyn EventRepository>,
         checkpoint_repo: Arc<dyn CheckpointRepository>,
-        db: crate::db::Database,
+    checkpointer: Arc<dyn checkpointer::Checkpointer>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         memory: Arc<MemoryService>,
@@ -48,7 +48,7 @@ impl SessionService {
             message_repo,
             event_repo,
             checkpoint_repo,
-            db,
+            checkpointer,
             llm,
             tools,
             memory,
@@ -131,15 +131,11 @@ impl SessionService {
         )
         .map_err(|e| SessionServiceError::Other(anyhow::anyhow!("kernel mapping error: {e}")))?;
 
-        let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(
-            self.db.clone(),
-        ));
-
         let mut kernel = KernelRuntimeHandle::new(
             vec![],
             self.event_repo.clone(),
             self.checkpoint_repo.clone(),
-            checkpointer,
+            self.checkpointer.clone(),
         );
 
         let history = self
