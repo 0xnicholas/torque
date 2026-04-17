@@ -1,16 +1,18 @@
-# Agent Runtime Service MVP
+# Agent Runtime Service
 
-Product-facing single-agent MVP for Torque.
+Product-facing service for Torque Agent Runtime.
 
-This crate demonstrates:
+This crate provides:
 
-- persistent sessions
-- multi-turn chat
-- SSE streaming responses
-- bounded context window
-- minimal demo-safe tool support
+- **Legacy MVP API** (`/`) — Sessions, multi-turn chat, SSE streaming
+- **v1 Platform API** (`/v1/`) — Agent definitions, instances, tasks, artifacts, teams, delegations, approvals, checkpoints, capabilities, events, and memory
 
-It does not yet demonstrate team orchestration, approvals UI, or recovery UI.
+## API Versions
+
+| Version | Prefix | Status | Description |
+|---------|--------|--------|-------------|
+| Legacy | `/` | Deprecated | Session-based chat MVP |
+| v1 | `/v1/` | Active | Full platform API |
 
 ## Prerequisites
 
