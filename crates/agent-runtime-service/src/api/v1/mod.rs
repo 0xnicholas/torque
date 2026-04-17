@@ -1,4 +1,4 @@
-use axum::{Router, routing::{get, post, delete}};
+use axum::{Router, routing::{get, post}};
 use crate::db::Database;
 use crate::service::ServiceContainer;
 use llm::OpenAiClient;
