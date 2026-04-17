@@ -744,3 +744,78 @@ The architecture is split across a focused set of documents.
 Torque can be summarized as:
 
 an instance-centric agent runtime kernel, plus a harness layer that lowers higher-level orchestration into explicit execution, capability, policy, context, team, and recovery contracts instead of hard-coding a workflow or transcript-centric system into the kernel.
+
+总体架构图
++----------------------------------------------------------------------------------+
+  |                              Upper-Layer Products / Callers                      |
+  |----------------------------------------------------------------------------------|
+  | CLI / API / Scheduler / Supervisor / Future Harness / External Orchestrators     |
+  +------------------------------------------+---------------------------------------+
+                                             |
+                                             | standard runtime objects
+                                             v
+  +----------------------------------------------------------------------------------+
+  |                                   Harness Layer                                  |
+  |----------------------------------------------------------------------------------|
+  | TeamDefinition | TeamInstance | TeamTask | SharedTaskState | Publish | Recovery  |
+  | Mode selection | Planning | Decomposition | Supervisor -> Subagent               |
+  |                                                                                  |
+  | Note: this layer lowers decisions into kernel requests; it does not replace      |
+  | the kernel contract.                                                             |
+  +------------------------------------------+---------------------------------------+
+                                             |
+                                             | ExecutionRequest / DelegationRequest
+                                             v
+  +----------------------------------------------------------------------------------+
+  |                                   Kernel Core                                    |
+  |----------------------------------------------------------------------------------|
+  | AgentDefinition                                                                    |
+  | AgentInstance                                                                      |
+  | Task                                                                               |
+  | ExecutionRequest  ->  ExecutionResult                                              |
+  | DelegationRequest ->  DelegationResult                                             |
+  | ApprovalRequest                                                                    |
+  | Artifact                                                                           |
+  | ExternalContextRef                                                                 |
+  |                                                                                   |
+  | Instance lifecycle: CREATED -> HYDRATING -> READY -> RUNNING -> WAITING_* -> ... |
+  | Task lifecycle:     OPEN -> IN_PROGRESS -> BLOCKED -> DONE / FAILED / ABANDONED  |
+  +-------------------+----------------------+----------------------+-----------------+
+                      |                      |                      |
+                      | uses                 | governed by          | derives from
+                      v                      v                      v
+  +--------------------------+   +--------------------------+   +-------------------+
+  |   Capability Layer       |   |      Policy Layer        |   | Context & State   |
+  |--------------------------|   |--------------------------|   |-------------------|
+  | CapabilityRef            |   | approval                 |   | Global stable     |
+  | CapabilityProfile        |   | delegation               |   | Team coordination |
+  | RegistryBinding          |   | visibility               |   | Agent private     |
+  | CapabilityResolution     |   | resource                 |   | External refs     |
+  | AgentDefinition binding  |   | memory                   |   | Artifact plane    |
+  |                          |   | tool                     |   | Memory plane      |
+  |                          |   | -> PolicyDecision        |   | -> TaskPacket     |
+  +--------------------------+   +--------------------------+   +-------------------+
+                      \                 |                 /
+                       \                |                /
+                        \               |               /
+                         \              |              /
+                          \             |             /
+                           v            v            v
+  +----------------------------------------------------------------------------------+
+  |                              Infrastructure / Adapters                           |
+  |----------------------------------------------------------------------------------|
+  | agent-runtime-service | llm | checkpointer | DB persistence | SSE/HTTP | tools   |
+  | SQLx repos            | OpenAI-compatible client | Redis/Postgres | auth         |
+  +----------------------------------------------------------------------------------+
+
+  如果映射到你这个 repo 的“建议落位”，可以再看成这样：
+
+  docs/specs
+     ↓ define target contracts
+
+  crates/torque-kernel         <- first scaffold now
+     ↓ consumed by
+
+  crates/agent-runtime-service <- current MVP adapter/service layer
+  crates/llm                   <- model client adapter
+  crates/checkpointer          <- recovery/checkpoint adapter

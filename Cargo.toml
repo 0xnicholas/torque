@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/llm", "crates/agent-runtime-service"]
+members = ["crates/llm", "crates/agent-runtime-service", "crates/torque-kernel"]
 resolver = "2"
 
 [workspace.package]
