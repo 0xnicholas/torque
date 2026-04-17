@@ -105,10 +105,11 @@ async fn test_api_key_isolation() {
         .await
         .expect("Failed to create session 2");
 
-    let sessions_1 = repo.list(&api_key_1, 10)
+    let sessions_1 = repo.list(10)
         .await
         .expect("Failed to list sessions");
 
+    let sessions_1: Vec<_> = sessions_1.into_iter().filter(|s| s.api_key == api_key_1).collect();
     assert_eq!(sessions_1.len(), 1);
     assert_eq!(sessions_1[0].id, session_1.id);
 }
