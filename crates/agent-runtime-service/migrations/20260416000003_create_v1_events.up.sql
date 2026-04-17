@@ -10,3 +10,4 @@ CREATE TABLE v1_events (
 
 CREATE INDEX idx_v1_events_resource ON v1_events(resource_type, resource_id, timestamp DESC);
 CREATE INDEX idx_v1_events_type ON v1_events(event_type, timestamp DESC);
+CREATE INDEX idx_v1_events_sequence ON v1_events(resource_type, resource_id, sequence_number);

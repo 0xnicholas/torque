@@ -1,5 +1,5 @@
 CREATE TABLE checkpoints (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     instance_id UUID,
     task_id UUID,
     snapshot JSONB NOT NULL,
