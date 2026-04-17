@@ -4,7 +4,7 @@
 
 **Goal:** Implement the Torque Platform API v1 REST service with SSE streaming runs, async team tasks, and full CRUD for all v1 resources, while keeping the existing MVP API functional.
 
-**Architecture:** Extend `crates/agent-runtime-service` with a parallel `/v1/` router hierarchy. Reuse the existing axum/Postgres stack. Add new database tables for v1 resources. Keep MVP routes intact during migration. Use tokio streams for SSE. Use sqlx for all DB access.
+**Architecture:** Extend `crates/agent-runtime-service` with a parallel `/v1/` router hierarchy, built on top of the `repository/` + `service/` + `kernel-bridge/` layers established by the architecture optimization. HTTP handlers are thin adapters (<30 lines) that delegate to `service/` only. DB access is isolated behind `repository/` async traits. Keep MVP routes intact during migration. Use tokio streams for SSE. Use sqlx for all persistence.
 
 **Tech Stack:** Rust, axum 0.7, tokio, sqlx, serde, uuid, chrono, tracing, tower-http
 
@@ -43,20 +43,29 @@
 - `crates/agent-runtime-service/src/models/v1/checkpoint.rs`
 - `crates/agent-runtime-service/src/models/v1/event.rs`
 
-### DB modules
-- `crates/agent-runtime-service/src/db/v1/mod.rs`
-- `crates/agent-runtime-service/src/db/v1/agent_definitions.rs`
-- `crates/agent-runtime-service/src/db/v1/agent_instances.rs`
-- `crates/agent-runtime-service/src/db/v1/runs.rs`
-- `crates/agent-runtime-service/src/db/v1/tasks.rs`
-- `crates/agent-runtime-service/src/db/v1/artifacts.rs`
-- `crates/agent-runtime-service/src/db/v1/memory.rs`
-- `crates/agent-runtime-service/src/db/v1/capabilities.rs`
-- `crates/agent-runtime-service/src/db/v1/teams.rs`
-- `crates/agent-runtime-service/src/db/v1/delegations.rs`
-- `crates/agent-runtime-service/src/db/v1/approvals.rs`
-- `crates/agent-runtime-service/src/db/v1/checkpoints.rs`
-- `crates/agent-runtime-service/src/db/v1/events.rs`
+### Repository modules (v1 extensions)
+Extends the `repository/` layer established by the architecture optimization.
+- `crates/agent-runtime-service/src/repository/agent_definition.rs` — `AgentDefinitionRepository` trait + `PostgresAgentDefinitionRepository`
+- `crates/agent-runtime-service/src/repository/agent_instance.rs` — `AgentInstanceRepository` trait + impl
+- `crates/agent-runtime-service/src/repository/task.rs` — `TaskRepository` trait + impl
+- `crates/agent-runtime-service/src/repository/artifact.rs` — `ArtifactRepository` trait + impl
+- `crates/agent-runtime-service/src/repository/memory.rs` — filled `MemoryRepository` + `MemoryWriteCandidateRepository`
+- `crates/agent-runtime-service/src/repository/capability.rs` — `CapabilityProfileRepository` + `CapabilityRegistryBindingRepository`
+- `crates/agent-runtime-service/src/repository/team.rs` — `TeamDefinitionRepository` + `TeamInstanceRepository`
+- `crates/agent-runtime-service/src/repository/delegation.rs` — `DelegationRepository`
+- `crates/agent-runtime-service/src/repository/approval.rs` — `ApprovalRepository`
+
+### Service modules (v1)
+- `crates/agent-runtime-service/src/service/agent_definition.rs` — `AgentDefinitionService`
+- `crates/agent-runtime-service/src/service/agent_instance.rs` — `AgentInstanceService`
+- `crates/agent-runtime-service/src/service/task.rs` — `TaskService`
+- `crates/agent-runtime-service/src/service/artifact.rs` — `ArtifactService`
+- `crates/agent-runtime-service/src/service/memory.rs` — filled `MemoryService`
+- `crates/agent-runtime-service/src/service/capability.rs` — `CapabilityService`
+- `crates/agent-runtime-service/src/service/team.rs` — `TeamService`
+- `crates/agent-runtime-service/src/service/delegation.rs` — `DelegationService`
+- `crates/agent-runtime-service/src/service/approval.rs` — `ApprovalService`
+- `crates/agent-runtime-service/src/service/mod.rs` — extended `ServiceContainer` with v1 services
 
 ### Tests
 - `crates/agent-runtime-service/tests/v1_agent_definitions.rs`
@@ -197,12 +206,14 @@ pub mod approvals;
 pub mod checkpoints;
 pub mod events;
 
-pub fn router(db: Database, llm: Arc<OpenAiClient>) -> Router {
+use crate::service::ServiceContainer;
+
+pub fn router(services: Arc<ServiceContainer>) -> Router {
     Router::new()
         .route("/v1/agent-definitions", post(agent_definitions::create).get(agent_definitions::list))
         .route("/v1/agent-definitions/:id", get(agent_definitions::get).delete(agent_definitions::delete))
         // more routes added in later tasks
-        .with_state((db, llm))
+        .with_state(services)
 }
 ```
 
@@ -213,10 +224,14 @@ Modify `crates/agent-runtime-service/src/api/mod.rs`:
 pub mod v1;
 ```
 
-Change the router function to nest v1:
+Change the router function signature and mount v1 with its own state:
 ```rust
-pub fn router(db: Database, llm: Arc<OpenAiClient>) -> Router {
-    let v1_router = v1::router(db.clone(), llm.clone());
+pub fn router(
+    db: Database,
+    llm: Arc<OpenAiClient>,
+    services: Arc<ServiceContainer>,
+) -> Router {
+    let v1_router = v1::router(services);
 
     Router::new()
         // existing MVP routes...
@@ -225,7 +240,7 @@ pub fn router(db: Database, llm: Arc<OpenAiClient>) -> Router {
         .route("/metrics", get(metrics::get))
         .nest("/", v1_router)
         .layer(middleware::from_fn(auth_middleware))
-        .with_state((db, llm))
+        .with_state((db, llm, services))
 }
 ```
 
@@ -234,30 +249,29 @@ pub fn router(db: Database, llm: Arc<OpenAiClient>) -> Router {
 Create `crates/agent-runtime-service/src/api/v1/agent_definitions.rs`:
 ```rust
 use axum::{extract::State, http::StatusCode, Json};
-use crate::db::Database;
-use llm::OpenAiClient;
+use crate::service::ServiceContainer;
 use std::sync::Arc;
 
 pub async fn create(
-    State((db, _llm)): State<(Database, Arc<OpenAiClient>)>,
+    State(_services): State<Arc<ServiceContainer>>,
 ) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
 
 pub async fn list(
-    State((db, _llm)): State<(Database, Arc<OpenAiClient>)>,
+    State(_services): State<Arc<ServiceContainer>>,
 ) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
 
 pub async fn get(
-    State((db, _llm)): State<(Database, Arc<OpenAiClient>)>,
+    State(_services): State<Arc<ServiceContainer>>,
 ) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
 
 pub async fn delete(
-    State((db, _llm)): State<(Database, Arc<OpenAiClient>)>,
+    State(_services): State<Arc<ServiceContainer>>,
 ) -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
@@ -366,44 +380,19 @@ impl RunGate {
 }
 ```
 
-- [ ] **Step 4: Wire into app state**
+- [ ] **Step 4: Export from lib.rs**
 
-Modify `crates/agent-runtime-service/src/app.rs`:
-```rust
-use agent_runtime_service::v1_guards::{IdempotencyStore, RunGate};
-use std::sync::Arc;
-
-pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
-    let idempotency = Arc::new(IdempotencyStore::new());
-    let run_gate = Arc::new(RunGate::new());
-    api::router(db, llm, idempotency, run_gate)
-}
-```
-
-Modify `crates/agent-runtime-service/src/api/mod.rs`:
-```rust
-use agent_runtime_service::v1_guards::{IdempotencyStore, RunGate};
-
-pub fn router(
-    db: Database,
-    llm: Arc<OpenAiClient>,
-    idempotency: Arc<IdempotencyStore>,
-    run_gate: Arc<RunGate>,
-) -> Router {
-    // ...
-    .with_state((db, llm, idempotency, run_gate))
-}
-```
-
-And `crates/agent-runtime-service/src/lib.rs`:
+Add to `crates/agent-runtime-service/src/lib.rs`:
 ```rust
 pub mod v1_guards;
 ```
 
+**Note:** `IdempotencyStore` and `RunGate` are wired into `ServiceContainer` during app initialization (see Architecture Optimization Plan). v1 handlers access them via `services.idempotency` and `services.run_gate`.
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/v1_guards.rs crates/agent-runtime-service/src/lib.rs crates/agent-runtime-service/src/app.rs crates/agent-runtime-service/src/api/mod.rs
+git add crates/agent-runtime-service/src/v1_guards.rs crates/agent-runtime-service/src/lib.rs
 git commit -m "feat(v1): add lifecycle guards, idempotency store, and run gate"
 ```
 
@@ -503,105 +492,190 @@ git commit -m "feat(v1): add AgentDefinition model and migration"
 
 ---
 
-### Task 1.2: Implement AgentDefinition DB layer
+### Task 1.2: Implement AgentDefinitionRepository and AgentDefinitionService
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/db/v1/agent_definitions.rs`
-- Modify: `crates/agent-runtime-service/src/db/v1/mod.rs`
-- Modify: `crates/agent-runtime-service/src/db/mod.rs`
+- Modify: `crates/agent-runtime-service/src/repository/agent_definition.rs`
+- Create: `crates/agent-runtime-service/src/service/agent_definition.rs`
+- Modify: `crates/agent-runtime-service/src/service/mod.rs`
 
-- [ ] **Step 1: Write DB functions**
+- [ ] **Step 1: Implement AgentDefinitionRepository trait and Postgres impl**
 
+Modify `crates/agent-runtime-service/src/repository/agent_definition.rs`:
 ```rust
+use async_trait::async_trait;
+use crate::db::Database;
 use crate::models::v1::agent_definition::{AgentDefinition, AgentDefinitionCreate};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-pub async fn create(pool: &PgPool, req: &AgentDefinitionCreate) -> sqlx::Result<AgentDefinition> {
-    sqlx::query_as::<_, AgentDefinition>(
-        r#"
-        INSERT INTO v1_agent_definitions (name, description, system_prompt, tool_policy, memory_policy, delegation_policy, limits, default_model_policy)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *
-        "#,
-    )
-    .bind(&req.name)
-    .bind(&req.description)
-    .bind(&req.system_prompt)
-    .bind(&req.tool_policy)
-    .bind(&req.memory_policy)
-    .bind(&req.delegation_policy)
-    .bind(&req.limits)
-    .bind(&req.default_model_policy)
-    .fetch_one(pool)
-    .await
+#[async_trait]
+pub trait AgentDefinitionRepository: Send + Sync {
+    async fn create(&self, req: &AgentDefinitionCreate) -> anyhow::Result<AgentDefinition>;
+    async fn list(&self, limit: i64, cursor: Option<Uuid>, sort: Option<&str>) -> anyhow::Result<Vec<AgentDefinition>>;
+    async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentDefinition>>;
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
 }
 
-pub async fn list(pool: &PgPool, limit: i64, cursor: Option<Uuid>, sort: Option<&str>) -> sqlx::Result<Vec<AgentDefinition>> {
-    let order = match sort {
-        Some("-created_at") => "created_at DESC, id DESC",
-        Some("created_at") => "created_at ASC, id ASC",
-        _ => "id ASC",
-    };
-    let rows = if let Some(after) = cursor {
-        sqlx::query_as::<_, AgentDefinition>(
-            &format!("SELECT * FROM v1_agent_definitions WHERE id > $1 ORDER BY {} LIMIT $2", order)
+pub struct PostgresAgentDefinitionRepository {
+    db: Database,
+}
+
+impl PostgresAgentDefinitionRepository {
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait]
+impl AgentDefinitionRepository for PostgresAgentDefinitionRepository {
+    async fn create(&self, req: &AgentDefinitionCreate) -> anyhow::Result<AgentDefinition> {
+        let row = sqlx::query_as::<_, AgentDefinition>(
+            r#"
+            INSERT INTO v1_agent_definitions (name, description, system_prompt, tool_policy, memory_policy, delegation_policy, limits, default_model_policy)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+            "#
         )
-        .bind(after)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-    } else {
-        sqlx::query_as::<_, AgentDefinition>(
-            &format!("SELECT * FROM v1_agent_definitions ORDER BY {} LIMIT $1", order)
-        )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?
-    };
-    Ok(rows)
-}
-
-pub async fn get(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<AgentDefinition>> {
-    sqlx::query_as::<_, AgentDefinition>(
-        "SELECT * FROM v1_agent_definitions WHERE id = $1"
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-}
-
-pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
-    let result = sqlx::query("DELETE FROM v1_agent_definitions WHERE id = $1")
-        .bind(id)
-        .execute(pool)
+        .bind(&req.name)
+        .bind(&req.description)
+        .bind(&req.system_prompt)
+        .bind(&req.tool_policy)
+        .bind(&req.memory_policy)
+        .bind(&req.delegation_policy)
+        .bind(&req.limits)
+        .bind(&req.default_model_policy)
+        .fetch_one(self.db.pool())
         .await?;
-    Ok(result.rows_affected() > 0)
+        Ok(row)
+    }
+
+    async fn list(&self, limit: i64, cursor: Option<Uuid>, sort: Option<&str>) -> anyhow::Result<Vec<AgentDefinition>> {
+        let order = match sort {
+            Some("-created_at") => "created_at DESC, id DESC",
+            Some("created_at") => "created_at ASC, id ASC",
+            _ => "id ASC",
+        };
+        let rows = if let Some(after) = cursor {
+            sqlx::query_as::<_, AgentDefinition>(
+                &format!("SELECT * FROM v1_agent_definitions WHERE id > $1 ORDER BY {} LIMIT $2", order)
+            )
+            .bind(after)
+            .bind(limit)
+            .fetch_all(self.db.pool())
+            .await?
+        } else {
+            sqlx::query_as::<_, AgentDefinition>(
+                &format!("SELECT * FROM v1_agent_definitions ORDER BY {} LIMIT $1", order)
+            )
+            .bind(limit)
+            .fetch_all(self.db.pool())
+            .await?
+        };
+        Ok(rows)
+    }
+
+    async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentDefinition>> {
+        let row = sqlx::query_as::<_, AgentDefinition>(
+            "SELECT * FROM v1_agent_definitions WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row)
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
+        let result = sqlx::query("DELETE FROM v1_agent_definitions WHERE id = $1")
+            .bind(id)
+            .execute(self.db.pool())
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
 }
 ```
 
-- [ ] **Step 2: Wire up module**
+- [ ] **Step 2: Implement AgentDefinitionService**
 
-Create `crates/agent-runtime-service/src/db/v1/mod.rs`:
+Create `crates/agent-runtime-service/src/service/agent_definition.rs`:
 ```rust
-pub mod agent_definitions;
+use crate::models::v1::agent_definition::{AgentDefinition, AgentDefinitionCreate};
+use crate::repository::AgentDefinitionRepository;
+use std::sync::Arc;
+use uuid::Uuid;
+
+pub struct AgentDefinitionService {
+    repo: Arc<dyn AgentDefinitionRepository>,
+}
+
+impl AgentDefinitionService {
+    pub fn new(repo: Arc<dyn AgentDefinitionRepository>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn create(&self, req: AgentDefinitionCreate) -> anyhow::Result<AgentDefinition> {
+        self.repo.create(&req).await
+    }
+
+    pub async fn list(&self, limit: i64, cursor: Option<Uuid>, sort: Option<&str>) -> anyhow::Result<Vec<AgentDefinition>> {
+        self.repo.list(limit, cursor, sort).await
+    }
+
+    pub async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentDefinition>> {
+        self.repo.get(id).await
+    }
+
+    pub async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
+        self.repo.delete(id).await
+    }
+}
 ```
 
-Modify `crates/agent-runtime-service/src/db/mod.rs` to add:
+- [ ] **Step 3: Wire into RepositoryContainer and ServiceContainer**
+
+Modify `crates/agent-runtime-service/src/repository/mod.rs`:
 ```rust
-pub mod v1;
+pub mod agent_definition;
+pub use agent_definition::{AgentDefinitionRepository, PostgresAgentDefinitionRepository};
 ```
 
-- [ ] **Step 3: Verify compilation**
+Update `RepositoryContainer` to include:
+```rust
+pub agent_definition: Arc<dyn AgentDefinitionRepository>,
+```
+
+And in `app.rs`, when constructing `RepositoryContainer`, add:
+```rust
+agent_definition: Arc::new(crate::repository::PostgresAgentDefinitionRepository::new(db.clone())),
+```
+
+Modify `crates/agent-runtime-service/src/service/mod.rs`:
+```rust
+pub mod agent_definition;
+pub use agent_definition::AgentDefinitionService;
+```
+
+Update `ServiceContainer` to include:
+```rust
+pub agent_definition: Arc<AgentDefinitionService>,
+```
+
+And in `ServiceContainer::new`, add before `Self { ... }`:
+```rust
+let agent_definition = Arc::new(AgentDefinitionService::new(repos.agent_definition.clone()));
+```
+
+Update the `Self { ... }` return to include `agent_definition,`.
+
+- [ ] **Step 4: Verify compilation**
 
 Run: `cargo check -p agent-runtime-service`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/db/
-git commit -m "feat(v1): add AgentDefinition DB layer"
+git add crates/agent-runtime-service/src/repository/agent_definition.rs crates/agent-runtime-service/src/service/
+git commit -m "feat(v1): add AgentDefinitionRepository and AgentDefinitionService"
 ```
 
 ---
@@ -620,18 +694,17 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use crate::db::Database;
 use crate::models::v1::agent_definition::{AgentDefinition, AgentDefinitionCreate};
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
-use llm::OpenAiClient;
+use crate::service::ServiceContainer;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn create(
-    State((db, _llm, _idempotency, _run_gate)): State<(Database, Arc<OpenAiClient>, Arc<IdempotencyStore>, Arc<RunGate>)>,
+    State(services): State<Arc<ServiceContainer>>,
     Json(req): Json<AgentDefinitionCreate>,
 ) -> Result<(StatusCode, Json<AgentDefinition>), (StatusCode, Json<ErrorBody>)> {
-    let def = crate::db::v1::agent_definitions::create(db.pool(), &req).await
+    let def = services.agent_definition.create(req).await
         .map_err(|e| (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
@@ -645,12 +718,12 @@ pub async fn create(
 }
 
 pub async fn list(
-    State((db, _llm, _idempotency, _run_gate)): State<(Database, Arc<OpenAiClient>, Arc<IdempotencyStore>, Arc<RunGate>)>,
+    State(services): State<Arc<ServiceContainer>>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<AgentDefinition>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
     let cursor = q.cursor.and_then(|s| Uuid::parse_str(&s).ok());
-    let mut rows = crate::db::v1::agent_definitions::list(db.pool(), limit + 1, cursor, q.sort.as_deref()).await
+    let mut rows = services.agent_definition.list(limit + 1, cursor, q.sort.as_deref()).await
         .map_err(|e| (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })
@@ -665,10 +738,10 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((db, _llm, _idempotency, _run_gate)): State<(Database, Arc<OpenAiClient>, Arc<IdempotencyStore>, Arc<RunGate>)>,
+    State(services): State<Arc<ServiceContainer>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<AgentDefinition>, StatusCode> {
-    match crate::db::v1::agent_definitions::get(db.pool(), id).await {
+    match services.agent_definition.get(id).await {
         Ok(Some(def)) => Ok(Json(def)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -676,10 +749,10 @@ pub async fn get(
 }
 
 pub async fn delete(
-    State((db, _llm, _idempotency, _run_gate)): State<(Database, Arc<OpenAiClient>, Arc<IdempotencyStore>, Arc<RunGate>)>,
+    State(services): State<Arc<ServiceContainer>>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    match crate::db::v1::agent_definitions::delete(db.pool(), id).await {
+    match services.agent_definition.delete(id).await {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -742,7 +815,8 @@ git commit -m "feat(v1): implement AgentDefinition handlers and tests"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/agent_instance.rs`
 - Create: `crates/agent-runtime-service/migrations/20260416000002_create_v1_agent_instances.up.sql`
-- Create: `crates/agent-runtime-service/src/db/v1/agent_instances.rs`
+- Create: `crates/agent-runtime-service/src/repository/agent_instance.rs`
+- Create: `crates/agent-runtime-service/src/service/agent_instance.rs`
 
 - [ ] **Step 1: Write model**
 
@@ -786,6 +860,12 @@ pub struct AgentInstanceCreate {
     #[serde(default)]
     pub external_context_refs: Vec<serde_json::Value>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TimeTravelRequest {
+    pub checkpoint_id: Uuid,
+    pub branch_name: Option<String>,
+}
 ```
 
 - [ ] **Step 2: Write migration**
@@ -810,7 +890,7 @@ Functions: `create`, `list`, `get`, `delete`, `update_status`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/agent_instance.rs crates/agent-runtime-service/src/db/v1/agent_instances.rs crates/agent-runtime-service/migrations/
+git add crates/agent-runtime-service/src/models/v1/agent_instance.rs crates/agent-runtime-service/src/repository/agent_instance.rs crates/agent-runtime-service/src/service/agent_instance.rs crates/agent-runtime-service/migrations/
 git commit -m "feat(v1): add AgentInstance model, migration, and DB layer"
 ```
 
@@ -905,17 +985,16 @@ use axum::{
     response::sse::{Event, Sse},
     Json,
 };
-use crate::db::Database;
 use crate::models::v1::run::{RunEvent, RunRequest};
-use llm::OpenAiClient;
+use crate::service::ServiceContainer;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 pub async fn run(
-    State((db, llm)): State<(Database, Arc<OpenAiClient>)>,
+    State(_services): State<Arc<ServiceContainer>>,
     Path(id): Path<Uuid>,
-    Json(req): Json<RunRequest>,
+    Json(_req): Json<RunRequest>,
 ) -> Sse<ReceiverStream<Result<Event, axum::Error>>> {
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, axum::Error>>(32);
 
@@ -967,7 +1046,8 @@ git commit -m "feat(v1): add Run model and SSE handler scaffold"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/task.rs`
 - Create: migration
-- Create: `crates/agent-runtime-service/src/db/v1/tasks.rs`
+- Create: `crates/agent-runtime-service/src/repository/task.rs`
+- Create: `crates/agent-runtime-service/src/service/task.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/tasks.rs`
 
 - [ ] **Step 1: Write model**
@@ -1040,7 +1120,7 @@ CREATE TABLE v1_tasks (
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/task.rs crates/agent-runtime-service/src/db/v1/tasks.rs crates/agent-runtime-service/src/api/v1/tasks.rs
+git add crates/agent-runtime-service/src/models/v1/task.rs crates/agent-runtime-service/src/repository/task.rs crates/agent-runtime-service/src/service/task.rs crates/agent-runtime-service/src/api/v1/tasks.rs
 git commit -m "feat(v1): implement Task resource"
 ```
 
@@ -1051,7 +1131,8 @@ git commit -m "feat(v1): implement Task resource"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/artifact.rs`
 - Create: migration
-- Create: `crates/agent-runtime-service/src/db/v1/artifacts.rs`
+- Create: `crates/agent-runtime-service/src/repository/artifact.rs`
+- Create: `crates/agent-runtime-service/src/service/artifact.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/artifacts.rs`
 
 - [ ] **Step 1: Write model**
@@ -1104,7 +1185,7 @@ CREATE TABLE v1_artifacts (
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/artifact.rs crates/agent-runtime-service/src/db/v1/artifacts.rs crates/agent-runtime-service/src/api/v1/artifacts.rs
+git add crates/agent-runtime-service/src/models/v1/artifact.rs crates/agent-runtime-service/src/repository/artifact.rs crates/agent-runtime-service/src/service/artifact.rs crates/agent-runtime-service/src/api/v1/artifacts.rs
 git commit -m "feat(v1): implement Artifact resource"
 ```
 
@@ -1114,7 +1195,7 @@ git commit -m "feat(v1): implement Artifact resource"
 
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/event.rs`
-- Create: `crates/agent-runtime-service/src/db/v1/events.rs`
+- Create: `crates/agent-runtime-service/src/repository/event.rs` (already exists from architecture optimization — extend with `list_by_types` if missing)
 - Modify: `crates/agent-runtime-service/src/api/v1/events.rs`
 
 - [ ] **Step 1: Write model**
@@ -1128,22 +1209,13 @@ pub struct Event {
     pub resource_type: String,
     pub resource_id: Uuid,
     pub payload: serde_json::Value,
+    pub sequence_number: Option<i64>,
 }
 ```
 
-- [ ] **Step 2: Write migration**
+- [ ] **Step 2: Verify events table exists**
 
-```sql
-CREATE TABLE v1_events (
-    event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_type TEXT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    resource_type TEXT NOT NULL,
-    resource_id UUID NOT NULL,
-    payload JSONB NOT NULL DEFAULT '{}'
-);
-CREATE INDEX idx_v1_events_resource ON v1_events(resource_type, resource_id, timestamp DESC);
-```
+The `v1_events` table and `Event` model were created by the Architecture Optimization Plan (migration `20260416000003_create_v1_events`). Ensure the model above aligns with that schema.
 
 - [ ] **Step 3: Implement handler**
 
@@ -1162,7 +1234,7 @@ CREATE INDEX idx_v1_events_resource ON v1_events(resource_type, resource_id, tim
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/event.rs crates/agent-runtime-service/src/db/v1/events.rs crates/agent-runtime-service/src/api/v1/events.rs
+git add crates/agent-runtime-service/src/models/v1/event.rs crates/agent-runtime-service/src/repository/event.rs crates/agent-runtime-service/src/api/v1/events.rs
 git commit -m "feat(v1): implement Event read-only endpoint"
 ```
 
@@ -1175,37 +1247,69 @@ git commit -m "feat(v1): implement Event read-only endpoint"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/memory.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/db/v1/memory.rs`
+- Modify: `crates/agent-runtime-service/src/repository/memory.rs`
+- Modify: `crates/agent-runtime-service/src/service/memory.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/memory.rs`
 
 - [ ] **Step 1: Write models**
 
 ```rust
+#[derive(Debug, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(rename_all = "snake_case")]
+pub enum MemoryCategory {
+    AgentProfileMemory,
+    UserPreferenceMemory,
+    TaskOrDomainMemory,
+    ExternalContextMemory,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MemoryContent {
+    pub category: MemoryCategory,
+    pub key: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(rename_all = "UPPERCASE")]
+pub enum MemoryWriteCandidateStatus {
+    Pending,
+    Approved,
+    Rejected,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct MemoryWriteCandidate {
     pub id: Uuid,
     pub agent_instance_id: Uuid,
-    pub status: String,
-    pub content: serde_json::Value,
-    pub nominated_memory_entries: serde_json::Value,
+    pub team_instance_id: Option<Uuid>,
+    pub content: serde_json::Value, // MemoryContent as JSON
+    pub reasoning: Option<String>,
+    pub status: MemoryWriteCandidateStatus,
+    pub memory_entry_id: Option<Uuid>,
+    pub reviewed_by: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub reviewed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct MemoryWriteCandidateCreate {
     pub agent_instance_id: Uuid,
-    pub content: serde_json::Value,
-    pub nominated_memory_entries: Vec<Uuid>,
+    pub content: MemoryContent,
+    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct MemoryEntry {
     pub id: Uuid,
-    pub agent_instance_id: Uuid,
-    pub content: serde_json::Value,
-    pub artifact_id: Option<Uuid>,
-    pub memory_type: String,
+    pub agent_instance_id: Option<Uuid>,
+    pub team_instance_id: Option<Uuid>,
+    pub category: MemoryCategory,
+    pub key: String,
+    pub value: serde_json::Value,
+    pub source_candidate_id: Uuid,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 ```
 
@@ -1223,7 +1327,7 @@ CREATE TABLE v1_memory_entries (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/memory.rs crates/agent-runtime-service/src/db/v1/memory.rs crates/agent-runtime-service/src/api/v1/memory.rs
+git add crates/agent-runtime-service/src/models/v1/memory.rs crates/agent-runtime-service/src/repository/memory.rs crates/agent-runtime-service/src/service/memory.rs crates/agent-runtime-service/src/api/v1/memory.rs
 git commit -m "feat(v1): implement Memory resources"
 ```
 
@@ -1234,19 +1338,39 @@ git commit -m "feat(v1): implement Memory resources"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/capability.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/db/v1/capabilities.rs`
+- Create: `crates/agent-runtime-service/src/repository/capability.rs`
+- Create: `crates/agent-runtime-service/src/service/capability.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/capabilities.rs`
 
 - [ ] **Step 1: Write models**
 
 ```rust
+#[derive(Debug, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(rename_all = "snake_case")]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+#[derive(Debug, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(rename_all = "snake_case")]
+pub enum QualityTier {
+    Experimental,
+    Beta,
+    Production,
+}
+
 #[derive(Debug, Serialize, FromRow)]
 pub struct CapabilityProfile {
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
-    pub capability_refs: serde_json::Value,
-    pub constraints: serde_json::Value,
+    pub input_contract: Option<serde_json::Value>,
+    pub output_contract: Option<serde_json::Value>,
+    pub risk_level: RiskLevel,
+    pub default_agent_definition_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -1255,26 +1379,41 @@ pub struct CapabilityProfile {
 pub struct CapabilityProfileCreate {
     pub name: String,
     pub description: Option<String>,
+    pub input_contract: Option<serde_json::Value>,
+    pub output_contract: Option<serde_json::Value>,
     #[serde(default)]
-    pub capability_refs: serde_json::Value,
-    #[serde(default)]
-    pub constraints: serde_json::Value,
+    pub risk_level: RiskLevel,
+    pub default_agent_definition_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct CapabilityRegistryBinding {
     pub id: Uuid,
-    pub profile_id: Uuid,
-    pub registry_id: String,
-    pub resolved_capabilities: serde_json::Value,
+    pub capability_profile_id: Uuid,
+    pub agent_definition_id: Uuid,
+    pub compatibility_score: Option<f64>,
+    pub quality_tier: QualityTier,
+    pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CapabilityRegistryBindingCreate {
+    pub capability_profile_id: Uuid,
+    pub agent_definition_id: Uuid,
+    pub compatibility_score: Option<f64>,
+    #[serde(default)]
+    pub quality_tier: QualityTier,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CapabilityResolveRequest {
-    pub profile_id: Uuid,
-    pub registry_id: String,
-    pub context: Option<serde_json::Value>,
+    pub team_instance_id: Option<Uuid>,
+    pub team_task_id: Option<Uuid>,
+    pub selector_id: Option<String>,
+    pub constraints: Option<serde_json::Value>,
 }
 ```
 
@@ -1292,7 +1431,7 @@ CREATE TABLE v1_capability_registry_bindings (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/capability.rs crates/agent-runtime-service/src/db/v1/capabilities.rs crates/agent-runtime-service/src/api/v1/capabilities.rs
+git add crates/agent-runtime-service/src/models/v1/capability.rs crates/agent-runtime-service/src/repository/capability.rs crates/agent-runtime-service/src/service/capability.rs crates/agent-runtime-service/src/api/v1/capabilities.rs
 git commit -m "feat(v1): implement Capability resources"
 ```
 
@@ -1305,7 +1444,8 @@ git commit -m "feat(v1): implement Capability resources"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/team.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/db/v1/teams.rs`
+- Create: `crates/agent-runtime-service/src/repository/team.rs`
+- Create: `crates/agent-runtime-service/src/service/team.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/teams.rs`
 
 - [ ] **Step 1: Write models**
@@ -1358,7 +1498,7 @@ CREATE TABLE v1_team_instances (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/team.rs crates/agent-runtime-service/src/db/v1/teams.rs crates/agent-runtime-service/src/api/v1/teams.rs
+git add crates/agent-runtime-service/src/models/v1/team.rs crates/agent-runtime-service/src/repository/team.rs crates/agent-runtime-service/src/service/team.rs crates/agent-runtime-service/src/api/v1/teams.rs
 git commit -m "feat(v1): implement Team resources"
 ```
 
@@ -1370,8 +1510,10 @@ git commit -m "feat(v1): implement Team resources"
 - Create: `crates/agent-runtime-service/src/models/v1/delegation.rs`
 - Create: `crates/agent-runtime-service/src/models/v1/approval.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/db/v1/delegations.rs`
-- Create: `crates/agent-runtime-service/src/db/v1/approvals.rs`
+- Create: `crates/agent-runtime-service/src/repository/delegation.rs`
+- Create: `crates/agent-runtime-service/src/repository/approval.rs`
+- Create: `crates/agent-runtime-service/src/service/delegation.rs`
+- Create: `crates/agent-runtime-service/src/service/approval.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/delegations.rs`
 - Modify: `crates/agent-runtime-service/src/api/v1/approvals.rs`
 
@@ -1407,7 +1549,7 @@ Approvals: `GET /v1/approvals`, `POST /v1/approvals/:id/resolve`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/delegation.rs crates/agent-runtime-service/src/models/v1/approval.rs crates/agent-runtime-service/src/db/v1/delegations.rs crates/agent-runtime-service/src/db/v1/approvals.rs crates/agent-runtime-service/src/api/v1/delegations.rs crates/agent-runtime-service/src/api/v1/approvals.rs
+git add crates/agent-runtime-service/src/models/v1/delegation.rs crates/agent-runtime-service/src/models/v1/approval.rs crates/agent-runtime-service/src/repository/delegation.rs crates/agent-runtime-service/src/repository/approval.rs crates/agent-runtime-service/src/service/delegation.rs crates/agent-runtime-service/src/service/approval.rs crates/agent-runtime-service/src/api/v1/delegations.rs crates/agent-runtime-service/src/api/v1/approvals.rs
 git commit -m "feat(v1): implement Delegation and Approval resources"
 ```
 
@@ -1418,7 +1560,7 @@ git commit -m "feat(v1): implement Delegation and Approval resources"
 **Files:**
 - Create: `crates/agent-runtime-service/src/models/v1/checkpoint.rs`
 - Create: migration
-- Create: `crates/agent-runtime-service/src/db/v1/checkpoints.rs`
+- Modify: `crates/agent-runtime-service/src/repository/checkpoint.rs` (already exists from architecture optimization)
 - Modify: `crates/agent-runtime-service/src/api/v1/checkpoints.rs`
 
 - [ ] **Step 1: Write model and migration**
@@ -1441,7 +1583,7 @@ pub struct Checkpoint {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/checkpoint.rs crates/agent-runtime-service/src/db/v1/checkpoints.rs crates/agent-runtime-service/src/api/v1/checkpoints.rs
+git add crates/agent-runtime-service/src/models/v1/checkpoint.rs crates/agent-runtime-service/src/repository/checkpoint.rs crates/agent-runtime-service/src/api/v1/checkpoints.rs
 git commit -m "feat(v1): implement Checkpoint resource"
 ```
 
