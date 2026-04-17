@@ -32,6 +32,17 @@ pub enum StreamEvent {
 }
 
 impl StreamEvent {
+    pub fn event_name(&self) -> &'static str {
+        match self {
+            StreamEvent::Start { .. } => "start",
+            StreamEvent::Chunk { .. } => "chunk",
+            StreamEvent::ToolCall { .. } => "tool_call",
+            StreamEvent::ToolResult { .. } => "tool_result",
+            StreamEvent::Done { .. } => "done",
+            StreamEvent::Error { .. } => "error",
+        }
+    }
+
     pub fn to_sse(&self) -> String {
         format!(
             "data: {}\n\n",

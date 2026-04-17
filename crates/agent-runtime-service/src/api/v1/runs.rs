@@ -3,6 +3,7 @@ use axum::{
     response::sse::{Event, Sse},
     Json,
 };
+use crate::agent::stream::StreamEvent;
 use crate::db::Database;
 use crate::models::v1::run::RunRequest;
 use crate::service::ServiceContainer;
@@ -12,18 +13,35 @@ use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 pub async fn run(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-    Json(_req): Json<RunRequest>,
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<RunRequest>,
 ) -> Sse<ReceiverStream<Result<Event, axum::Error>>> {
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, axum::Error>>(32);
+    let stream_tx = tx.clone();
+    let run_service = services.run.clone();
 
     tokio::spawn(async move {
-        let start = serde_json::json!({"event": "run.started", "data": {"status": "RUNNING"}});
-        let _ = tx.send(Ok(Event::default().event("run.started").json_data(start).unwrap())).await;
-        
-        let done = serde_json::json!({"event": "run.completed", "data": {"status": "COMPLETED"}});
-        let _ = tx.send(Ok(Event::default().event("run.completed").json_data(done).unwrap())).await;
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<StreamEvent>(32);
+
+        // Spawn execution
+        let run_handle = tokio::spawn(async move {
+            run_service.execute(id, req, event_tx).await
+        });
+
+        // Forward StreamEvents to SSE
+        while let Some(event) = event_rx.recv().await {
+            let sse_event = Event::default().event(event.event_name())
+                .json_data(&event)
+                .unwrap_or_else(|_| Event::default().event("error").data("serialization error"));
+            
+            if stream_tx.send(Ok(sse_event)).await.is_err() {
+                break; // Client disconnected
+            }
+        }
+
+        // Wait for completion
+        let _ = run_handle.await;
     });
 
     Sse::new(ReceiverStream::new(rx))
