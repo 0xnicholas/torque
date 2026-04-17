@@ -2,3 +2,6 @@
 target/
 .worktrees/
 .DS_Store
+.omx/
+.sisyphus/
+tmp.json
