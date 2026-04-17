@@ -7,6 +7,7 @@ pub mod checkpoint;
 pub mod delegation;
 pub mod event;
 pub mod memory;
+pub mod run;
 pub mod session;
 pub mod task;
 pub mod team;
@@ -21,6 +22,7 @@ pub use checkpoint::CheckpointService;
 pub use delegation::DelegationService;
 pub use event::EventService;
 pub use memory::MemoryService;
+pub use run::RunService;
 pub use session::SessionService;
 pub use task::TaskService;
 pub use team::TeamService;
@@ -40,6 +42,7 @@ pub struct ServiceContainer {
     pub approval: std::sync::Arc<ApprovalService>,
     pub checkpoint: std::sync::Arc<CheckpointService>,
     pub event: std::sync::Arc<EventService>,
+    pub run: std::sync::Arc<RunService>,
     pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
     pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
 }
@@ -59,8 +62,8 @@ impl ServiceContainer {
             repos.message.clone(),
             repos.event.clone(),
             repos.checkpoint.clone(),
-            checkpointer,
-            llm,
+            checkpointer.clone(),
+            llm.clone(),
             tool.clone(),
             memory.clone(),
         ));
@@ -84,11 +87,21 @@ impl ServiceContainer {
         let approval = std::sync::Arc::new(ApprovalService::new(repos.approval.clone()));
         let checkpoint = std::sync::Arc::new(CheckpointService::new(repos.checkpoint_ext.clone()));
         let event = std::sync::Arc::new(EventService::new(repos.event_ext.clone()));
+        let run = std::sync::Arc::new(RunService::new(
+            repos.agent_definition.clone(),
+            repos.agent_instance.clone(),
+            repos.task.clone(),
+            repos.event.clone(),
+            repos.checkpoint.clone(),
+            checkpointer,
+            llm,
+            tool.clone(),
+        ));
 
         Self {
             session, memory, tool, agent_instance, agent_definition,
             task, artifact, capability, team, delegation, approval,
-            checkpoint, event, idempotency, run_gate,
+            checkpoint, event, run, idempotency, run_gate,
         }
     }
 }
