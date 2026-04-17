@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[async_trait]
 pub trait ApprovalRepository: Send + Sync {
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<Approval>>;
+    async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Approval>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Approval>>;
     async fn resolve(&self, id: Uuid, status: &str) -> anyhow::Result<bool>;
 }
@@ -26,6 +27,17 @@ impl ApprovalRepository for PostgresApprovalRepository {
         let rows = sqlx::query_as::<_, Approval>(
             "SELECT * FROM v1_approvals ORDER BY requested_at DESC LIMIT $1"
         )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
+    async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Approval>> {
+        let rows = sqlx::query_as::<_, Approval>(
+            "SELECT * FROM v1_approvals WHERE task_id = $1 ORDER BY requested_at DESC LIMIT $2"
+        )
+        .bind(task_id)
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;

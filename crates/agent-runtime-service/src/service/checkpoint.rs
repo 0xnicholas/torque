@@ -12,6 +12,10 @@ impl CheckpointService {
         Self { repo }
     }
 
+    pub async fn list(&self, limit: i64) -> anyhow::Result<Vec<Checkpoint>> {
+        self.repo.list(limit).await
+    }
+
     pub async fn list_by_instance(
         &self,
         instance_id: Uuid,

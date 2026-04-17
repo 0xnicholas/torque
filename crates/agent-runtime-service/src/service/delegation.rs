@@ -25,6 +25,14 @@ impl DelegationService {
         self.repo.list(limit).await
     }
 
+    pub async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>> {
+        self.repo.list_by_instance(instance_id, limit).await
+    }
+
+    pub async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>> {
+        self.repo.list_by_task(task_id, limit).await
+    }
+
     pub async fn get(&self, id: Uuid) -> anyhow::Result<Option<Delegation>> {
         self.repo.get(id).await
     }

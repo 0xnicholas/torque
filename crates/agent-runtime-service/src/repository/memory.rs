@@ -36,6 +36,11 @@ pub trait MemoryRepository: Send + Sync {
         query: &str,
         limit: i64,
     ) -> anyhow::Result<Vec<MemoryEntry>>;
+    async fn get_candidate_by_id(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+    ) -> anyhow::Result<Option<MemoryCandidate>>;
     async fn get_entry_by_id(
         &self,
         project_scope: &str,
@@ -390,6 +395,25 @@ impl MemoryRepository for PostgresMemoryRepository {
         Ok(rows)
     }
 
+    async fn get_candidate_by_id(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+    ) -> anyhow::Result<Option<MemoryCandidate>> {
+        let row = sqlx::query_as::<_, MemoryCandidate>(
+            r#"
+            SELECT *
+            FROM memory_candidates
+            WHERE project_scope = $1 AND id = $2
+            "#,
+        )
+        .bind(project_scope)
+        .bind(id)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row)
+    }
+
     async fn get_entry_by_id(
         &self,
         project_scope: &str,
@@ -406,7 +430,6 @@ impl MemoryRepository for PostgresMemoryRepository {
         .bind(id)
         .fetch_optional(self.db.pool())
         .await?;
-
         Ok(row)
     }
 

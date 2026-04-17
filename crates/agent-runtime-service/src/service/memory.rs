@@ -73,6 +73,14 @@ impl MemoryService {
         self.repo.get_entry_by_id(project_scope, id).await
     }
 
+    pub async fn get_candidate_by_id(
+        &self,
+        project_scope: &str,
+        id: Uuid,
+    ) -> anyhow::Result<Option<MemoryCandidate>> {
+        self.repo.get_candidate_by_id(project_scope, id).await
+    }
+
     pub async fn update_candidate_status(
         &self,
         project_scope: &str,

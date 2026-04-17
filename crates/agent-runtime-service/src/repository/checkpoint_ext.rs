@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait CheckpointRepositoryExt: Send + Sync {
+    async fn list(&self, limit: i64) -> anyhow::Result<Vec<Checkpoint>>;
     async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Checkpoint>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Checkpoint>>;
 }
@@ -21,6 +22,16 @@ impl PostgresCheckpointRepositoryExt {
 
 #[async_trait]
 impl CheckpointRepositoryExt for PostgresCheckpointRepositoryExt {
+    async fn list(&self, limit: i64) -> anyhow::Result<Vec<Checkpoint>> {
+        let rows = sqlx::query_as::<_, Checkpoint>(
+            "SELECT * FROM v1_checkpoints ORDER BY created_at DESC LIMIT $1"
+        )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
     async fn list_by_instance(
         &self,
         instance_id: Uuid,

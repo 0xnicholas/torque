@@ -65,10 +65,14 @@ pub async fn delete(
 }
 
 pub async fn get_content(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match services.artifact.get(id).await {
+        Ok(Some(artifact)) => Ok(Json(artifact.content)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 pub async fn publish(

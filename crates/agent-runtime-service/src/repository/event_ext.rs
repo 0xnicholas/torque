@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait EventRepositoryExt: Send + Sync {
+    async fn list(&self, limit: i64) -> anyhow::Result<Vec<Event>>;
     async fn list_by_types(
         &self,
         resource_type: &str,
@@ -26,6 +27,16 @@ impl PostgresEventRepositoryExt {
 
 #[async_trait]
 impl EventRepositoryExt for PostgresEventRepositoryExt {
+    async fn list(&self, limit: i64) -> anyhow::Result<Vec<Event>> {
+        let rows = sqlx::query_as::<_, Event>(
+            "SELECT * FROM v1_events ORDER BY timestamp DESC LIMIT $1"
+        )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
     async fn list_by_types(
         &self,
         resource_type: &str,

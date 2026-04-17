@@ -13,6 +13,7 @@ pub trait ArtifactRepository: Send + Sync {
         content: serde_json::Value,
     ) -> anyhow::Result<Artifact>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<Artifact>>;
+    async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Artifact>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Artifact>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
     async fn update_scope(&self, id: Uuid, scope: ArtifactScope) -> anyhow::Result<bool>;
@@ -55,6 +56,17 @@ impl ArtifactRepository for PostgresArtifactRepository {
         let rows = sqlx::query_as::<_, Artifact>(
             "SELECT * FROM v1_artifacts ORDER BY created_at DESC LIMIT $1"
         )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
+    async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Artifact>> {
+        let rows = sqlx::query_as::<_, Artifact>(
+            "SELECT * FROM v1_artifacts WHERE source_instance_id = $1 ORDER BY created_at DESC LIMIT $2"
+        )
+        .bind(instance_id)
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;

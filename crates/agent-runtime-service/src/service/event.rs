@@ -12,6 +12,10 @@ impl EventService {
         Self { repo }
     }
 
+    pub async fn list(&self, limit: i64) -> anyhow::Result<Vec<Event>> {
+        self.repo.list(limit).await
+    }
+
     pub async fn list_by_resource(
         &self,
         resource_type: &str,

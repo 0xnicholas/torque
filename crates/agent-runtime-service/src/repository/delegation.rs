@@ -7,6 +7,8 @@ use uuid::Uuid;
 pub trait DelegationRepository: Send + Sync {
     async fn create(&self, task_id: Uuid, parent_instance_id: Uuid, selector: serde_json::Value) -> anyhow::Result<Delegation>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<Delegation>>;
+    async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>>;
+    async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Delegation>>;
     async fn update_status(&self, id: Uuid, status: &str) -> anyhow::Result<bool>;
 }
@@ -44,6 +46,28 @@ impl DelegationRepository for PostgresDelegationRepository {
         let rows = sqlx::query_as::<_, Delegation>(
             "SELECT * FROM v1_delegations ORDER BY created_at DESC LIMIT $1"
         )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
+    async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>> {
+        let rows = sqlx::query_as::<_, Delegation>(
+            "SELECT * FROM v1_delegations WHERE parent_agent_instance_id = $1 ORDER BY created_at DESC LIMIT $2"
+        )
+        .bind(instance_id)
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
+    async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>> {
+        let rows = sqlx::query_as::<_, Delegation>(
+            "SELECT * FROM v1_delegations WHERE task_id = $1 ORDER BY created_at DESC LIMIT $2"
+        )
+        .bind(task_id)
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;

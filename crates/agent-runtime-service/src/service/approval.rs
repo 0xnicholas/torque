@@ -16,6 +16,10 @@ impl ApprovalService {
         self.repo.list(limit).await
     }
 
+    pub async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Approval>> {
+        self.repo.list_by_task(task_id, limit).await
+    }
+
     pub async fn get(&self, id: Uuid) -> anyhow::Result<Option<Approval>> {
         self.repo.get(id).await
     }

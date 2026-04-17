@@ -26,6 +26,10 @@ impl ArtifactService {
         self.repo.list(limit).await
     }
 
+    pub async fn list_by_instance(&self, instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Artifact>> {
+        self.repo.list_by_instance(instance_id, limit).await
+    }
+
     pub async fn get(&self, id: Uuid) -> anyhow::Result<Option<Artifact>> {
         self.repo.get(id).await
     }
