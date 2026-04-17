@@ -71,10 +71,12 @@ impl SessionService {
         api_key: &str,
         limit: i64,
     ) -> Result<Vec<crate::models::Session>, SessionServiceError> {
-        self.session_repo
-            .list(api_key, limit)
+        let sessions = self
+            .session_repo
+            .list(limit)
             .await
-            .map_err(SessionServiceError::Other)
+            .map_err(SessionServiceError::Other)?;
+        Ok(sessions.into_iter().filter(|s| s.api_key == api_key).collect())
     }
 
     pub async fn get_by_id(
