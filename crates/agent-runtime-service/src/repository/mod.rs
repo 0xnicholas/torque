@@ -2,19 +2,41 @@ use std::sync::Arc;
 
 pub mod agent_definition;
 pub mod agent_instance;
+pub mod approval;
+pub mod artifact;
+pub mod capability;
 pub mod checkpoint;
+pub mod checkpoint_ext;
+pub mod delegation;
 pub mod event;
+pub mod event_ext;
 pub mod memory;
 pub mod message;
 pub mod session;
+pub mod task;
+pub mod team;
 
 pub use agent_definition::{AgentDefinitionRepository, PostgresAgentDefinitionRepository};
 pub use agent_instance::{AgentInstanceRepository, PostgresAgentInstanceRepository};
+pub use approval::{ApprovalRepository, PostgresApprovalRepository};
+pub use artifact::{ArtifactRepository, PostgresArtifactRepository};
+pub use capability::{
+    CapabilityProfileRepository, CapabilityRegistryBindingRepository,
+    PostgresCapabilityProfileRepository, PostgresCapabilityRegistryBindingRepository,
+};
 pub use checkpoint::{CheckpointRepository, PostgresCheckpointRepository};
+pub use checkpoint_ext::{CheckpointRepositoryExt, PostgresCheckpointRepositoryExt};
+pub use delegation::{DelegationRepository, PostgresDelegationRepository};
 pub use event::{EventRepository, PostgresEventRepository};
+pub use event_ext::{EventRepositoryExt, PostgresEventRepositoryExt};
 pub use memory::{MemoryRepository, PostgresMemoryRepository};
 pub use message::{MessageRepository, PostgresMessageRepository};
 pub use session::{PostgresSessionRepository, SessionKernelState, SessionRepository};
+pub use task::{TaskRepository, PostgresTaskRepository};
+pub use team::{
+    TeamDefinitionRepository, TeamInstanceRepository,
+    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository,
+};
 
 pub struct RepositoryContainer {
     pub session: Arc<dyn SessionRepository>,
@@ -24,4 +46,14 @@ pub struct RepositoryContainer {
     pub checkpoint: Arc<dyn CheckpointRepository>,
     pub agent_definition: Arc<dyn AgentDefinitionRepository>,
     pub agent_instance: Arc<dyn AgentInstanceRepository>,
+    pub task: Arc<dyn TaskRepository>,
+    pub artifact: Arc<dyn ArtifactRepository>,
+    pub capability_profile: Arc<dyn CapabilityProfileRepository>,
+    pub capability_binding: Arc<dyn CapabilityRegistryBindingRepository>,
+    pub team_definition: Arc<dyn TeamDefinitionRepository>,
+    pub team_instance: Arc<dyn TeamInstanceRepository>,
+    pub delegation: Arc<dyn DelegationRepository>,
+    pub approval: Arc<dyn ApprovalRepository>,
+    pub checkpoint_ext: Arc<dyn CheckpointRepositoryExt>,
+    pub event_ext: Arc<dyn EventRepositoryExt>,
 }

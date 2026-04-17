@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Default, sqlx::Type, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(rename_all = "snake_case")]
 pub enum RiskLevel {
     #[default]
@@ -13,7 +13,7 @@ pub enum RiskLevel {
     Critical,
 }
 
-#[derive(Debug, Default, sqlx::Type, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(rename_all = "snake_case")]
 pub enum QualityTier {
     #[default]

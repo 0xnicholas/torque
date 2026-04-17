@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, sqlx::Type, Serialize, Deserialize)]
+#[derive(Debug, Default, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(rename_all = "snake_case")]
 pub enum ArtifactScope {
+    #[default]
     Private,
     TeamShared,
     ExternalPublished,
@@ -23,4 +24,13 @@ pub struct Artifact {
     pub summary: Option<String>,
     pub content: serde_json::Value,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ArtifactCreate {
+    pub kind: String,
+    #[serde(default)]
+    pub scope: ArtifactScope,
+    pub mime_type: String,
+    pub content: serde_json::Value,
 }

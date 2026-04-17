@@ -23,7 +23,7 @@ async fn build_session_service(
     let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let memory_repo = Arc::new(PostgresMemoryRepository::new(db.clone()));
 
-    let tool = Arc::new(ToolService::new().await);
+    let tool = Arc::new(ToolService::new());
     let memory = Arc::new(MemoryService::new(memory_repo));
 
     let checkpointer = Arc::new(agent_runtime_service::kernel_bridge::PostgresCheckpointer::new(

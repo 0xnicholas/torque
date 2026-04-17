@@ -6,7 +6,7 @@ pub struct ToolService {
 }
 
 impl ToolService {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         let registry = Arc::new(ToolRegistry::new());
         Self { registry }
     }
