@@ -2,16 +2,19 @@ pub mod session;
 pub mod tool;
 pub mod memory;
 pub mod agent_instance;
+pub mod agent_definition;
 
 pub use session::SessionService;
 pub use memory::MemoryService;
 pub use tool::ToolService;
+pub use agent_definition::AgentDefinitionService;
 
 pub struct ServiceContainer {
     pub session: std::sync::Arc<SessionService>,
     pub memory: std::sync::Arc<memory::MemoryService>,
     pub tool: std::sync::Arc<ToolService>,
     pub agent_instance: std::sync::Arc<agent_instance::AgentInstanceService>,
+    pub agent_definition: std::sync::Arc<AgentDefinitionService>,
     pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
     pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
 }
@@ -42,7 +45,10 @@ impl ServiceContainer {
             repos.checkpoint.clone(),
             repos.agent_definition.clone(),
         ));
+        let agent_definition = std::sync::Arc::new(AgentDefinitionService::new(
+            repos.agent_definition.clone(),
+        ));
 
-        Self { session, memory, tool, agent_instance, idempotency, run_gate }
+        Self { session, memory, tool, agent_instance, agent_definition, idempotency, run_gate }
     }
 }
