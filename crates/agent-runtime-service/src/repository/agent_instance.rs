@@ -10,6 +10,7 @@ pub trait AgentInstanceRepository: Send + Sync {
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentInstance>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
     async fn update_status(&self, id: Uuid, status: AgentInstanceStatus) -> anyhow::Result<bool>;
+    async fn update_current_task(&self, id: Uuid, task_id: Option<Uuid>) -> anyhow::Result<bool>;
 }
 
 pub struct PostgresAgentInstanceRepository { db: Database }
@@ -60,6 +61,17 @@ impl AgentInstanceRepository for PostgresAgentInstanceRepository {
             .bind(id)
             .execute(self.db.pool())
             .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn update_current_task(&self, id: Uuid, task_id: Option<Uuid>) -> anyhow::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE v1_agent_instances SET current_task_id = $1, updated_at = NOW() WHERE id = $2"
+        )
+        .bind(task_id)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 }
