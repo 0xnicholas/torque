@@ -1,13 +1,14 @@
+pub mod agent_definition;
+pub mod agent_instance;
+pub mod memory;
 pub mod session;
 pub mod tool;
-pub mod memory;
-pub mod agent_instance;
-pub mod agent_definition;
 
-pub use session::SessionService;
-pub use memory::MemoryService;
-pub use tool::ToolService;
 pub use agent_definition::AgentDefinitionService;
+pub use agent_instance::AgentInstanceService;
+pub use memory::MemoryService;
+pub use session::SessionService;
+pub use tool::ToolService;
 
 pub struct ServiceContainer {
     pub session: std::sync::Arc<SessionService>,
@@ -40,10 +41,7 @@ impl ServiceContainer {
             memory.clone(),
         ));
         let agent_instance = std::sync::Arc::new(agent_instance::AgentInstanceService::new(
-            repos.session.clone(),
-            repos.event.clone(),
-            repos.checkpoint.clone(),
-            repos.agent_definition.clone(),
+            repos.agent_instance.clone(),
         ));
         let agent_definition = std::sync::Arc::new(AgentDefinitionService::new(
             repos.agent_definition.clone(),

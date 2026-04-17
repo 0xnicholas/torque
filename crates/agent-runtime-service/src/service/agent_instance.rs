@@ -1,27 +1,17 @@
-use crate::repository::{
-    AgentDefinitionRepository, CheckpointRepository, EventRepository, SessionRepository,
-};
+use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceCreate, AgentInstanceStatus};
+use crate::repository::AgentInstanceRepository;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct AgentInstanceService {
-    _session_repo: Arc<dyn SessionRepository>,
-    _event_repo: Arc<dyn EventRepository>,
-    _checkpoint_repo: Arc<dyn CheckpointRepository>,
-    _agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
+    repo: Arc<dyn AgentInstanceRepository>,
 }
 
 impl AgentInstanceService {
-    pub fn new(
-        session_repo: Arc<dyn SessionRepository>,
-        event_repo: Arc<dyn EventRepository>,
-        checkpoint_repo: Arc<dyn CheckpointRepository>,
-        agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
-    ) -> Self {
-        Self {
-            _session_repo: session_repo,
-            _event_repo: event_repo,
-            _checkpoint_repo: checkpoint_repo,
-            _agent_definition_repo: agent_definition_repo,
-        }
-    }
+    pub fn new(repo: Arc<dyn AgentInstanceRepository>) -> Self { Self { repo } }
+    pub async fn create(&self, req: AgentInstanceCreate) -> anyhow::Result<AgentInstance> { self.repo.create(&req).await }
+    pub async fn list(&self, limit: i64) -> anyhow::Result<Vec<AgentInstance>> { self.repo.list(limit).await }
+    pub async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentInstance>> { self.repo.get(id).await }
+    pub async fn delete(&self, id: Uuid) -> anyhow::Result<bool> { self.repo.delete(id).await }
+    pub async fn update_status(&self, id: Uuid, status: AgentInstanceStatus) -> anyhow::Result<bool> { self.repo.update_status(id, status).await }
 }

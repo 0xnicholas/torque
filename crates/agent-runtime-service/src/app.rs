@@ -23,6 +23,9 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         agent_definition: Arc::new(crate::repository::PostgresAgentDefinitionRepository::new(
             db.clone(),
         )),
+        agent_instance: Arc::new(crate::repository::PostgresAgentInstanceRepository::new(
+            db.clone(),
+        )),
     };
 
     let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(db.clone()));
