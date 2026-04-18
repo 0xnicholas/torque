@@ -143,29 +143,42 @@ Working tree: clean
 
 ---
 
+## Phase 2: Team Execution (COMPLETED)
+
+### Task 1: Add TeamMember Model and Repository
+- [x] Created `v1_team_members` table migration
+- [x] Added `TeamMember` and `TeamMemberCreate` models
+- [x] Added `TeamMemberRepository` with create/list/remove methods
+- [x] Wired into `TeamService`, `RepositoryContainer`, `ServiceContainer`, `app.rs`
+
+### Tasks 2-5: Implement Team Handlers
+- [x] **create_task**: Creates `TeamTask`, returns 202 Accepted
+- [x] **list_tasks**: Lists tasks filtered by `team_instance_id` with pagination
+- [x] **list_members**: Lists team members with pagination
+- [x] **publish**: Placeholder (returns 200), full shared state is future work
+
+### Task 6: Team Execution Integration Tests
+- [x] Created `tests/v1_team_execution_tests.rs` with 3 tests
+- [x] Test: Team task lifecycle (definition → instance → task → list)
+- [x] Test: Team member management (add, list, remove)
+- [x] Test: Error handling for nonexistent team instance
+
+### Task 7: Final Verification
+- [x] Full test suite: 20/20 tests pass
+- [x] Compilation check: clean (no errors)
+- [x] Working tree: clean
+
+---
+
 ## Next Steps
 
-All tasks in this plan are complete. Options for next work:
+Branch `feat/kernel-execution` is ready with both Phase 1 (Kernel Execution) and Phase 2 (Team Execution) complete.
 
-1. **Merge to main**
-   - Branch `feat/kernel-execution` is ready
-   - 10 commits ahead of main
-   - All tests pass (17/17)
-
-2. **Continue to Phase 2: Team Execution**
-   - Implement supervisor-led team collaboration
-   - Team task creation and delegation
-   - Shared state management
-
-3. **Continue to Phase 3: Policy Evaluation**
-   - Tool governance before execution
-   - Delegation constraints
-   - Approval flow during execution
-
-4. **Continue to Phase 4: Recovery**
-   - Checkpoint restore endpoint
-   - Event replay
-   - State reconciliation
+**Options:**
+1. **Merge to main** — 14 commits ahead, all tests pass (20/20)
+2. **Phase 3: Policy Evaluation** — Tool governance, delegation constraints, approval flow
+3. **Phase 4: Recovery** — Checkpoint restore, event replay, state reconciliation
+4. **Phase 5: Context State Management** — Lazy loading, context compaction, TaskPacket
 
 ---
 
