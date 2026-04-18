@@ -144,6 +144,12 @@ impl RecoveryService {
             }
         ).await?;
 
+        // Log branch creation with name if provided
+        if let Some(name) = branch_name {
+            println!("Created branch '{}' from checkpoint {} for instance {}", 
+                name, checkpoint_id, instance_id);
+        }
+
         // 4. Restore status from checkpoint
         if let Some(status) = checkpoint.snapshot.get("status").and_then(|s| s.as_str()) {
             let restored_status = match status {

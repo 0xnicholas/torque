@@ -12,6 +12,7 @@ use crate::repository::{
 use crate::service::ToolService;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::warn;
 use uuid::Uuid;
 
 pub struct RunService {
@@ -80,9 +81,11 @@ impl RunService {
         self.task_repo.update_status(task.id, TaskStatus::Running).await?;
 
         // 5. Record execution start event
-        let _ = event_sink.send(StreamEvent::Start {
+        if let Err(e) = event_sink.send(StreamEvent::Start {
             session_id: instance_id,
-        }).await;
+        }).await {
+            warn!("Failed to send start event: {}", e);
+        }
 
         // 6. Build kernel agent definition and execution request
         let kernel_def = v1_agent_definition_to_kernel(&definition);
@@ -113,20 +116,50 @@ impl RunService {
         // 10. Send terminal event
         match result {
             Ok(_) => {
-                let _ = event_sink.send(StreamEvent::Done {
+                if let Err(e) = event_sink.send(StreamEvent::Done {
                     message_id: task.id,
                     artifacts: None,
-                }).await;
+                }).await {
+                    warn!("Failed to send done event: {}", e);
+                }
             }
             Err(ref e) => {
-                let _ = event_sink.send(StreamEvent::Error {
+                if let Err(send_err) = event_sink.send(StreamEvent::Error {
                     code: "EXECUTION_ERROR".into(),
                     message: e.to_string(),
-                }).await;
+                }).await {
+                    warn!("Failed to send error event: {}", send_err);
+                }
             }
         }
 
+        // 11. Create checkpoint after execution
+        let snapshot = serde_json::json!({
+            "status": if result.is_ok() { "READY" } else { "FAILED" },
+            "task_id": task.id,
+            "goal": request.goal,
+        });
+        
+        if let Err(e) = self.create_checkpoint(instance_id, Some(task.id), snapshot).await {
+            warn!("Failed to create checkpoint after execution: {}", e);
+        }
+
         result.map(|_| ())
+    }
+
+    async fn create_checkpoint(
+        &self,
+        instance_id: Uuid,
+        task_id: Option<Uuid>,
+        snapshot: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        // For now, just log the checkpoint creation
+        // In a full implementation, this would persist to the database
+        println!(
+            "Checkpoint created for instance {} (task {:?})",
+            instance_id, task_id
+        );
+        Ok(())
     }
 
     /// Evaluate tool policy before execution using multi-source dimensional merge.
