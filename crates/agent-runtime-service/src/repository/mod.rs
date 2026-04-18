@@ -34,8 +34,8 @@ pub use message::{MessageRepository, PostgresMessageRepository};
 pub use session::{PostgresSessionRepository, SessionKernelState, SessionRepository};
 pub use task::{TaskRepository, PostgresTaskRepository};
 pub use team::{
-    TeamDefinitionRepository, TeamInstanceRepository,
-    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository,
+    TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
+    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository, PostgresTeamMemberRepository,
 };
 
 pub struct RepositoryContainer {
@@ -52,6 +52,7 @@ pub struct RepositoryContainer {
     pub capability_binding: Arc<dyn CapabilityRegistryBindingRepository>,
     pub team_definition: Arc<dyn TeamDefinitionRepository>,
     pub team_instance: Arc<dyn TeamInstanceRepository>,
+    pub team_member: Arc<dyn TeamMemberRepository>,
     pub delegation: Arc<dyn DelegationRepository>,
     pub approval: Arc<dyn ApprovalRepository>,
     pub checkpoint_ext: Arc<dyn CheckpointRepositoryExt>,

@@ -1,21 +1,23 @@
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate,
+    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
 };
-use crate::repository::{TeamDefinitionRepository, TeamInstanceRepository};
+use crate::repository::{TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository};
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct TeamService {
     definition_repo: Arc<dyn TeamDefinitionRepository>,
     instance_repo: Arc<dyn TeamInstanceRepository>,
+    member_repo: Arc<dyn TeamMemberRepository>,
 }
 
 impl TeamService {
     pub fn new(
         definition_repo: Arc<dyn TeamDefinitionRepository>,
         instance_repo: Arc<dyn TeamInstanceRepository>,
+        member_repo: Arc<dyn TeamMemberRepository>,
     ) -> Self {
-        Self { definition_repo, instance_repo }
+        Self { definition_repo, instance_repo, member_repo }
     }
 
     pub async fn create_definition(
@@ -58,5 +60,30 @@ impl TeamService {
 
     pub async fn delete_instance(&self, id: Uuid) -> anyhow::Result<bool> {
         self.instance_repo.delete(id).await
+    }
+
+    pub async fn add_member(
+        &self,
+        team_instance_id: Uuid,
+        agent_instance_id: Uuid,
+        role: &str,
+    ) -> anyhow::Result<TeamMember> {
+        self.member_repo.create(team_instance_id, agent_instance_id, role).await
+    }
+
+    pub async fn list_members(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<TeamMember>> {
+        self.member_repo.list_by_team(team_instance_id, limit).await
+    }
+
+    pub async fn remove_member(
+        &self,
+        team_instance_id: Uuid,
+        agent_instance_id: Uuid,
+    ) -> anyhow::Result<bool> {
+        self.member_repo.remove(team_instance_id, agent_instance_id).await
     }
 }

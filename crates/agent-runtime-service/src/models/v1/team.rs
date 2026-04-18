@@ -50,3 +50,26 @@ pub struct TeamTaskCreate {
     #[serde(default)]
     pub parent_task_id: Option<Uuid>,
 }
+
+#[derive(Debug, Serialize, FromRow)]
+pub struct TeamMember {
+    pub id: Uuid,
+    pub team_instance_id: Uuid,
+    pub agent_instance_id: Uuid,
+    pub role: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TeamMemberCreate {
+    pub team_instance_id: Uuid,
+    pub agent_instance_id: Uuid,
+    #[serde(default = "default_member_role")]
+    pub role: String,
+}
+
+fn default_member_role() -> String {
+    "member".to_string()
+}
