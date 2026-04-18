@@ -61,13 +61,13 @@ impl KernelRuntimeHandle {
         Ok(())
     }
 
-    pub async fn execute_chat(
+    pub async fn execute_v1(
         &mut self,
         request: ExecutionRequest,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolRegistry>,
         event_sink: mpsc::Sender<StreamEvent>,
-        llm_messages: Vec<LlmMessage>,
+        initial_messages: Vec<LlmMessage>,
     ) -> Result<ExecutionResult, KernelBridgeError> {
         // 1. Start kernel instance/task
         let result = self.runtime.handle(request, StepDecision::Continue)?;
@@ -81,7 +81,7 @@ impl KernelRuntimeHandle {
             .await;
 
         let final_content = self
-            .run_llm_conversation(llm, tools, event_sink.clone(), llm_messages)
+            .run_llm_conversation(llm, tools, event_sink.clone(), initial_messages)
             .await?;
 
         let complete_request = self.reconstruct_request(instance_id)?;
@@ -96,6 +96,19 @@ impl KernelRuntimeHandle {
         result.summary = Some(final_content);
 
         Ok(result)
+    }
+
+    /// Backward-compatible wrapper for session-based chat.
+    /// Converts session message history and delegates to execute_v1.
+    pub async fn execute_chat(
+        &mut self,
+        request: ExecutionRequest,
+        llm: Arc<dyn LlmClient>,
+        tools: Arc<ToolRegistry>,
+        event_sink: mpsc::Sender<StreamEvent>,
+        llm_messages: Vec<LlmMessage>,
+    ) -> Result<ExecutionResult, KernelBridgeError> {
+        self.execute_v1(request, llm, tools, event_sink, llm_messages).await
     }
 
     async fn run_llm_conversation(

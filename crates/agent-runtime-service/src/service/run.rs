@@ -123,7 +123,7 @@ impl RunService {
 
     async fn run_execution(
         &self,
-        instance_id: Uuid,
+        _instance_id: Uuid,
         kernel_def: torque_kernel::AgentDefinition,
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
@@ -135,9 +135,8 @@ impl RunService {
             self.checkpointer.clone(),
         );
 
-        // Use existing execute_chat logic adapted for v1
-        // For now, this is a simplified version that streams LLM responses
-        let result = kernel.execute_chat(
+        // Use execute_v1 for v1 runs (no session message history)
+        let result = kernel.execute_v1(
             request,
             self.llm.clone(),
             self.tools.registry(),
