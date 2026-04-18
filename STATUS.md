@@ -71,9 +71,10 @@ This builds on top of the completed Architecture Optimization and Platform API v
 
 ## Remaining Tasks
 
-- [ ] **Task 8:** Refactor KernelRuntimeHandle
-  - Extract `execute_v1()` method for shared use between session and v1
-  - Keep `execute_chat()` as backward-compatible wrapper
+- [x] **Task 8:** Refactor KernelRuntimeHandle
+  - Extracted `execute_v1()` method with generic message support
+  - `execute_chat()` now calls `execute_v1()` as backward-compatible wrapper
+  - RunService updated to use `execute_v1()` for clarity
 
 - [ ] **Task 9:** Add Run Execution Integration Tests
   - Create `tests/v1_execution_tests.rs`
@@ -95,11 +96,9 @@ This builds on top of the completed Architecture Optimization and Platform API v
 
 ## Blockers / Issues
 
-### 1. KernelRuntimeHandle.execute_chat Signature Mismatch (Task 8)
-**Status:** Non-blocking for now
-**Details:** The current `execute_chat()` is tightly coupled to Session (takes `Vec<LlmMessage>`). The plan calls for extracting `execute_v1()` that works with v1 RunRequest. However, the current implementation in `RunService` simply passes empty `Vec` for messages, which works but doesn't leverage message history.
-**Impact:** Low - execution works, but doesn't support conversation context across runs
-**Resolution:** Deferred to Task 8. Can be refactored after basic execution is working.
+### 1. ✅ RESOLVED: KernelRuntimeHandle.execute_chat Signature Mismatch (Task 8)
+**Status:** Completed
+**Resolution:** Extracted `execute_v1()` method that accepts `initial_messages: Vec<LlmMessage>`. `execute_chat()` is now a thin wrapper around `execute_v1()`. Both session chat and v1 runs share the same core execution logic. RunService uses `execute_v1()` with empty message history (conversation context across runs is future work).
 
 ### 2. Mock LLM for Testing (Task 9)
 **Status:** Blocking integration tests
