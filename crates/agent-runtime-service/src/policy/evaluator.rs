@@ -1,4 +1,4 @@
-use super::{PolicyDecision, PolicyInput};
+use super::{PolicyDecision, PolicyInput, PolicySources};
 
 pub struct PolicyEvaluator;
 
@@ -7,25 +7,49 @@ impl PolicyEvaluator {
         Self
     }
 
-    pub fn evaluate(
-        &self,
-        input: &PolicyInput,
-        agent_tool_policy: &serde_json::Value,
-    ) -> PolicyDecision {
-        let mut decision = PolicyDecision::default();
+    /// Evaluate policy across multiple sources with dimensional conservative merge.
+    ///
+    /// Per the policy spec:
+    /// - Each dimension is evaluated independently across applicable sources
+    /// - Within a dimension, the most restrictive rule wins
+    /// - Not every source may speak on every dimension
+    pub fn evaluate(&self, input: &PolicyInput, sources: &PolicySources) -> PolicyDecision {
+        let mut final_decision = PolicyDecision::default();
 
-        // Evaluate tool policy dimension
+        // Evaluate tool policy dimension across all applicable sources
         if input.action_type == "tool_call" {
             if let Some(tool_name) = &input.tool_name {
-                let tool_decision = self.evaluate_tool_policy(tool_name, agent_tool_policy);
-                decision = decision.merge(tool_decision);
+                // Evaluate each applicable source
+                let source_priorities = [
+                    ("system", &sources.system),
+                    ("capability", &sources.capability),
+                    ("agent", &sources.agent),
+                    ("team", &sources.team),
+                    ("selector", &sources.selector),
+                    ("runtime", &sources.runtime),
+                ];
+
+                for (source_name, policy) in source_priorities {
+                    if let Some(policy) = policy {
+                        let source_decision =
+                            self.evaluate_tool_policy(tool_name, policy, source_name);
+                        final_decision = final_decision.merge(source_decision);
+                    }
+                }
             }
         }
 
-        decision
+        // TODO: Evaluate other dimensions (approval, visibility, delegation, resource, memory)
+
+        final_decision
     }
 
-    fn evaluate_tool_policy(&self, tool_name: &str, policy: &serde_json::Value) -> PolicyDecision {
+    fn evaluate_tool_policy(
+        &self,
+        tool_name: &str,
+        policy: &serde_json::Value,
+        source_name: &str,
+    ) -> PolicyDecision {
         // Default: allow
         if policy.is_null() || policy == &serde_json::json!({}) {
             return PolicyDecision::default();
@@ -37,8 +61,8 @@ impl PolicyEvaluator {
                 if let Some(name) = forbidden_tool.as_str() {
                     if name == tool_name || name == "*" {
                         return PolicyDecision::deny(format!(
-                            "Tool '{}' is forbidden by policy",
-                            tool_name
+                            "Tool '{}' is forbidden by {} policy",
+                            tool_name, source_name
                         ));
                     }
                 }
@@ -55,7 +79,10 @@ impl PolicyEvaluator {
                     if name == tool_name || name == "*" {
                         return PolicyDecision::require_approval(
                             "tool",
-                            format!("Tool '{}' requires approval", tool_name),
+                            format!(
+                                "Tool '{}' requires approval by {} policy",
+                                tool_name, source_name
+                            ),
                         );
                     }
                 }
@@ -75,8 +102,8 @@ impl PolicyEvaluator {
             }
             if !is_allowed {
                 return PolicyDecision::deny(format!(
-                    "Tool '{}' is not in allowed tools list",
-                    tool_name
+                    "Tool '{}' is not in {} allowed tools list",
+                    tool_name, source_name
                 ));
             }
         }

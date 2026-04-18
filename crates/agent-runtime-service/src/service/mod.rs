@@ -6,6 +6,7 @@ pub mod capability;
 pub mod checkpoint;
 pub mod delegation;
 pub mod event;
+pub mod event_replay;
 pub mod memory;
 pub mod recovery;
 pub mod run;

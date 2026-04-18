@@ -129,21 +129,35 @@ impl RunService {
         result.map(|_| ())
     }
 
-    /// Evaluate tool policy before execution.
+    /// Evaluate tool policy before execution using multi-source dimensional merge.
     /// This is called by the orchestration layer, not the kernel.
     pub fn evaluate_tool_policy(
         &self,
         tool_name: &str,
         agent_definition_id: Uuid,
-        tool_policy: &serde_json::Value,
+        tool_policy: serde_json::Value,
+        team_policy: Option<serde_json::Value>,
     ) -> crate::policy::PolicyDecision {
+        use crate::policy::PolicySources;
+        
         let input = PolicyInput {
             action_type: "tool_call".to_string(),
             tool_name: Some(tool_name.to_string()),
             agent_definition_id: Some(agent_definition_id),
             ..Default::default()
         };
-        self.policy_evaluator.evaluate(&input, tool_policy)
+        
+        let sources = PolicySources::new()
+            .with_agent(tool_policy);
+        
+        // Add team policy if available
+        let sources = if let Some(team) = team_policy {
+            sources.with_team(team)
+        } else {
+            sources
+        };
+        
+        self.policy_evaluator.evaluate(&input, &sources)
     }
 
     async fn run_execution(

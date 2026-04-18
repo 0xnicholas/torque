@@ -4,6 +4,7 @@ use crate::models::v1::event::Event;
 use crate::repository::{
     AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt,
 };
+use crate::service::event_replay::EventReplayRegistry;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -11,6 +12,7 @@ pub struct RecoveryService {
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
     checkpoint_repo: Arc<dyn CheckpointRepositoryExt>,
     event_repo: Arc<dyn EventRepositoryExt>,
+    event_registry: EventReplayRegistry,
 }
 
 impl RecoveryService {
@@ -23,6 +25,7 @@ impl RecoveryService {
             agent_instance_repo,
             checkpoint_repo,
             event_repo,
+            event_registry: EventReplayRegistry::new(),
         }
     }
 
@@ -75,21 +78,11 @@ impl RecoveryService {
             self.agent_instance_repo.update_status(instance_id, restored_status).await?;
         }
 
-        // Step 4b: Replay tail events to reconcile state
+        // Step 4b: Replay tail events using registry
         for event in tail_events {
-            match event.event_type.as_str() {
-                "task.completed" => {
-                    self.agent_instance_repo.update_current_task(instance_id, None).await?;
-                    self.agent_instance_repo.update_status(instance_id, AgentInstanceStatus::Ready).await?;
-                }
-                "task.failed" => {
-                    self.agent_instance_repo.update_current_task(instance_id, None).await?;
-                    // Keep failed status
-                }
-                "instance.suspended" => {
-                    self.agent_instance_repo.update_status(instance_id, AgentInstanceStatus::Suspended).await?;
-                }
-                _ => {}
+            if let Err(e) = self.event_registry.replay(event, &self.agent_instance_repo, None).await {
+                // Log replay error but continue recovery
+                eprintln!("Event replay warning for {}: {}", event.event_type, e);
             }
         }
 
@@ -176,18 +169,10 @@ impl RecoveryService {
             .collect();
 
         for event in tail_events {
-            match event.event_type.as_str() {
-                "task.completed" => {
-                    self.agent_instance_repo.update_current_task(new_instance.id, None).await?;
-                    self.agent_instance_repo.update_status(new_instance.id, AgentInstanceStatus::Ready).await?;
-                }
-                "task.failed" => {
-                    self.agent_instance_repo.update_current_task(new_instance.id, None).await?;
-                }
-                "instance.suspended" => {
-                    self.agent_instance_repo.update_status(new_instance.id, AgentInstanceStatus::Suspended).await?;
-                }
-                _ => {}
+            if let Err(e) = self.event_registry.replay(
+                event, &self.agent_instance_repo, Some(new_instance.id)
+            ).await {
+                eprintln!("Event replay warning for {}: {}", event.event_type, e);
             }
         }
 

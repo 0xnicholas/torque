@@ -118,3 +118,41 @@ pub struct PolicyInput {
     pub tool_name: Option<String>,
     pub action_type: String, // "tool_call", "delegation", "memory_write", "publish"
 }
+
+/// Multiple policy sources for dimensional evaluation.
+/// Each source provides policy for specific dimensions.
+#[derive(Debug, Clone, Default)]
+pub struct PolicySources {
+    pub system: Option<serde_json::Value>, // Global hard boundaries
+    pub capability: Option<serde_json::Value>, // Capability-level rules
+    pub agent: Option<serde_json::Value>,  // AgentDefinition policy
+    pub team: Option<serde_json::Value>,   // Team collaboration policy
+    pub selector: Option<serde_json::Value>, // Local binding constraints
+    pub runtime: Option<serde_json::Value>, // Runtime signals
+}
+
+impl PolicySources {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_agent(mut self, policy: serde_json::Value) -> Self {
+        self.agent = Some(policy);
+        self
+    }
+
+    pub fn with_team(mut self, policy: serde_json::Value) -> Self {
+        self.team = Some(policy);
+        self
+    }
+
+    pub fn with_system(mut self, policy: serde_json::Value) -> Self {
+        self.system = Some(policy);
+        self
+    }
+
+    pub fn with_capability(mut self, policy: serde_json::Value) -> Self {
+        self.capability = Some(policy);
+        self
+    }
+}
