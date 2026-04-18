@@ -54,13 +54,19 @@ pub struct ServiceContainer {
 impl ServiceContainer {
     pub fn new(
         repos: crate::repository::RepositoryContainer,
+        memory_v1: std::sync::Arc<dyn crate::repository::MemoryRepositoryV1>,
         checkpointer: std::sync::Arc<dyn checkpointer::Checkpointer>,
         llm: std::sync::Arc<dyn llm::LlmClient>,
+        embedding: Option<std::sync::Arc<dyn crate::embedding::EmbeddingGenerator>>,
         idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
         run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
     ) -> Self {
         let tool = std::sync::Arc::new(ToolService::new());
-        let memory = std::sync::Arc::new(memory::MemoryService::new(repos.memory.clone()));
+        let memory = std::sync::Arc::new(memory::MemoryService::new(
+            repos.memory.clone(),
+            memory_v1,
+            embedding,
+        ));
         let session = std::sync::Arc::new(SessionService::new(
             repos.session.clone(),
             repos.message.clone(),

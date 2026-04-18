@@ -195,15 +195,88 @@ Working tree: clean
 
 ---
 
+## Phase 3: Memory System P0 (COMPLETED)
+
+### P0.1: Memory Tables + pgvector
+- [x] Created migration `20260419000001_create_v1_memory_tables`
+- [x] `v1_memory_entries` table with embedding support (vector(1536))
+- [x] `v1_memory_write_candidates` table with extended status enum
+- [x] `session_memory` table (KV + TTL)
+- [x] `memory_decision_log` table (audit trail)
+- [x] HNSW indexes for semantic search
+
+### P0.2: Embedding Write Path
+- [x] `EmbeddingGenerator` trait with `generate()`, `dimensions()`, `model_name()`
+- [x] `OpenAIEmbeddingGenerator` implementation (OpenAI API, text-embedding-3-small)
+- [x] `memory_to_embedding_text()` helper for consistent text formatting
+- [x] Integrated into `MemoryService::v1_create_entry()`
+
+### P0.3: Semantic Retrieval
+- [x] `semantic_search()` — vector similarity search with pgvector `<=>` operator
+- [x] `hybrid_search()` — RRF fusion of vector + keyword (ts_rank_cd)
+- [x] `POST /v1/memory-entries/search` API with category filter
+- [x] Custom `Vector` type with sqlx `Type`/`Decode`/`Encode` implementation
+
+### P0.4: Session Memory
+- [x] `SessionMemoryRepository` with get/set/delete/list/cleanup methods
+- [x] TTL support via `expires_at` column
+- [x] Internal service (no public API in P0)
+
+### P0.5: EpisodicMemory Enum
+- [x] Added `EpisodicMemory` variant to `MemoryCategory`
+- [x] Updated API handlers and constraints
+
+### P0.6: Embedding Backfill
+- [x] `GET /v1/memory-entries/without-embedding` (internal)
+- [x] `POST /v1/memory-entries/backfill` API
+- [x] Batch processing with configurable `batch_size`
+- [x] Error handling and progress reporting
+
+### P0.7: Category Backfill Plan
+- [ ] Document gradual labeling strategy for historical data
+
+### Implementation Details
+- **Custom Vector type:** `crates/agent-runtime-service/src/vector_type.rs` — handles pgvector text format `[1.0,2.0,3.0]`
+- **MemoryEntryRow:** Internal DB row struct with embedding field
+- **MemoryEntry:** Public API model without embedding (clean API responses)
+- **sqlx 0.8 upgrade:** Required for pgvector compatibility; workspace-wide upgrade completed
+
+---
+
+## Current State
+
+### Compilation
+```bash
+cargo check -p agent-runtime-service
+```
+✅ Clean (no errors, 3 warnings from existing code)
+
+### Tests
+```bash
+cargo test -p agent-runtime-service
+```
+✅ All tests passing (including existing tests updated for new MemoryService signature)
+
+### Git Status
+Working tree: contains P0 implementation ready for commit
+
+---
+
 ## Next Steps
 
-Branch `feat/kernel-execution` is ready with both Phase 1 (Kernel Execution) and Phase 2 (Team Execution) complete.
+**P1: Pipeline Core (Week 3-5)**
+- Candidate Generation (LLM fact extraction, integrated with RunService)
+- Memory Gating framework (quality assessment, risk/conflict/consent rules)
+- Dedup with dynamic thresholds by type
+- Equivalence check (rules engine + LLM fallback)
 
-**Options:**
-1. **Merge to main** — 14 commits ahead, all tests pass (20/20)
-2. **Phase 3: Policy Evaluation** — Tool governance, delegation constraints, approval flow
-3. **Phase 4: Recovery** — Checkpoint restore, event replay, state reconciliation
-4. **Phase 5: Context State Management** — Lazy loading, context compaction, TaskPacket
+**P2: Governance & Audit (Week 6-7)**
+- Decision log service
+- Manual trigger APIs (already started)
+- Review lifecycle endpoints
+
+**P3: Advanced Features (Future)**
+- Analytics, Provenance UI, Compaction/Summarization
 
 ---
 

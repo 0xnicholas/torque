@@ -70,5 +70,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/memory-write-candidates/:id/reject", post(memory::reject_candidate))
         .route("/v1/memory-entries", get(memory::list_entries))
         .route("/v1/memory-entries/:id", get(memory::get_entry))
-        .route("/v1/memory-entries/search", get(memory::search))
+        .route("/v1/memory-entries/search", post(memory::search))
+        .route("/v1/memory-entries/force", post(memory::force_write))
+        .route("/v1/memory-entries/backfill", post(memory::backfill))
 }

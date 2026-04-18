@@ -1,5 +1,4 @@
 use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
-use crate::models::v1::checkpoint::Checkpoint;
 use crate::models::v1::event::Event;
 use crate::repository::{
     AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt,

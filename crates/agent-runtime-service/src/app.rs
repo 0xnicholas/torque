@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::api;
 use crate::db::Database;
+use crate::embedding::OpenAIEmbeddingGenerator;
 use crate::repository::RepositoryContainer;
 use crate::service::ServiceContainer;
 
@@ -59,12 +60,32 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         )),
     };
 
+    let memory_v1 = Arc::new(crate::repository::PostgresMemoryRepositoryV1::new(
+        db.clone(),
+    ));
+
+    let embedding = match OpenAIEmbeddingGenerator::from_env() {
+        Ok(gen) => Some(Arc::new(gen) as Arc<dyn crate::embedding::EmbeddingGenerator>),
+        Err(e) => {
+            tracing::warn!("Failed to initialize embedding generator: {}", e);
+            None
+        }
+    };
+
     let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(db.clone()));
     let idempotency = Arc::new(crate::v1_guards::IdempotencyStore::new());
     let run_gate = Arc::new(crate::v1_guards::RunGate::new());
     let llm_dyn: Arc<dyn llm::LlmClient> = llm.clone();
 
-    let services = ServiceContainer::new(repos, checkpointer, llm_dyn, idempotency, run_gate);
+    let services = ServiceContainer::new(
+        repos,
+        memory_v1,
+        checkpointer,
+        llm_dyn,
+        embedding,
+        idempotency,
+        run_gate,
+    );
 
     api::router(db, llm, Arc::new(services))
 }
