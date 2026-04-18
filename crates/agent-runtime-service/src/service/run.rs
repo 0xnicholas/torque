@@ -86,6 +86,7 @@ impl RunService {
             kernel_def,
             execution_request,
             event_sink.clone(),
+            definition.tool_policy.clone(),
         ).await;
 
         // 7. Update task status based on result
@@ -127,6 +128,7 @@ impl RunService {
         kernel_def: torque_kernel::AgentDefinition,
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
+        tool_policy: serde_json::Value,
     ) -> anyhow::Result<String> {
         let mut kernel = KernelRuntimeHandle::new(
             vec![kernel_def],
@@ -136,12 +138,19 @@ impl RunService {
         );
 
         // Use execute_v1 for v1 runs (no session message history)
+        let tool_policy_opt = if tool_policy.is_null() || tool_policy == serde_json::json!({}) {
+            None
+        } else {
+            Some(tool_policy)
+        };
+        
         let result = kernel.execute_v1(
             request,
             self.llm.clone(),
             self.tools.registry(),
             event_sink,
             vec![], // Start with empty messages for v1
+            tool_policy_opt,
         ).await;
 
         result

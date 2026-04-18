@@ -68,6 +68,7 @@ impl KernelRuntimeHandle {
         tools: Arc<ToolRegistry>,
         event_sink: mpsc::Sender<StreamEvent>,
         initial_messages: Vec<LlmMessage>,
+        tool_policy: Option<serde_json::Value>,
     ) -> Result<ExecutionResult, KernelBridgeError> {
         // 1. Start kernel instance/task
         let result = self.runtime.handle(request, StepDecision::Continue)?;
@@ -81,7 +82,7 @@ impl KernelRuntimeHandle {
             .await;
 
         let final_content = self
-            .run_llm_conversation(llm, tools, event_sink.clone(), initial_messages)
+            .run_llm_conversation(llm, tools, event_sink.clone(), initial_messages, tool_policy)
             .await?;
 
         let complete_request = self.reconstruct_request(instance_id)?;
@@ -108,7 +109,7 @@ impl KernelRuntimeHandle {
         event_sink: mpsc::Sender<StreamEvent>,
         llm_messages: Vec<LlmMessage>,
     ) -> Result<ExecutionResult, KernelBridgeError> {
-        self.execute_v1(request, llm, tools, event_sink, llm_messages).await
+        self.execute_v1(request, llm, tools, event_sink, llm_messages, None).await
     }
 
     async fn run_llm_conversation(
@@ -117,6 +118,7 @@ impl KernelRuntimeHandle {
         tools: Arc<ToolRegistry>,
         event_sink: mpsc::Sender<StreamEvent>,
         mut messages: Vec<LlmMessage>,
+        tool_policy: Option<serde_json::Value>,
     ) -> Result<String, KernelBridgeError> {
         let tool_defs = tools.to_llm_tools().await;
         let mut tool_call_count = 0;
@@ -170,6 +172,49 @@ impl KernelRuntimeHandle {
                     tool_call_count += 1;
 
                     for tool_call in &tool_calls {
+                        // Evaluate tool policy before execution
+                        if let Some(ref policy) = tool_policy {
+                            use crate::policy::{PolicyEvaluator, PolicyInput};
+                            let evaluator = PolicyEvaluator::new();
+                            let input = PolicyInput {
+                                action_type: "tool_call".to_string(),
+                                tool_name: Some(tool_call.name.clone()),
+                                ..Default::default()
+                            };
+                            let decision = evaluator.evaluate(&input, policy);
+                            
+                            if !decision.allowed {
+                                let _ = event_sink
+                                    .send(StreamEvent::Error {
+                                        code: "POLICY_DENIED".into(),
+                                        message: decision.reasons.join(", "),
+                                    })
+                                    .await;
+                                return Err(KernelBridgeError::Db(anyhow::anyhow!(
+                                    "Tool '{}' denied by policy: {}",
+                                    tool_call.name,
+                                    decision.reasons.join(", ")
+                                )));
+                            }
+                            
+                            if decision.requires_approval {
+                                let _ = event_sink
+                                    .send(StreamEvent::Error {
+                                        code: "POLICY_APPROVAL_REQUIRED".into(),
+                                        message: format!(
+                                            "Tool '{}' requires approval: {}",
+                                            tool_call.name,
+                                            decision.reasons.join(", ")
+                                        ),
+                                    })
+                                    .await;
+                                return Err(KernelBridgeError::Db(anyhow::anyhow!(
+                                    "Tool '{}' requires approval",
+                                    tool_call.name
+                                )));
+                            }
+                        }
+
                         let _ = event_sink
                             .send(StreamEvent::ToolCall {
                                 name: tool_call.name.clone(),

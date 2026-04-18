@@ -9,4 +9,5 @@ pub mod repository;
 pub mod service;
 pub mod kernel_bridge;
 pub mod infra;
+pub mod policy;
 pub mod v1_guards;
