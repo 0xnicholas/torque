@@ -53,19 +53,15 @@ pub async fn list_candidates(
     let limit = q.limit.clamp(1, 100);
     let offset = q.cursor.as_ref().and_then(|c| c.parse::<i64>().ok()).unwrap_or(0);
     
-    let status = q.cursor.as_ref()
-        .and_then(|c| {
-            if c.starts_with("status:") {
-                match c.strip_prefix("status:") {
-                    Some("pending") => Some(MemoryWriteCandidateStatus::Pending),
-                    Some("review_required") => Some(MemoryWriteCandidateStatus::ReviewRequired),
-                    Some("approved") => Some(MemoryWriteCandidateStatus::Approved),
-                    Some("rejected") => Some(MemoryWriteCandidateStatus::Rejected),
-                    _ => None,
-                }
-            } else {
-                None
-            }
+    let status = q.filter_status.as_ref()
+        .and_then(|s| match s.as_str() {
+            "pending" => Some(MemoryWriteCandidateStatus::Pending),
+            "review_required" => Some(MemoryWriteCandidateStatus::ReviewRequired),
+            "approved" => Some(MemoryWriteCandidateStatus::Approved),
+            "rejected" => Some(MemoryWriteCandidateStatus::Rejected),
+            "auto_approved" => Some(MemoryWriteCandidateStatus::AutoApproved),
+            "merged" => Some(MemoryWriteCandidateStatus::Merged),
+            _ => None,
         });
     
     let rows = services.memory.v1_list_candidates(status, limit, offset).await
@@ -115,7 +111,19 @@ pub async fn approve_candidate(
             request_id: None,
         }))),
     };
-    
+
+    if candidate.status != MemoryWriteCandidateStatus::Pending
+        && candidate.status != MemoryWriteCandidateStatus::ReviewRequired
+        && candidate.status != MemoryWriteCandidateStatus::AutoApproved
+    {
+        return Err((StatusCode::CONFLICT, Json(ErrorBody {
+            code: "ALREADY_PROCESSED".into(),
+            message: format!("Candidate is already {}", serde_json::to_string(&candidate.status).unwrap_or_default()),
+            details: None,
+            request_id: None,
+        })));
+    }
+
     let content: crate::models::v1::memory::MemoryContent = serde_json::from_value(
         candidate.content.clone()
     ).map_err(|e| (

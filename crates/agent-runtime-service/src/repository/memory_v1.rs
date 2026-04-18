@@ -114,6 +114,7 @@ pub trait MemoryRepositoryV1: Send + Sync {
     
     async fn session_memory_cleanup_expired(
         &self,
+        batch_size: i64,
     ) -> anyhow::Result<u64>;
     
     // Decision Log
@@ -347,6 +348,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             .filter(|s| s.len() >= 2)
             .collect::<Vec<_>>()
             .join(" | ");
+
+        if search_terms.is_empty() {
+            return self.semantic_search(query_embedding, category, limit).await;
+        }
 
         let rows: Vec<HybridSearchRow> = if let Some(cat) = category {
             sqlx::query_as::<_, HybridSearchRow>(
@@ -609,10 +614,19 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
 
     async fn session_memory_cleanup_expired(
         &self,
+        batch_size: i64,
     ) -> anyhow::Result<u64> {
         let result = sqlx::query(
-            r#"DELETE FROM session_memory WHERE expires_at IS NOT NULL AND expires_at <= NOW()"#,
+            r#"
+            DELETE FROM session_memory
+            WHERE id IN (
+                SELECT id FROM session_memory
+                WHERE expires_at IS NOT NULL AND expires_at <= NOW()
+                LIMIT $1
+            )
+            "#,
         )
+        .bind(batch_size)
         .execute(self.db.pool())
         .await?;
 

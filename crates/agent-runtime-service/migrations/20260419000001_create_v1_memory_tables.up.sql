@@ -108,3 +108,8 @@ CREATE INDEX IF NOT EXISTS idx_decision_log_type
     ON memory_decision_log(decision_type);
 CREATE INDEX IF NOT EXISTS idx_decision_log_processed_at 
     ON memory_decision_log(processed_at);
+
+-- GIN index for full-text search (hybrid search keyword component)
+CREATE INDEX IF NOT EXISTS idx_v1_memory_entries_fts 
+    ON v1_memory_entries 
+    USING GIN (to_tsvector('english', key || ' ' || COALESCE(value::text, '')));

@@ -17,8 +17,12 @@ pub struct OpenAIEmbeddingGenerator {
 
 impl OpenAIEmbeddingGenerator {
     pub fn new(api_key: String) -> Self {
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
-            http_client: reqwest::Client::new(),
+            http_client,
             base_url: "https://api.openai.com/v1".to_string(),
             api_key,
             model: "text-embedding-3-small".to_string(),
@@ -98,6 +102,14 @@ impl EmbeddingGenerator for OpenAIEmbeddingGenerator {
             .map(|d| d.embedding)
             .ok_or_else(|| anyhow::anyhow!("No embedding data in response"))?;
 
+        if embedding.len() != self.dimensions {
+            anyhow::bail!(
+                "Embedding dimension mismatch: expected {}, got {}",
+                self.dimensions,
+                embedding.len()
+            );
+        }
+
         Ok(embedding)
     }
 
@@ -111,10 +123,21 @@ impl EmbeddingGenerator for OpenAIEmbeddingGenerator {
 }
 
 pub fn memory_to_embedding_text(content: &crate::models::v1::memory::MemoryContent) -> String {
-    format!(
-        "{}: {} - {}",
-        serde_json::to_string(&content.category).unwrap_or_default(),
-        content.key,
-        serde_json::to_string(&content.value).unwrap_or_default()
-    )
+    let category_str = match content.category {
+        crate::models::v1::memory::MemoryCategory::AgentProfileMemory => "agent profile",
+        crate::models::v1::memory::MemoryCategory::UserPreferenceMemory => "user preference",
+        crate::models::v1::memory::MemoryCategory::TaskOrDomainMemory => "task domain",
+        crate::models::v1::memory::MemoryCategory::EpisodicMemory => "episodic",
+        crate::models::v1::memory::MemoryCategory::ExternalContextMemory => "external context",
+    };
+    let value_str = match &content.value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Object(map) if map.len() == 1 => {
+            map.iter().next().map(|(k, v)| {
+                format!("{}: {}", k, v.as_str().unwrap_or(&v.to_string()))
+            }).unwrap_or_else(|| content.value.to_string())
+        }
+        _ => content.value.to_string(),
+    };
+    format!("{}: {} - {}", category_str, content.key, value_str)
 }

@@ -3,6 +3,8 @@ use sqlx::postgres::{PgTypeInfo, PgValueRef};
 use sqlx::{Decode, Type};
 use std::error::Error;
 
+pub const EMBEDDING_DIMENSIONS: usize = 1536;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vector(pub Vec<f32>);
 
@@ -10,11 +12,27 @@ impl Vector {
     pub fn to_vec(&self) -> Vec<f32> {
         self.0.clone()
     }
+
+    pub fn validate_dimensions(&self) -> Result<(), String> {
+        if self.0.len() != EMBEDDING_DIMENSIONS {
+            Err(format!(
+                "Expected {} dimensions, got {}",
+                EMBEDDING_DIMENSIONS,
+                self.0.len()
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl From<Vec<f32>> for Vector {
     fn from(v: Vec<f32>) -> Self {
-        Self(v)
+        let vec = Self(v);
+        if let Err(e) = vec.validate_dimensions() {
+            tracing::warn!("Vector dimension mismatch: {}", e);
+        }
+        vec
     }
 }
 

@@ -265,8 +265,9 @@ impl MemoryService {
 
     pub async fn session_memory_cleanup(
         &self,
+        batch_size: i64,
     ) -> anyhow::Result<u64> {
-        self.repo_v1.session_memory_cleanup_expired().await
+        self.repo_v1.session_memory_cleanup_expired(batch_size).await
     }
 
     // Decision Log
