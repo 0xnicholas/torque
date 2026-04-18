@@ -22,6 +22,7 @@ pub trait TaskRepository: Send + Sync {
         id: Uuid,
         artifacts: serde_json::Value,
     ) -> anyhow::Result<bool>;
+    async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<Task>>;
 }
 
 pub struct PostgresTaskRepository {
@@ -104,5 +105,20 @@ impl TaskRepository for PostgresTaskRepository {
         .execute(self.db.pool())
         .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn list_by_team(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<Task>> {
+        let rows = sqlx::query_as::<_, Task>(
+            "SELECT * FROM v1_tasks WHERE team_instance_id = $1 ORDER BY created_at DESC LIMIT $2"
+        )
+        .bind(team_instance_id)
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
     }
 }

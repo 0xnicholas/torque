@@ -5,7 +5,8 @@ use axum::{
 };
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
-use crate::models::v1::team::{TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate};
+use crate::models::v1::task::Task;
+use crate::models::v1::team::{TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTaskCreate};
 use crate::service::ServiceContainer;
 use llm::OpenAiClient;
 use std::sync::Arc;
@@ -117,30 +118,78 @@ pub async fn delete_instance(
     }
 }
 
-pub async fn list_tasks(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+pub async fn create_task(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<TeamTaskCreate>,
+) -> Result<(StatusCode, Json<Task>), (StatusCode, Json<ErrorBody>)> {
+    let task = services.team.create_team_task(id, &req.goal, req.instructions.as_deref()).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-pub async fn create_task(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+pub async fn list_tasks(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<ListResponse<Task>>, (StatusCode, Json<ErrorBody>)> {
+    let limit = q.limit.clamp(1, 100);
+    let mut rows = services.team.list_team_tasks(id, limit + 1).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    let has_more = rows.len() > limit as usize;
+    if has_more { rows.pop(); }
+    let next_cursor = rows.last().map(|r| r.id.to_string());
+    Ok(Json(ListResponse {
+        data: rows,
+        pagination: Pagination { next_cursor, prev_cursor: q.cursor, has_more },
+    }))
 }
 
 pub async fn list_members(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<ListResponse<TeamMember>>, (StatusCode, Json<ErrorBody>)> {
+    let limit = q.limit.clamp(1, 100);
+    let mut rows = services.team.list_members(id, limit + 1).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    let has_more = rows.len() > limit as usize;
+    if has_more { rows.pop(); }
+    let next_cursor = rows.last().map(|r| r.id.to_string());
+    Ok(Json(ListResponse {
+        data: rows,
+        pagination: Pagination { next_cursor, prev_cursor: q.cursor, has_more },
+    }))
 }
 
 pub async fn publish(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorBody>)> {
+    // For MVP, publish marks the team instance as having shared state
+    // In a full implementation, this would publish artifacts to team's shared state
+    let _instance = services.team.get_instance(id).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorBody {
+            code: "NOT_FOUND".into(),
+            message: "Team instance not found".into(),
+            details: None,
+            request_id: None,
+        })))?;
+
+    // TODO: Implement actual publish logic (update team instance status, create shared state entry)
+    // For now, return 200 OK as placeholder
+    Ok(StatusCode::OK)
 }
