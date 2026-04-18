@@ -89,9 +89,34 @@ This builds on top of the completed Architecture Optimization and Platform API v
   - Added `RunEvent` schemas for SSE events (start, chunk, tool_call, tool_result, done, error)
 
 - [x] **Task 11:** Final Verification
-  - ✅ Full test suite: 17/17 tests pass
+  - ✅ Full test suite: 20/20 tests pass
   - ✅ Compilation check: clean (no errors)
   - ✅ Working tree: clean
+
+### Code Review Fixes (Post-Implementation)
+- [x] **Critical 1-2:** Decouple policy evaluation from kernel execution
+  - PolicyEvaluator moved to RunService (orchestration layer)
+  - Kernel now receives pre-validated execution intent
+  - PolicyDecision returned to caller instead of aborting execution
+
+- [x] **Critical 3-4:** Recovery transaction safety and branching
+  - Pre-validate recovery plan before mutations
+  - time_travel creates new instance (branch) instead of modifying existing
+
+- [x] **Critical 5-6:** Task state validation and PolicyEvaluator lifecycle
+  - TaskStatus transition validation in TaskRepository::update_status
+  - PolicyEvaluator instantiated once as RunService field
+
+- [x] **Important 7-8:** Multi-source policy and event replay
+  - PolicySources supports 6 source layers (system, capability, agent, team, selector, runtime)
+  - Conservative merge across dimensions
+  - EventReplayRegistry with async trait-based handlers
+  - RecoveryService uses registry instead of hardcoded matching
+
+- [x] **Important 9-12:** State validation, SSE, instance_id
+  - TaskStatus transition table includes Created -> Running
+  - SSE start event sent before execution begins
+  - instance_id passed through v1 mapping to ExecutionRequest
 
 ---
 
