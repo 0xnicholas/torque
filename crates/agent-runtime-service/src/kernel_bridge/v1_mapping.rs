@@ -27,6 +27,7 @@ pub fn v1_agent_definition_to_kernel(def: &V1AgentDefinition) -> KernelAgentDefi
 pub fn run_request_to_execution_request(
     agent_definition: &KernelAgentDefinition,
     run_request: &RunRequest,
+    instance_id: Option<uuid::Uuid>,
 ) -> ExecutionRequest {
     let mode = match run_request.execution_mode.as_str() {
         "async" => ExecutionMode::Async,
@@ -35,10 +36,21 @@ pub fn run_request_to_execution_request(
 
     let instructions = run_request.instructions.clone().unwrap_or_default();
 
-    ExecutionRequest::new(
+    let mut request = ExecutionRequest::new(
         agent_definition.id,
         run_request.goal.clone(),
         vec![instructions],
     )
-    .with_execution_mode(mode)
+    .with_execution_mode(mode);
+
+    // Include instance_id if available
+    if let Some(id) = instance_id {
+        use torque_kernel::ids::AgentInstanceId;
+        let kernel_id = AgentInstanceId::new();
+        // Note: This creates a new ID. In a full implementation,
+        // we'd need a way to map v1 UUID to kernel AgentInstanceId
+        request = request.with_instance_id(kernel_id);
+    }
+
+    request
 }

@@ -78,6 +78,17 @@ impl TaskRepository for PostgresTaskRepository {
     }
 
     async fn update_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<bool> {
+        // Validate state transition
+        let current = self.get(id).await?;
+        if let Some(ref task) = current {
+            if !task.status.can_transition_to(&status) {
+                return Err(anyhow::anyhow!(
+                    "Invalid task state transition: {:?} -> {:?}",
+                    task.status, status
+                ));
+            }
+        }
+
         let result = sqlx::query(
             "UPDATE v1_tasks SET status = $1, updated_at = NOW() WHERE id = $2"
         )

@@ -35,6 +35,7 @@ impl TaskStatus {
     pub fn can_transition_to(&self, next: &TaskStatus) -> bool {
         match (self, next) {
             (TaskStatus::Created, TaskStatus::Queued) => true,
+            (TaskStatus::Created, TaskStatus::Running) => true,
             (TaskStatus::Queued, TaskStatus::Running) => true,
             (TaskStatus::Running, TaskStatus::WaitingTool) => true,
             (TaskStatus::Running, TaskStatus::WaitingSubagent) => true,

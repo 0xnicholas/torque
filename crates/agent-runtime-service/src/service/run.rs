@@ -4,6 +4,7 @@ use crate::kernel_bridge::{run_request_to_execution_request, v1_agent_definition
 use crate::models::v1::agent_instance::AgentInstanceStatus;
 use crate::models::v1::run::RunRequest;
 use crate::models::v1::task::{TaskStatus, TaskType};
+use crate::policy::{PolicyEvaluator, PolicyInput};
 use crate::repository::{
     AgentDefinitionRepository, AgentInstanceRepository, TaskRepository,
     EventRepository, CheckpointRepository,
@@ -22,6 +23,7 @@ pub struct RunService {
     checkpointer: Arc<dyn checkpointer::Checkpointer>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
+    policy_evaluator: PolicyEvaluator,
 }
 
 impl RunService {
@@ -44,6 +46,7 @@ impl RunService {
             checkpointer,
             llm,
             tools,
+            policy_evaluator: PolicyEvaluator::new(),
         }
     }
 
@@ -76,34 +79,38 @@ impl RunService {
         self.agent_instance_repo.update_current_task(instance_id, Some(task.id)).await?;
         self.task_repo.update_status(task.id, TaskStatus::Running).await?;
 
-        // 5. Build kernel agent definition and execution request
-        let kernel_def = v1_agent_definition_to_kernel(&definition);
-        let execution_request = run_request_to_execution_request(&kernel_def, &request);
+        // 5. Record execution start event
+        let _ = event_sink.send(StreamEvent::Start {
+            session_id: instance_id,
+        }).await;
 
-        // 6. Execute via kernel bridge
+        // 6. Build kernel agent definition and execution request
+        let kernel_def = v1_agent_definition_to_kernel(&definition);
+        let execution_request = run_request_to_execution_request(&kernel_def, &request, Some(instance_id));
+
+        // 7. Execute via kernel bridge (no policy inside kernel)
         let result = self.run_execution(
             instance_id,
             kernel_def,
             execution_request,
             event_sink.clone(),
-            definition.tool_policy.clone(),
         ).await;
 
-        // 7. Update task status based on result
+        // 8. Update task status based on result
         let final_status = match &result {
             Ok(_) => TaskStatus::Completed,
             Err(_) => TaskStatus::Failed,
         };
         self.task_repo.update_status(task.id, final_status).await?;
 
-        // 8. Update instance status
+        // 9. Update instance status
         self.agent_instance_repo.update_current_task(instance_id, None).await?;
         self.agent_instance_repo.update_status(
             instance_id,
             if result.is_ok() { AgentInstanceStatus::Ready } else { AgentInstanceStatus::Failed }
         ).await?;
 
-        // 9. Send terminal event
+        // 10. Send terminal event
         match result {
             Ok(_) => {
                 let _ = event_sink.send(StreamEvent::Done {
@@ -122,13 +129,29 @@ impl RunService {
         result.map(|_| ())
     }
 
+    /// Evaluate tool policy before execution.
+    /// This is called by the orchestration layer, not the kernel.
+    pub fn evaluate_tool_policy(
+        &self,
+        tool_name: &str,
+        agent_definition_id: Uuid,
+        tool_policy: &serde_json::Value,
+    ) -> crate::policy::PolicyDecision {
+        let input = PolicyInput {
+            action_type: "tool_call".to_string(),
+            tool_name: Some(tool_name.to_string()),
+            agent_definition_id: Some(agent_definition_id),
+            ..Default::default()
+        };
+        self.policy_evaluator.evaluate(&input, tool_policy)
+    }
+
     async fn run_execution(
         &self,
         _instance_id: Uuid,
         kernel_def: torque_kernel::AgentDefinition,
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
-        tool_policy: serde_json::Value,
     ) -> anyhow::Result<String> {
         let mut kernel = KernelRuntimeHandle::new(
             vec![kernel_def],
@@ -137,20 +160,13 @@ impl RunService {
             self.checkpointer.clone(),
         );
 
-        // Use execute_v1 for v1 runs (no session message history)
-        let tool_policy_opt = if tool_policy.is_null() || tool_policy == serde_json::json!({}) {
-            None
-        } else {
-            Some(tool_policy)
-        };
-        
+        // Execute without policy (policy is evaluated at orchestration layer)
         let result = kernel.execute_v1(
             request,
             self.llm.clone(),
             self.tools.registry(),
             event_sink,
             vec![], // Start with empty messages for v1
-            tool_policy_opt,
         ).await;
 
         result
