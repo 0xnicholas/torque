@@ -1363,8 +1363,29 @@ components:
       properties:
         goal:
           type: string
-        input:
+        instructions:
+          type: string
+        input_artifacts:
+          type: array
+          items:
+            type: string
+            format: uuid
+        external_context_refs:
+          type: array
+          items:
+            type: object
+        constraints:
           type: object
+        execution_mode:
+          type: string
+          enum: [sync, async]
+          default: sync
+        expected_outputs:
+          type: array
+          items:
+            type: string
+        idempotency_key:
+          type: string
       required: [goal]
 
     # Artifacts
@@ -1889,3 +1910,88 @@ components:
         pagination:
           $ref: '#/components/schemas/Pagination'
       required: [data, pagination]
+
+    # Run Events (SSE)
+    RunEvent:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [start, chunk, tool_call, tool_result, done, error]
+        data:
+          type: object
+      required: [event]
+
+    RunEventStart:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [start]
+        session_id:
+          type: string
+          format: uuid
+      required: [event, session_id]
+
+    RunEventChunk:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [chunk]
+        content:
+          type: string
+      required: [event, content]
+
+    RunEventToolCall:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [tool_call]
+        name:
+          type: string
+        arguments:
+          type: object
+      required: [event, name, arguments]
+
+    RunEventToolResult:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [tool_result]
+        name:
+          type: string
+        success:
+          type: boolean
+        content:
+          type: string
+        error:
+          type: string
+      required: [event, name, success, content]
+
+    RunEventDone:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [done]
+        message_id:
+          type: string
+          format: uuid
+        artifacts:
+          type: object
+      required: [event, message_id]
+
+    RunEventError:
+      type: object
+      properties:
+        event:
+          type: string
+          enum: [error]
+        code:
+          type: string
+        message:
+          type: string
+      required: [event, code, message]
