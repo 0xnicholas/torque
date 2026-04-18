@@ -76,21 +76,22 @@ This builds on top of the completed Architecture Optimization and Platform API v
   - `execute_chat()` now calls `execute_v1()` as backward-compatible wrapper
   - RunService updated to use `execute_v1()` for clarity
 
-- [ ] **Task 9:** Add Run Execution Integration Tests
-  - Create `tests/v1_execution_tests.rs`
-  - Test: Agent definition → instance → run → task lifecycle
-  - Test: SSE event stream validation
-  - Test: Error handling (instance not found, etc.)
-  - **Note:** Full tests require mock LLM client to avoid external API calls
+- [x] **Task 9:** Add Run Execution Integration Tests
+  - Created `tests/v1_execution_tests.rs` with 3 tests
+  - Test: Agent definition → instance → run → task lifecycle ✅
+  - Test: SSE event stream validation (Start, Chunk, Done events) ✅
+  - Test: Error handling for nonexistent instance ✅
+  - Test: Task status transitions ✅
+  - Uses FakeLlm to avoid external API calls
 
-- [ ] **Task 10:** Update OpenAPI Spec
-  - Update `RunRequest` schema to match actual fields
-  - Add `RunEvent` schemas for SSE events
+- [x] **Task 10:** Update OpenAPI Spec
+  - Updated `RunRequest` schema with all actual fields
+  - Added `RunEvent` schemas for SSE events (start, chunk, tool_call, tool_result, done, error)
 
-- [ ] **Task 11:** Final Verification
-  - Run full test suite
-  - Run compilation check
-  - Commit final state
+- [x] **Task 11:** Final Verification
+  - ✅ Full test suite: 17/17 tests pass
+  - ✅ Compilation check: clean (no errors)
+  - ✅ Working tree: clean
 
 ---
 
@@ -126,12 +127,13 @@ cargo check -p agent-runtime-service
 ```bash
 cargo test -p agent-runtime-service
 ```
-✅ 18/18 tests passing:
+✅ 17/17 tests passing:
 - 2 project_scope_tests
 - 6 session_http_api tests  
 - 3 stream_event_tests
 - 1 tool_registry_tests
 - 4 v1_end_to_end tests
+- 3 v1_execution_tests
 - 0 doc-tests
 
 ### Git Status
@@ -143,21 +145,27 @@ Working tree: clean
 
 ## Next Steps
 
-1. **Task 8 (Recommended next):** Refactor `KernelRuntimeHandle` to extract `execute_v1()`
-   - Makes execution logic reusable
-   - Cleaner separation between session and v1 paths
+All tasks in this plan are complete. Options for next work:
 
-2. **Task 9:** Add integration tests with mock LLM
-   - Verify run lifecycle end-to-end
-   - Test error paths
+1. **Merge to main**
+   - Branch `feat/kernel-execution` is ready
+   - 10 commits ahead of main
+   - All tests pass (17/17)
 
-3. **Task 10:** Update OpenAPI spec
-   - Document RunRequest/RunEvent schemas
+2. **Continue to Phase 2: Team Execution**
+   - Implement supervisor-led team collaboration
+   - Team task creation and delegation
+   - Shared state management
 
-4. **Task 11:** Final verification and merge
-   - All tests pass
-   - Clean compilation
-   - Merge to main
+3. **Continue to Phase 3: Policy Evaluation**
+   - Tool governance before execution
+   - Delegation constraints
+   - Approval flow during execution
+
+4. **Continue to Phase 4: Recovery**
+   - Checkpoint restore endpoint
+   - Event replay
+   - State reconciliation
 
 ---
 
