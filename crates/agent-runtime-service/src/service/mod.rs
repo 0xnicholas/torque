@@ -7,6 +7,7 @@ pub mod checkpoint;
 pub mod delegation;
 pub mod event;
 pub mod memory;
+pub mod recovery;
 pub mod run;
 pub mod session;
 pub mod task;
@@ -22,6 +23,7 @@ pub use checkpoint::CheckpointService;
 pub use delegation::DelegationService;
 pub use event::EventService;
 pub use memory::MemoryService;
+pub use recovery::RecoveryService;
 pub use run::RunService;
 pub use session::SessionService;
 pub use task::TaskService;
@@ -43,6 +45,7 @@ pub struct ServiceContainer {
     pub checkpoint: std::sync::Arc<CheckpointService>,
     pub event: std::sync::Arc<EventService>,
     pub run: std::sync::Arc<RunService>,
+    pub recovery: std::sync::Arc<RecoveryService>,
     pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
     pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
 }
@@ -99,11 +102,16 @@ impl ServiceContainer {
             llm,
             tool.clone(),
         ));
+        let recovery = std::sync::Arc::new(RecoveryService::new(
+            repos.agent_instance.clone(),
+            repos.checkpoint_ext.clone(),
+            repos.event_ext.clone(),
+        ));
 
         Self {
             session, memory, tool, agent_instance, agent_definition,
             task, artifact, capability, team, delegation, approval,
-            checkpoint, event, run, idempotency, run_gate,
+            checkpoint, event, run, recovery, idempotency, run_gate,
         }
     }
 }

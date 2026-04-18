@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use crate::db::Database;
+use crate::models::v1::agent_instance::AgentInstance;
 use crate::models::v1::checkpoint::Checkpoint;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::service::ServiceContainer;
@@ -42,8 +43,13 @@ pub async fn get(
 }
 
 pub async fn restore(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
+    let instance = services.recovery.restore_from_checkpoint(id).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "RESTORE_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    Ok(Json(instance))
 }

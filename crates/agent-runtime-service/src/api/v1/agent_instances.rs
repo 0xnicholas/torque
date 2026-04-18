@@ -85,18 +85,28 @@ pub async fn cancel(
 }
 
 pub async fn resume(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
+    let instance = services.recovery.resume_instance(id).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "RESUME_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    Ok(Json(instance))
 }
 
 pub async fn time_travel(
-    State((_, _, _services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-    Json(_req): Json<TimeTravelRequest>,
-) -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<TimeTravelRequest>,
+) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
+    let instance = services.recovery.time_travel(id, req.checkpoint_id, req.branch_name).await
+        .map_err(|e| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { code: "TIME_TRAVEL_ERROR".into(), message: e.to_string(), details: None, request_id: None })
+        ))?;
+    Ok(Json(instance))
 }
 
 pub async fn list_delegations(
