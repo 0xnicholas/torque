@@ -104,7 +104,9 @@ impl ServiceContainer {
             repos.team_definition.clone(),
             repos.team_instance.clone(),
             repos.team_member.clone(),
-            repos.task.clone(),
+            repos.team_task.clone(),
+            repos.team_shared_state.clone(),
+            repos.team_event.clone(),
         ));
         let delegation = std::sync::Arc::new(DelegationService::new(repos.delegation.clone()));
         let approval = std::sync::Arc::new(ApprovalService::new(repos.approval.clone()));

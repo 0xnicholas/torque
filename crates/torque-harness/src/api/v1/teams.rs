@@ -1,9 +1,8 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
-use crate::models::v1::task::Task;
 use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTaskCreate,
+    TeamTask, TeamTaskCreate,
 };
 use crate::service::ServiceContainer;
 use axum::{
@@ -165,7 +164,7 @@ pub async fn create_task(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<TeamTaskCreate>,
-) -> Result<(StatusCode, Json<Task>), (StatusCode, Json<ErrorBody>)> {
+) -> Result<(StatusCode, Json<TeamTask>), (StatusCode, Json<ErrorBody>)> {
     let task = services
         .team
         .create_team_task(id, &req.goal, req.instructions.as_deref())
@@ -188,7 +187,7 @@ pub async fn list_tasks(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
-) -> Result<Json<ListResponse<Task>>, (StatusCode, Json<ErrorBody>)> {
+) -> Result<Json<ListResponse<TeamTask>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
     let mut rows = services
         .team
