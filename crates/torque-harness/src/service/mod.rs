@@ -38,7 +38,7 @@ pub use reflexion::{
 pub use run::RunService;
 pub use session::SessionService;
 pub use task::TaskService;
-pub use team::TeamService;
+pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
 
 pub struct ServiceContainer {
@@ -51,6 +51,7 @@ pub struct ServiceContainer {
     pub artifact: std::sync::Arc<ArtifactService>,
     pub capability: std::sync::Arc<CapabilityService>,
     pub team: std::sync::Arc<TeamService>,
+    pub team_supervisor: std::sync::Arc<TeamSupervisor>,
     pub delegation: std::sync::Arc<DelegationService>,
     pub approval: std::sync::Arc<ApprovalService>,
     pub checkpoint: std::sync::Arc<CheckpointService>,
@@ -104,8 +105,31 @@ impl ServiceContainer {
             repos.team_definition.clone(),
             repos.team_instance.clone(),
             repos.team_member.clone(),
-            repos.task.clone(),
+            repos.team_task.clone(),
+            repos.team_shared_state.clone(),
+            repos.team_event.clone(),
         ));
+
+        let team_selector_resolver = std::sync::Arc::new(team::SelectorResolver::new(
+            repos.team_member.clone(),
+            repos.agent_instance.clone(),
+            repos.capability_profile.clone(),
+            repos.capability_binding.clone(),
+        ));
+        let team_shared_state_manager = std::sync::Arc::new(team::SharedTaskStateManager::new(
+            repos.team_shared_state.clone(),
+        ));
+        let team_event_emitter = std::sync::Arc::new(team::TeamEventEmitter::new(
+            repos.team_event.clone(),
+        ));
+        let team_supervisor = std::sync::Arc::new(TeamSupervisor::new(
+            repos.team_task.clone(),
+            repos.delegation.clone(),
+            team_selector_resolver,
+            team_shared_state_manager,
+            team_event_emitter,
+        ));
+
         let delegation = std::sync::Arc::new(DelegationService::new(repos.delegation.clone()));
         let approval = std::sync::Arc::new(ApprovalService::new(repos.approval.clone()));
         let checkpoint = std::sync::Arc::new(CheckpointService::new(repos.checkpoint_ext.clone()));
@@ -151,6 +175,7 @@ impl ServiceContainer {
             artifact,
             capability,
             team,
+            team_supervisor,
             delegation,
             approval,
             checkpoint,

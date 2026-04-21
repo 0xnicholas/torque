@@ -1,11 +1,10 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
-use crate::models::v1::task::Task;
 use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTaskCreate,
+    TeamTask, TeamTaskCreate,
 };
-use crate::service::ServiceContainer;
+use crate::service::{ServiceContainer, team::SupervisorResult};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -165,10 +164,10 @@ pub async fn create_task(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<TeamTaskCreate>,
-) -> Result<(StatusCode, Json<Task>), (StatusCode, Json<ErrorBody>)> {
+) -> Result<(StatusCode, Json<TeamTask>), (StatusCode, Json<ErrorBody>)> {
     let task = services
         .team
-        .create_team_task(id, &req.goal, req.instructions.as_deref())
+        .create_team_task(id, &req)
         .await
         .map_err(|e| {
             (
@@ -188,7 +187,7 @@ pub async fn list_tasks(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
-) -> Result<Json<ListResponse<Task>>, (StatusCode, Json<ErrorBody>)> {
+) -> Result<Json<ListResponse<TeamTask>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
     let mut rows = services
         .team
@@ -290,4 +289,41 @@ pub async fn publish(
     // TODO: Implement actual publish logic (update team instance status, create shared state entry)
     // For now, return 200 OK as placeholder
     Ok(StatusCode::OK)
+}
+
+#[derive(serde::Serialize)]
+pub struct SupervisorExecutionResponse {
+    executed: bool,
+    task_id: Option<Uuid>,
+    success: bool,
+    summary: String,
+}
+
+pub async fn execute_supervisor(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SupervisorExecutionResponse>, (StatusCode, Json<ErrorBody>)> {
+    match services.team_supervisor.poll_and_execute(id).await {
+        Ok(Some(result)) => Ok(Json(SupervisorExecutionResponse {
+            executed: true,
+            task_id: Some(result.task_id),
+            success: result.success,
+            summary: result.summary,
+        })),
+        Ok(None) => Ok(Json(SupervisorExecutionResponse {
+            executed: false,
+            task_id: None,
+            success: true,
+            summary: "No open tasks to execute".to_string(),
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "SUPERVISOR_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )),
+    }
 }

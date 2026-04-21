@@ -1,9 +1,10 @@
-use crate::models::v1::task::{Task, TaskType};
 use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
+    TeamTask, TeamTaskCreate,
 };
 use crate::repository::{
-    TaskRepository, TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
+    TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
+    TeamTaskRepository, SharedTaskStateRepository, TeamEventRepository,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -12,7 +13,9 @@ pub struct TeamService {
     definition_repo: Arc<dyn TeamDefinitionRepository>,
     instance_repo: Arc<dyn TeamInstanceRepository>,
     member_repo: Arc<dyn TeamMemberRepository>,
-    task_repo: Arc<dyn TaskRepository>,
+    team_task_repo: Arc<dyn TeamTaskRepository>,
+    shared_state_repo: Arc<dyn SharedTaskStateRepository>,
+    team_event_repo: Arc<dyn TeamEventRepository>,
 }
 
 impl TeamService {
@@ -20,13 +23,17 @@ impl TeamService {
         definition_repo: Arc<dyn TeamDefinitionRepository>,
         instance_repo: Arc<dyn TeamInstanceRepository>,
         member_repo: Arc<dyn TeamMemberRepository>,
-        task_repo: Arc<dyn TaskRepository>,
+        team_task_repo: Arc<dyn TeamTaskRepository>,
+        shared_state_repo: Arc<dyn SharedTaskStateRepository>,
+        team_event_repo: Arc<dyn TeamEventRepository>,
     ) -> Self {
         Self {
             definition_repo,
             instance_repo,
             member_repo,
-            task_repo,
+            team_task_repo,
+            shared_state_repo,
+            team_event_repo,
         }
     }
 
@@ -97,35 +104,22 @@ impl TeamService {
     pub async fn create_team_task(
         &self,
         team_instance_id: Uuid,
-        goal: &str,
-        instructions: Option<&str>,
-    ) -> anyhow::Result<Task> {
-        // Verify team instance exists
+        req: &TeamTaskCreate,
+    ) -> anyhow::Result<TeamTask> {
         let _instance = self
             .instance_repo
             .get(team_instance_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Team instance not found: {}", team_instance_id))?;
 
-        // Create team task
-        let task = self
-            .task_repo
-            .create(
-                TaskType::TeamTask,
-                goal,
-                instructions,
-                None, // agent_instance_id will be set when supervisor claims it
-                serde_json::json!([]),
-            )
-            .await?;
-
-        // Note: In a full implementation, we would:
-        // 1. Create supervisor agent instance from team definition
-        // 2. Add supervisor as team member
-        // 3. Set task.agent_instance_id to supervisor
-        // 4. Trigger supervisor execution
-        // For MVP, we return the created task and let the caller handle execution
-
+        let task = self.team_task_repo.create(
+            team_instance_id,
+            &req.goal,
+            req.instructions.as_deref(),
+            &req.input_artifacts,
+            req.parent_task_id,
+            req.idempotency_key.as_deref(),
+        ).await?;
         Ok(task)
     }
 
@@ -133,7 +127,23 @@ impl TeamService {
         &self,
         team_instance_id: Uuid,
         limit: i64,
-    ) -> anyhow::Result<Vec<Task>> {
-        self.task_repo.list_by_team(team_instance_id, limit).await
+    ) -> anyhow::Result<Vec<TeamTask>> {
+        self.team_task_repo.list_by_team(team_instance_id, limit).await
+    }
+
+    pub async fn get_team_task(&self, id: Uuid) -> anyhow::Result<Option<TeamTask>> {
+        self.team_task_repo.get(id).await
+    }
+
+    pub async fn get_shared_state(&self, team_instance_id: Uuid) -> anyhow::Result<Option<crate::models::v1::team::SharedTaskState>> {
+        self.shared_state_repo.get(team_instance_id).await
+    }
+
+    pub async fn get_or_create_shared_state(&self, team_instance_id: Uuid) -> anyhow::Result<crate::models::v1::team::SharedTaskState> {
+        self.shared_state_repo.get_or_create(team_instance_id).await
+    }
+
+    pub async fn get_team_events(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<crate::models::v1::team::TeamEvent>> {
+        self.team_event_repo.list_by_team(team_instance_id, limit).await
     }
 }

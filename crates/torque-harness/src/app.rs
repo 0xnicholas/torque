@@ -46,6 +46,15 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         team_member: Arc::new(crate::repository::PostgresTeamMemberRepository::new(
             db.clone(),
         )),
+        team_task: Arc::new(crate::repository::PostgresTeamTaskRepository::new(
+            db.clone(),
+        )),
+        team_shared_state: Arc::new(crate::repository::PostgresSharedTaskStateRepository::new(
+            db.clone(),
+        )),
+        team_event: Arc::new(crate::repository::PostgresTeamEventRepository::new(
+            db.clone(),
+        )),
         delegation: Arc::new(crate::repository::PostgresDelegationRepository::new(
             db.clone(),
         )),
