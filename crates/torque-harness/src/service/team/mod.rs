@@ -6,6 +6,8 @@ pub mod events;
 pub mod modes;
 pub mod member_agent;
 pub mod local_member_agent;
+pub mod circuit_breaker;
+pub mod retry;
 
 pub use service::TeamService;
 pub use supervisor::{TeamSupervisor, SupervisorResult};
@@ -14,3 +16,5 @@ pub use shared_state::SharedTaskStateManager;
 pub use events::TeamEventEmitter;
 pub use member_agent::{MemberAgent, MemberTask, MemberHealth};
 pub use local_member_agent::LocalMemberAgent;
+pub use circuit_breaker::{CircuitBreaker, CircuitState};
+pub use retry::{MemberHealthTracker, RetryBudget, RetryDecision, classify_rejection};
