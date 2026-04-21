@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::models::v1::delegation::Delegation;
+use crate::models::v1::delegation::{Delegation, DelegationStatus};
 use async_trait::async_trait;
 use uuid::Uuid;
 
@@ -20,6 +20,10 @@ pub trait DelegationRepository: Send + Sync {
     async fn list_by_task(&self, task_id: Uuid, limit: i64) -> anyhow::Result<Vec<Delegation>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Delegation>>;
     async fn update_status(&self, id: Uuid, status: &str) -> anyhow::Result<bool>;
+    async fn complete(&self, id: Uuid, artifact_id: Uuid) -> anyhow::Result<bool>;
+    async fn fail(&self, id: Uuid, error: &str) -> anyhow::Result<bool>;
+    async fn reject(&self, id: Uuid, reason: &str) -> anyhow::Result<bool>;
+    async fn list_by_status(&self, task_id: Uuid, status: DelegationStatus) -> anyhow::Result<Vec<Delegation>>;
 }
 
 pub struct PostgresDelegationRepository {
@@ -102,5 +106,49 @@ impl DelegationRepository for PostgresDelegationRepository {
             .execute(self.db.pool())
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn complete(&self, id: Uuid, artifact_id: Uuid) -> anyhow::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE v1_delegations SET status = 'COMPLETED', result_artifact_id = $1, updated_at = NOW() WHERE id = $2"
+        )
+        .bind(artifact_id)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn fail(&self, id: Uuid, error: &str) -> anyhow::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE v1_delegations SET status = 'FAILED', error_message = $1, updated_at = NOW() WHERE id = $2"
+        )
+        .bind(error)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn reject(&self, id: Uuid, reason: &str) -> anyhow::Result<bool> {
+        let result = sqlx::query(
+            "UPDATE v1_delegations SET status = 'REJECTED', rejection_reason = $1, updated_at = NOW() WHERE id = $2"
+        )
+        .bind(reason)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list_by_status(&self, task_id: Uuid, status: DelegationStatus) -> anyhow::Result<Vec<Delegation>> {
+        let rows = sqlx::query_as::<_, Delegation>(
+            "SELECT * FROM v1_delegations WHERE task_id = $1 AND status = $2 ORDER BY created_at DESC"
+        )
+        .bind(task_id)
+        .bind(status)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
     }
 }
