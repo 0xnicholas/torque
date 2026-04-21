@@ -61,11 +61,21 @@ impl RedisStreamBus {
 impl StreamBus for RedisStreamBus {
     async fn xadd(&self, stream: &str, message: &StreamMessage) -> anyhow::Result<String> {
         let mut conn = self.conn.clone();
-        let data_str = serde_json::to_string(&message.data)?;
+
+        let mut args = vec![stream.to_string(), "*".to_string()];
+
+        if let serde_json::Value::Object(obj) = &message.data {
+            for (key, value) in obj {
+                args.push(key.clone());
+                args.push(serde_json::to_string(&value)?);
+            }
+        } else {
+            args.push("data".to_string());
+            args.push(serde_json::to_string(&message.data)?);
+        }
+
         let id: String = redis::cmd("XADD")
-            .arg(stream)
-            .arg("*")
-            .arg(data_str)
+            .arg(&args)
             .query_async(&mut conn)
             .await?;
         Ok(id)
@@ -86,11 +96,18 @@ impl StreamBus for RedisStreamBus {
         let mut results = Vec::new();
         for (stream_name, entries) in result {
             for (entry_id, fields) in entries {
-                let data: serde_json::Value = fields.into_iter().collect();
+                let mut obj = serde_json::Map::new();
+                for (key, value) in fields {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
+                        obj.insert(key, parsed);
+                    } else {
+                        obj.insert(key, serde_json::Value::String(value));
+                    }
+                }
                 results.push(StreamReadResult {
                     stream: stream_name.clone(),
                     id: entry_id,
-                    data,
+                    data: serde_json::Value::Object(obj),
                 });
             }
         }
@@ -125,11 +142,18 @@ impl StreamBus for RedisStreamBus {
         let mut results = Vec::new();
         for (stream_name, entries) in result {
             for (entry_id, fields) in entries {
-                let data: serde_json::Value = fields.into_iter().collect();
+                let mut obj = serde_json::Map::new();
+                for (key, value) in fields {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&value) {
+                        obj.insert(key, parsed);
+                    } else {
+                        obj.insert(key, serde_json::Value::String(value));
+                    }
+                }
                 results.push(StreamReadResult {
                     stream: stream_name.clone(),
                     id: entry_id,
-                    data,
+                    data: serde_json::Value::Object(obj),
                 });
             }
         }
