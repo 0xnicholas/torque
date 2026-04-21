@@ -4,7 +4,7 @@ use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
     TeamTask, TeamTaskCreate,
 };
-use crate::service::ServiceContainer;
+use crate::service::{ServiceContainer, team::SupervisorResult};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -289,4 +289,41 @@ pub async fn publish(
     // TODO: Implement actual publish logic (update team instance status, create shared state entry)
     // For now, return 200 OK as placeholder
     Ok(StatusCode::OK)
+}
+
+#[derive(serde::Serialize)]
+pub struct SupervisorExecutionResponse {
+    executed: bool,
+    task_id: Option<Uuid>,
+    success: bool,
+    summary: String,
+}
+
+pub async fn execute_supervisor(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SupervisorExecutionResponse>, (StatusCode, Json<ErrorBody>)> {
+    match services.team_supervisor.poll_and_execute(id).await {
+        Ok(Some(result)) => Ok(Json(SupervisorExecutionResponse {
+            executed: true,
+            task_id: Some(result.task_id),
+            success: result.success,
+            summary: result.summary,
+        })),
+        Ok(None) => Ok(Json(SupervisorExecutionResponse {
+            executed: false,
+            task_id: None,
+            success: true,
+            summary: "No open tasks to execute".to_string(),
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "SUPERVISOR_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )),
+    }
 }

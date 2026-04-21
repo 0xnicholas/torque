@@ -6,7 +6,7 @@ pub mod events;
 pub mod modes;
 
 pub use service::TeamService;
-pub use supervisor::TeamSupervisor;
+pub use supervisor::{TeamSupervisor, SupervisorResult};
 pub use selector::SelectorResolver;
 pub use shared_state::SharedTaskStateManager;
 pub use events::TeamEventEmitter;

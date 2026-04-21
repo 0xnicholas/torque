@@ -113,6 +113,8 @@ impl ServiceContainer {
         let team_selector_resolver = std::sync::Arc::new(team::SelectorResolver::new(
             repos.team_member.clone(),
             repos.agent_instance.clone(),
+            repos.capability_profile.clone(),
+            repos.capability_binding.clone(),
         ));
         let team_shared_state_manager = std::sync::Arc::new(team::SharedTaskStateManager::new(
             repos.team_shared_state.clone(),
