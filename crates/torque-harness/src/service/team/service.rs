@@ -1,6 +1,6 @@
 use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTask, TeamTaskCreate,
+    TeamTask,
 };
 use crate::repository::{
     TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,

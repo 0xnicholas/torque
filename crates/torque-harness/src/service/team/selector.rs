@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 pub struct SelectorResolver {
     team_member_repo: Arc<dyn TeamMemberRepository>,
-    agent_instance_repo: Arc<dyn AgentInstanceRepository>,
+    #[allow(dead_code)]
+    agent_instance_repo: Arc<dyn AgentInstanceRepository>, // TODO: Use for capability profile matching when implemented
 }
 
 impl SelectorResolver {

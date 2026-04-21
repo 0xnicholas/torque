@@ -1,5 +1,5 @@
 use crate::models::v1::team::{MemberSelector, SelectorType, TeamMode, TeamTask, TeamTaskStatus, TriageResult, TaskComplexity, ProcessingPath};
-use crate::service::team::modes::{ModeExecutionResult, TeamModeHandler};
+use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use crate::repository::{DelegationRepository, TeamTaskRepository};
 use std::sync::Arc;
