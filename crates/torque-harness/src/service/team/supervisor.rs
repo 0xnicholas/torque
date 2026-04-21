@@ -72,6 +72,9 @@ impl TeamSupervisor {
                         crate::models::v1::delegation_event::DelegationEvent::TimeoutPartial { partial_quality, .. } => {
                             return Ok(DelegationWaitResult::TimeoutPartial(partial_quality));
                         }
+                        crate::models::v1::delegation_event::DelegationEvent::Rejected { reason, .. } => {
+                            return Ok(DelegationWaitResult::Rejected(reason.to_string()));
+                        }
                         _ => continue,
                     }
                 }
@@ -184,5 +187,6 @@ pub enum DelegationWaitResult {
     Completed,
     Failed(String),
     TimeoutPartial(PartialQuality),
+    Rejected(String),
     Timeout,
 }

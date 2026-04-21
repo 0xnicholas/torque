@@ -64,3 +64,16 @@ pub enum RejectionReason {
     Timeout,
     Other(String),
 }
+
+impl std::fmt::Display for RejectionReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RejectionReason::CapacityFull => write!(f, "CAPACITY_FULL"),
+            RejectionReason::CapabilityMismatch => write!(f, "CAPABILITY_MISMATCH"),
+            RejectionReason::PolicyViolation => write!(f, "POLICY_VIOLATION"),
+            RejectionReason::MemberUnavailable => write!(f, "MEMBER_UNAVAILABLE"),
+            RejectionReason::Timeout => write!(f, "TIMEOUT"),
+            RejectionReason::Other(s) => write!(f, "OTHER: {}", s),
+        }
+    }
+}

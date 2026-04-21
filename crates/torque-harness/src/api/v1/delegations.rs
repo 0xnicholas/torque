@@ -90,11 +90,17 @@ pub async fn accept(
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct RejectRequest {
+    pub reason: String,
+}
+
 pub async fn reject(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
+    Json(req): Json<RejectRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    match services.delegation.reject(id).await {
+    match services.delegation.reject(id, &req.reason).await {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),

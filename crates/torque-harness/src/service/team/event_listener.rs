@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use futures::Stream;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 use crate::message_bus::stream_bus::{RedisStreamBus, StreamBus};
@@ -42,9 +41,14 @@ impl RedisStreamEventListener {
     }
 }
 
-fn parse_delegation_event(data: &serde_json::Value, delegation_id: Uuid) -> Option<DelegationEvent> {
+pub fn parse_delegation_event(data: &serde_json::Value) -> Option<DelegationEvent> {
     let type_field = data.get("type")?.as_str()?;
     let event_data = data.get("data")?;
+
+    let delegation_id = event_data
+        .get("delegation_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())?;
 
     match type_field {
         "created" => {
@@ -76,6 +80,19 @@ fn parse_delegation_event(data: &serde_json::Value, delegation_id: Uuid) -> Opti
                 member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
                 error: event_data.get("error")?.as_str()?.to_string(),
                 failed_at: chrono::Utc::now(),
+            })
+        }
+        "rejected" => {
+            let reason = if let Some(reason_str) = event_data.get("reason")?.as_str() {
+                crate::models::v1::delegation_event::RejectionReason::Other(reason_str.to_string())
+            } else {
+                crate::models::v1::delegation_event::RejectionReason::Other("unknown".to_string())
+            };
+            Some(DelegationEvent::Rejected {
+                delegation_id,
+                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+                reason,
+                rejected_at: chrono::Utc::now(),
             })
         }
         "timeout_partial" => {
@@ -112,6 +129,22 @@ fn parse_delegation_event(data: &serde_json::Value, delegation_id: Uuid) -> Opti
                 timed_out_at: chrono::Utc::now(),
             })
         }
+        "extension_requested" => {
+            Some(DelegationEvent::ExtensionRequested {
+                delegation_id,
+                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+                requested_seconds: event_data.get("requested_seconds")?.as_u64()? as u32,
+                reason: event_data.get("reason")?.as_str()?.to_string(),
+                requested_at: chrono::Utc::now(),
+            })
+        }
+        "extension_granted" => {
+            Some(DelegationEvent::ExtensionGranted {
+                delegation_id,
+                granted_seconds: event_data.get("granted_seconds")?.as_u64()? as u32,
+                new_deadline: chrono::Utc::now(),
+            })
+        }
         _ => None,
     }
 }
@@ -127,10 +160,10 @@ impl EventListener for RedisStreamEventListener {
         let consumer_id = self.consumer_id.clone();
         let dg_id = delegation_id;
 
-        let _ = bus.create_consumer_group(&stream_key, "delegation-group", "0").await;
+        let _ = bus.create_consumer_group(&stream_key, "delegation-group", "$").await;
 
         let stream = async_stream! {
-            let mut last_id = "0".to_string();
+            let mut last_id = "$".to_string();
 
             loop {
                 match timeout(
@@ -144,11 +177,11 @@ impl EventListener for RedisStreamEventListener {
                 ).await {
                     Ok(Ok(results)) => {
                         for result in results {
-                            if let Some(event) = parse_delegation_event(&result.data, dg_id) {
+                            if let Some(event) = parse_delegation_event(&result.data) {
                                 yield event;
+                                let _ = bus.xack(&stream_key, "delegation-group", &[&result.id]).await;
+                                last_id = result.id.clone();
                             }
-                            last_id = result.id.clone();
-                            let _ = bus.xack(&stream_key, "delegation-group", &[&result.id]).await;
                         }
                     }
                     Ok(Err(e)) => {
@@ -172,18 +205,18 @@ impl EventListener for RedisStreamEventListener {
         let stream_key = format!("team:{}:tasks:shared", team_id);
         let bus = self.stream_bus.clone();
         let consumer_id = self.consumer_id.clone();
-        let team_id_val = team_id;
+        let group_name = format!("team-{}", team_id);
 
-        let _ = bus.create_consumer_group(&stream_key, &format!("team-{}", team_id), "0").await;
+        let _ = bus.create_consumer_group(&stream_key, &group_name, "$").await;
 
         let stream = async_stream! {
-            let mut last_id = "0".to_string();
+            let mut last_id = "$".to_string();
 
             loop {
                 match timeout(
                     Duration::from_secs(1),
                     bus.xreadgroup(
-                        &format!("team-{}", team_id),
+                        &group_name,
                         &consumer_id,
                         &[(stream_key.as_str(), &last_id)],
                         10,
@@ -191,12 +224,11 @@ impl EventListener for RedisStreamEventListener {
                 ).await {
                     Ok(Ok(results)) => {
                         for result in results {
-                            // Parse as delegation event or create generic event
-                            if let Some(event) = parse_delegation_event(&result.data, team_id_val) {
+                            if let Some(event) = parse_delegation_event(&result.data) {
                                 yield event;
+                                let _ = bus.xack(&stream_key, &group_name, &[&result.id]).await;
+                                last_id = result.id.clone();
                             }
-                            last_id = result.id.clone();
-                            let _ = bus.xack(&stream_key, &format!("team-{}", team_id), &[&result.id]).await;
                         }
                     }
                     Ok(Err(e)) => {
@@ -220,18 +252,18 @@ impl EventListener for RedisStreamEventListener {
         let stream_key = format!("member:{}:tasks", member_id);
         let bus = self.stream_bus.clone();
         let consumer_id = self.consumer_id.clone();
-        let member_id_val = member_id;
+        let group_name = format!("member-{}", member_id);
 
-        let _ = bus.create_consumer_group(&stream_key, &format!("member-{}", member_id), "0").await;
+        let _ = bus.create_consumer_group(&stream_key, &group_name, "$").await;
 
         let stream = async_stream! {
-            let mut last_id = "0".to_string();
+            let mut last_id = "$".to_string();
 
             loop {
                 match timeout(
                     Duration::from_secs(1),
                     bus.xreadgroup(
-                        &format!("member-{}", member_id),
+                        &group_name,
                         &consumer_id,
                         &[(stream_key.as_str(), &last_id)],
                         10,
@@ -239,11 +271,11 @@ impl EventListener for RedisStreamEventListener {
                 ).await {
                     Ok(Ok(results)) => {
                         for result in results {
-                            if let Some(event) = parse_delegation_event(&result.data, member_id_val) {
+                            if let Some(event) = parse_delegation_event(&result.data) {
                                 yield event;
+                                let _ = bus.xack(&stream_key, &group_name, &[&result.id]).await;
+                                last_id = result.id.clone();
                             }
-                            last_id = result.id.clone();
-                            let _ = bus.xack(&stream_key, &format!("member-{}", member_id), &[&result.id]).await;
                         }
                     }
                     Ok(Err(e)) => {
