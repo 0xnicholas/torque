@@ -5,7 +5,7 @@ use serial_test::serial;
 
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::task::{TaskStatus, TaskType};
-use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate};
+use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate, TeamTaskStatus};
 use torque_harness::repository::{
     AgentDefinitionRepository, AgentInstanceRepository,
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
@@ -14,8 +14,11 @@ use torque_harness::repository::{
     PostgresSharedTaskStateRepository, PostgresTeamEventRepository,
     SharedTaskStateRepository, TeamDefinitionRepository, TeamEventRepository,
     TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
+    DelegationRepository, PostgresDelegationRepository,
+    PostgresCapabilityProfileRepository, PostgresCapabilityRegistryBindingRepository,
 };
 use torque_harness::service::TeamService;
+use torque_harness::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter, TeamSupervisor};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -294,4 +297,140 @@ async fn test_team_task_for_nonexistent_team_fails() {
         result.is_err(),
         "Should fail with nonexistent team instance"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_supervisor_poll_and_execute_with_route_mode() {
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
+
+    let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
+    let agent_inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
+    let team_def_repo = Arc::new(PostgresTeamDefinitionRepository::new(db.clone()));
+    let team_inst_repo = Arc::new(PostgresTeamInstanceRepository::new(db.clone()));
+    let team_member_repo = Arc::new(PostgresTeamMemberRepository::new(db.clone()));
+    let team_task_repo = Arc::new(PostgresTeamTaskRepository::new(db.clone()));
+    let shared_state_repo = Arc::new(PostgresSharedTaskStateRepository::new(db.clone()));
+    let team_event_repo = Arc::new(PostgresTeamEventRepository::new(db.clone()));
+    let delegation_repo = Arc::new(PostgresDelegationRepository::new(db.clone()));
+    let capability_profile_repo = Arc::new(PostgresCapabilityProfileRepository::new(db.clone()));
+    let capability_binding_repo = Arc::new(PostgresCapabilityRegistryBindingRepository::new(db.clone()));
+
+    let selector_resolver = SelectorResolver::new(
+        team_member_repo.clone(),
+        agent_inst_repo.clone(),
+        capability_profile_repo,
+        capability_binding_repo,
+    );
+    let shared_state_manager = SharedTaskStateManager::new(shared_state_repo.clone());
+    let event_emitter = TeamEventEmitter::new(team_event_repo.clone());
+
+    let supervisor = TeamSupervisor::new(
+        team_task_repo.clone(),
+        delegation_repo.clone(),
+        Arc::new(selector_resolver),
+        Arc::new(shared_state_manager),
+        Arc::new(event_emitter),
+    );
+
+    let supervisor_def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "Supervisor Agent".into(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .expect("create supervisor definition");
+
+    let member_def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "Member Agent".into(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .expect("create member definition");
+
+    let team_def = team_def_repo
+        .create(&TeamDefinitionCreate {
+            name: "Supervisor Test Team".into(),
+            description: None,
+            supervisor_agent_definition_id: supervisor_def.id,
+            sub_agents: vec![],
+            policy: serde_json::json!({}),
+        })
+        .await
+        .expect("create team definition");
+
+    let team_instance = team_inst_repo
+        .create(&TeamInstanceCreate {
+            team_definition_id: team_def.id,
+        })
+        .await
+        .expect("create team instance");
+
+    let member_instance = agent_inst_repo
+        .create(&torque_harness::models::v1::agent_instance::AgentInstanceCreate {
+            agent_definition_id: member_def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .expect("create member instance");
+
+    team_member_repo
+        .create(team_instance.id, member_instance.id, "worker")
+        .await
+        .expect("add team member");
+
+    let task = team_task_repo
+        .create(
+            team_instance.id,
+            "Simple task goal",
+            None,
+            &[],
+            None,
+            None,
+        )
+        .await
+        .expect("create team task");
+
+    assert_eq!(task.status, TeamTaskStatus::Open);
+
+    let result = supervisor.poll_and_execute(team_instance.id).await;
+    assert!(result.is_ok(), "poll_and_execute should succeed");
+
+    let result = result.unwrap();
+    assert!(result.is_some(), "Should have executed a task");
+    let exec_result = result.unwrap();
+    assert!(exec_result.success, "Execution should succeed: {}", exec_result.summary);
+    assert_eq!(exec_result.task_id, task.id);
+
+    let updated_task = team_task_repo.get(task.id).await.unwrap().unwrap();
+    assert!(
+        matches!(updated_task.status, TeamTaskStatus::Completed | TeamTaskStatus::InProgress),
+        "Task should be completed or in progress, got {:?}",
+        updated_task.status
+    );
+
+    let delegations = delegation_repo.list_by_task(task.id, 10).await.unwrap();
+    assert!(!delegations.is_empty(), "Should have created at least one delegation");
+
+    team_task_repo.mark_completed(task.id).await.expect("cleanup");
+    team_member_repo.remove(team_instance.id, member_instance.id).await.expect("cleanup");
+    team_inst_repo.delete(team_instance.id).await.expect("cleanup");
+    team_def_repo.delete(team_def.id).await.expect("cleanup");
+    def_repo.delete(supervisor_def.id).await.expect("cleanup");
+    def_repo.delete(member_def.id).await.expect("cleanup");
 }
