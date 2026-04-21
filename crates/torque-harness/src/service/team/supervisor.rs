@@ -1,8 +1,12 @@
 use crate::models::v1::team::{MemberSelector, SelectorType, TeamMode, TeamTask, TeamTaskStatus, TriageResult, TaskComplexity, ProcessingPath};
+use crate::models::v1::partial_quality::PartialQuality;
+use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use crate::repository::{DelegationRepository, TeamTaskRepository};
 use std::sync::Arc;
+use tokio::time::{timeout, Duration, Instant};
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 pub struct TeamSupervisor {
@@ -39,6 +43,42 @@ impl TeamSupervisor {
 
         let task = &open_tasks[0];
         self.execute_task(task, team_instance_id).await
+    }
+
+    pub async fn wait_for_delegation_completion(
+        &self,
+        delegation_id: Uuid,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
+    ) -> anyhow::Result<DelegationWaitResult> {
+        let deadline = Instant::now() + timeout_duration;
+        let mut stream = event_listener.subscribe_delegation(delegation_id).await?;
+
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(DelegationWaitResult::Timeout);
+            }
+
+            match timeout(remaining, stream.next()).await {
+                Ok(Some(event)) => {
+                    match event {
+                        crate::models::v1::delegation_event::DelegationEvent::Completed { .. } => {
+                            return Ok(DelegationWaitResult::Completed);
+                        }
+                        crate::models::v1::delegation_event::DelegationEvent::Failed { error, .. } => {
+                            return Ok(DelegationWaitResult::Failed(error));
+                        }
+                        crate::models::v1::delegation_event::DelegationEvent::TimeoutPartial { partial_quality, .. } => {
+                            return Ok(DelegationWaitResult::TimeoutPartial(partial_quality));
+                        }
+                        _ => continue,
+                    }
+                }
+                Ok(None) => continue,
+                Err(_) => return Ok(DelegationWaitResult::Timeout),
+            }
+        }
     }
 
     pub async fn execute_task(&self, task: &TeamTask, team_instance_id: Uuid) -> anyhow::Result<Option<SupervisorResult>> {
@@ -137,4 +177,12 @@ pub struct SupervisorResult {
     pub task_id: Uuid,
     pub success: bool,
     pub summary: String,
+}
+
+#[derive(Debug)]
+pub enum DelegationWaitResult {
+    Completed,
+    Failed(String),
+    TimeoutPartial(PartialQuality),
+    Timeout,
 }
