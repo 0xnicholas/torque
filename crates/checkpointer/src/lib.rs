@@ -1,5 +1,7 @@
 pub mod error;
-pub mod trait_def;
+pub mod hybrid;
+pub mod r#trait;
 
 pub use error::{CheckpointerError, Result};
-pub use trait_def::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
+pub use hybrid::HybridCheckpointer;
+pub use r#trait::{Checkpointer, CheckpointState, CheckpointMeta, CheckpointId};

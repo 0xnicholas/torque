@@ -1,0 +1,25 @@
+[package]
+name = "executor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../types" }
+db = { path = "../db" }
+queue = { path = "../queue" }
+llm = { path = "../llm" }
+context-store = { path = "../context-store" }
+tool-executor = { path = "../tool-executor" }
+agent-runtime = { path = "../agent-runtime" }
+checkpointer = { path = "../checkpointer" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "1"
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
