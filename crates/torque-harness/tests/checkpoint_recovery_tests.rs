@@ -37,14 +37,17 @@ async fn test_checkpoint_persistence_and_retrieval() {
     let instance_id = uuid::Uuid::new_v4();
     let task_id = uuid::Uuid::new_v4();
     let state = checkpointer::CheckpointState {
-        data: serde_json::json!({
+        messages: vec![],
+        tool_call_count: 0,
+        intermediate_results: vec![],
+        custom_state: Some(serde_json::json!({
             "instance_state": "Running",
             "checkpoint_reason": "test_checkpoint",
             "active_task_state": "InProgress",
             "pending_approval_ids": Vec::<uuid::Uuid>::new(),
             "child_delegation_ids": Vec::<uuid::Uuid>::new(),
             "event_sequence": 1,
-        }),
+        })),
     };
 
     let checkpoint_id = checkpointer
@@ -59,15 +62,17 @@ async fn test_checkpoint_persistence_and_retrieval() {
 
     assert_eq!(
         loaded_state
-            .data
-            .get("instance_state")
+            .custom_state
+            .as_ref()
+            .and_then(|v| v.get("instance_state"))
             .and_then(|v| v.as_str()),
         Some("Running")
     );
     assert_eq!(
         loaded_state
-            .data
-            .get("checkpoint_reason")
+            .custom_state
+            .as_ref()
+            .and_then(|v| v.get("checkpoint_reason"))
             .and_then(|v| v.as_str()),
         Some("test_checkpoint")
     );
@@ -91,10 +96,13 @@ async fn test_checkpoint_list_by_instance() {
 
     for i in 0..3 {
         let state = checkpointer::CheckpointState {
-            data: serde_json::json!({
+            messages: vec![],
+            tool_call_count: 0,
+            intermediate_results: vec![],
+            custom_state: Some(serde_json::json!({
                 "instance_state": format!("State{}", i),
                 "checkpoint_reason": format!("reason_{}", i),
-            }),
+            })),
         };
         let _ = checkpointer
             .save(instance_id, uuid::Uuid::new_v4(), state)
@@ -148,10 +156,13 @@ async fn test_checkpoint_model_query() {
         .expect("should create agent instance");
 
     let state = checkpointer::CheckpointState {
-        data: serde_json::json!({
+        messages: vec![],
+        tool_call_count: 0,
+        intermediate_results: vec![],
+        custom_state: Some(serde_json::json!({
             "instance_state": "Ready",
             "checkpoint_reason": "test",
-        }),
+        })),
     };
     let checkpointer: Arc<PostgresCheckpointer> = Arc::new(PostgresCheckpointer::new(db.clone()));
     let _ = checkpointer
@@ -179,14 +190,17 @@ async fn test_checkpoint_model_query() {
 #[serial]
 async fn test_checkpoint_state_format() {
     let state = checkpointer::CheckpointState {
-        data: serde_json::json!({
+        messages: vec![],
+        tool_call_count: 0,
+        intermediate_results: vec![],
+        custom_state: Some(serde_json::json!({
             "instance_state": "Running",
             "checkpoint_reason": "awaiting_tool",
             "active_task_state": "InProgress",
             "pending_approval_ids": [],
             "child_delegation_ids": [],
             "event_sequence": 42,
-        }),
+        })),
     };
 
     let serialized = serde_json::to_string(&state).expect("should serialize");
@@ -195,22 +209,25 @@ async fn test_checkpoint_state_format() {
 
     assert_eq!(
         deserialized
-            .data
-            .get("instance_state")
+            .custom_state
+            .as_ref()
+            .and_then(|v| v.get("instance_state"))
             .and_then(|v| v.as_str()),
         Some("Running")
     );
     assert_eq!(
         deserialized
-            .data
-            .get("checkpoint_reason")
+            .custom_state
+            .as_ref()
+            .and_then(|v| v.get("checkpoint_reason"))
             .and_then(|v| v.as_str()),
         Some("awaiting_tool")
     );
     assert_eq!(
         deserialized
-            .data
-            .get("event_sequence")
+            .custom_state
+            .as_ref()
+            .and_then(|v| v.get("event_sequence"))
             .and_then(|v| v.as_i64()),
         Some(42)
     );

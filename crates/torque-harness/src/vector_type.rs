@@ -63,7 +63,7 @@ impl<'q> Encode<'q, sqlx::Postgres> for Vector {
     fn encode_by_ref(
         &self,
         buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<IsNull, Box<dyn Error + Send + Sync>> {
+    ) -> IsNull {
         let text = format!(
             "[{}]",
             self.0
@@ -73,6 +73,6 @@ impl<'q> Encode<'q, sqlx::Postgres> for Vector {
                 .join(",")
         );
         buf.extend_from_slice(text.as_bytes());
-        Ok(IsNull::No)
+        IsNull::No
     }
 }

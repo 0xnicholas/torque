@@ -102,9 +102,10 @@ mod sqlx_impls {
     }
 
     impl Encode<'_, sqlx::Postgres> for AgentInstanceStatus {
-        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
             let s = self.to_string();
-            Ok(<String as Encode<sqlx::Postgres>>::encode(s, buf)?)
+            buf.extend_from_slice(s.as_bytes());
+            sqlx::encode::IsNull::No
         }
     }
 

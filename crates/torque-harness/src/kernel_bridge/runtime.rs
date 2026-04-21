@@ -314,14 +314,17 @@ impl KernelRuntimeHandle {
             .unwrap_or(run_id);
 
         let state = checkpointer::CheckpointState {
-            data: serde_json::json!({
+            messages: vec![],
+            tool_call_count: 0,
+            intermediate_results: vec![],
+            custom_state: Some(serde_json::json!({
                 "instance_state": format!("{:?}", checkpoint.instance_state),
                 "checkpoint_reason": reason,
                 "active_task_state": checkpoint.active_task_state.map(|s| format!("{:?}", s)),
                 "pending_approval_ids": checkpoint.pending_approval_ids.iter().map(|id| id.as_uuid()).collect::<Vec<_>>(),
                 "child_delegation_ids": checkpoint.child_delegation_ids.iter().map(|id| id.as_uuid()).collect::<Vec<_>>(),
                 "event_sequence": checkpoint.event_sequence,
-            }),
+            })),
         };
 
         let checkpoint_id = self

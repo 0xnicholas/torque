@@ -254,14 +254,17 @@ impl RunService {
         snapshot: serde_json::Value,
     ) -> anyhow::Result<()> {
         let state = CheckpointState {
-            data: serde_json::json!({
+            messages: vec![],
+            tool_call_count: 0,
+            intermediate_results: vec![],
+            custom_state: Some(serde_json::json!({
                 "instance_state": snapshot.get("status").and_then(|s| s.as_str()).unwrap_or("Ready"),
                 "checkpoint_reason": "run_service",
                 "active_task_state": null,
                 "pending_approval_ids": Vec::<Uuid>::new(),
                 "child_delegation_ids": Vec::<Uuid>::new(),
                 "event_sequence": 0,
-            }),
+            })),
         };
 
         self.checkpointer

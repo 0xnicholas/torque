@@ -15,6 +15,41 @@ pub enum DelegationStatus {
     TimeoutPartial,
 }
 
+impl std::fmt::Display for DelegationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DelegationStatus::Pending => write!(f, "PENDING"),
+            DelegationStatus::Accepted => write!(f, "ACCEPTED"),
+            DelegationStatus::Rejected => write!(f, "REJECTED"),
+            DelegationStatus::Completed => write!(f, "COMPLETED"),
+            DelegationStatus::Failed => write!(f, "FAILED"),
+            DelegationStatus::TimeoutPartial => write!(f, "TIMEOUT_PARTIAL"),
+        }
+    }
+}
+
+impl TryFrom<&str> for DelegationStatus {
+    type Error = String;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "PENDING" => Ok(DelegationStatus::Pending),
+            "ACCEPTED" => Ok(DelegationStatus::Accepted),
+            "REJECTED" => Ok(DelegationStatus::Rejected),
+            "COMPLETED" => Ok(DelegationStatus::Completed),
+            "FAILED" => Ok(DelegationStatus::Failed),
+            "TIMEOUT_PARTIAL" => Ok(DelegationStatus::TimeoutPartial),
+            _ => Err(format!("Unknown status: {}", s)),
+        }
+    }
+}
+
+impl TryFrom<String> for DelegationStatus {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
 impl DelegationStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(
