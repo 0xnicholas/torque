@@ -115,43 +115,78 @@ impl RecoveryService {
         instance_id: Uuid,
         checkpoint: &crate::models::v1::checkpoint::Checkpoint,
     ) -> anyhow::Result<()> {
-        let data = checkpoint.snapshot.get("data");
+        let current_instance = self
+            .agent_instance_repo
+            .get(instance_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Instance {} disappeared during reconciliation", instance_id))?;
 
+        let checkpoint_time = checkpoint.created_at;
+        let events_after_checkpoint = self
+            .event_repo
+            .list_by_types("agent_instance", instance_id, &[], 1000)
+            .await?;
+
+        let events_after: Vec<_> = events_after_checkpoint
+            .iter()
+            .filter(|e| e.timestamp > checkpoint_time)
+            .collect();
+
+        if !events_after.is_empty() {
+            tracing::warn!(
+                "Reconciliation: {} events occurred after checkpoint for instance {}",
+                events_after.len(),
+                instance_id
+            );
+
+            for event in &events_after {
+                tracing::debug!(
+                    "Reconciliation: event {} at {} for instance {}",
+                    event.event_type,
+                    event.timestamp,
+                    instance_id
+                );
+            }
+        }
+
+        let data = checkpoint.snapshot.get("data");
         if let Some(data) = data {
             if let Some(pending_approvals) = data.get("pending_approval_ids") {
                 if let Some(approvals) = pending_approvals.as_array() {
-                    for approval in approvals {
-                        if let Some(approval_id) = approval.as_str() {
-                            tracing::debug!(
-                                "Reconciliation: checking pending approval {} for instance {}",
-                                approval_id,
-                                instance_id
-                            );
-                        }
+                    let approval_count = approvals.len();
+                    if approval_count > 0 {
+                        tracing::info!(
+                            "Reconciliation: checkpoint indicates {} pending approvals for instance {}",
+                            approval_count,
+                            instance_id
+                        );
                     }
                 }
             }
 
             if let Some(child_delegations) = data.get("child_delegation_ids") {
                 if let Some(delegations) = child_delegations.as_array() {
-                    for delegation in delegations {
-                        if let Some(delegation_id) = delegation.as_str() {
-                            tracing::debug!(
-                                "Reconciliation: checking child delegation {} for instance {}",
-                                delegation_id,
-                                instance_id
-                            );
-                        }
+                    let delegation_count = delegations.len();
+                    if delegation_count > 0 {
+                        tracing::info!(
+                            "Reconciliation: checkpoint indicates {} child delegations for instance {}",
+                            delegation_count,
+                            instance_id
+                        );
                     }
                 }
             }
 
-            if let Some(reason) = data.get("checkpoint_reason").and_then(|r| r.as_str()) {
-                tracing::debug!(
-                    "Reconciliation: checkpoint reason = {} for instance {}",
-                    reason,
-                    instance_id
-                );
+            if let Some(checkpoint_state) = data.get("instance_state").and_then(|s| s.as_str()) {
+                let current_state = format!("{:?}", current_instance.status);
+                if checkpoint_state != current_state {
+                    tracing::warn!(
+                        "Reconciliation: instance {} state mismatch - checkpoint: {}, current: {}",
+                        instance_id,
+                        checkpoint_state,
+                        current_state
+                    );
+                }
             }
         }
 

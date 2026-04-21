@@ -102,6 +102,7 @@ impl KernelRuntimeHandle {
                 reason: "task_complete".to_string(),
             })
             .await;
+        let _ = self.record_checkpoint_event(checkpoint_id, instance_id, "task_complete").await;
 
         let mut result = result;
         result.summary = Some(final_content);
@@ -244,6 +245,7 @@ impl KernelRuntimeHandle {
                                 reason: "awaiting_llm".to_string(),
                             })
                             .await;
+                        let _ = self.record_checkpoint_event(checkpoint_id, instance_id, "awaiting_llm").await;
                     }
                 }
                 _ => {
@@ -284,6 +286,17 @@ impl KernelRuntimeHandle {
         for event in db_events {
             self.event_repo.create(event).await?;
         }
+        Ok(())
+    }
+
+    async fn record_checkpoint_event(
+        &self,
+        checkpoint_id: Uuid,
+        instance_id: AgentInstanceId,
+        reason: &str,
+    ) -> Result<(), KernelBridgeError> {
+        let event = EventRecorder::checkpoint_created_event(checkpoint_id, instance_id.as_uuid(), reason);
+        self.event_repo.create(event).await?;
         Ok(())
     }
 

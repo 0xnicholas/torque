@@ -90,4 +90,23 @@ impl EventRecorder {
         }
         events
     }
+
+    pub fn checkpoint_created_event(
+        checkpoint_id: Uuid,
+        instance_id: Uuid,
+        reason: &str,
+    ) -> Event {
+        Event {
+            event_id: Uuid::new_v4(),
+            event_type: "checkpoint.created".to_string(),
+            timestamp: Utc::now(),
+            resource_type: "agent_instance".to_string(),
+            resource_id: instance_id,
+            payload: serde_json::json!({
+                "checkpoint_id": checkpoint_id,
+                "reason": reason,
+            }),
+            sequence_number: None,
+        }
+    }
 }
