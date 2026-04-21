@@ -6,9 +6,14 @@ pub mod capability;
 pub mod checkpoint;
 pub mod common;
 pub mod delegation;
+pub mod delegation_event;
 pub mod event;
 pub mod gating;
 pub mod memory;
+pub mod partial_quality;
 pub mod run;
 pub mod task;
 pub mod team;
+
+pub use delegation_event::{DelegationEvent, RejectionReason};
+pub use partial_quality::PartialQuality;
