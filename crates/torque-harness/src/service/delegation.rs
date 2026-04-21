@@ -50,4 +50,12 @@ impl DelegationService {
     pub async fn reject(&self, id: Uuid) -> anyhow::Result<bool> {
         self.repo.update_status(id, "REJECTED").await
     }
+
+    pub async fn complete(&self, id: Uuid, artifact_id: Uuid) -> anyhow::Result<bool> {
+        self.repo.complete(id, artifact_id).await
+    }
+
+    pub async fn fail(&self, id: Uuid, error: &str) -> anyhow::Result<bool> {
+        self.repo.fail(id, error).await
+    }
 }

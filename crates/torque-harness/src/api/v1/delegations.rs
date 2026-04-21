@@ -100,3 +100,37 @@ pub async fn reject(
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
+
+#[derive(serde::Deserialize)]
+pub struct CompleteRequest {
+    pub artifact_id: Uuid,
+}
+
+pub async fn complete(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<CompleteRequest>,
+) -> Result<StatusCode, StatusCode> {
+    match services.delegation.complete(id, req.artifact_id).await {
+        Ok(true) => Ok(StatusCode::OK),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct FailRequest {
+    pub error: String,
+}
+
+pub async fn fail(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<FailRequest>,
+) -> Result<StatusCode, StatusCode> {
+    match services.delegation.fail(id, &req.error).await {
+        Ok(true) => Ok(StatusCode::OK),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}

@@ -134,6 +134,8 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/delegations/:id", get(delegations::get))
         .route("/v1/delegations/:id/accept", post(delegations::accept))
         .route("/v1/delegations/:id/reject", post(delegations::reject))
+        .route("/v1/delegations/:id/complete", post(delegations::complete))
+        .route("/v1/delegations/:id/fail", post(delegations::fail))
         .route("/v1/approvals", get(approvals::list))
         .route("/v1/approvals/:id", get(approvals::get))
         .route("/v1/approvals/:id/resolve", post(approvals::resolve))
