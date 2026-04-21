@@ -41,7 +41,9 @@ pub use session::{PostgresSessionRepository, SessionKernelState, SessionReposito
 pub use task::{PostgresTaskRepository, TaskRepository};
 pub use team::{
     PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository, PostgresTeamMemberRepository,
+    PostgresTeamTaskRepository, PostgresSharedTaskStateRepository, PostgresTeamEventRepository,
     TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
+    TeamTaskRepository, SharedTaskStateRepository, TeamEventRepository,
 };
 
 pub struct RepositoryContainer {
@@ -59,6 +61,9 @@ pub struct RepositoryContainer {
     pub team_definition: Arc<dyn TeamDefinitionRepository>,
     pub team_instance: Arc<dyn TeamInstanceRepository>,
     pub team_member: Arc<dyn TeamMemberRepository>,
+    pub team_task: Arc<dyn TeamTaskRepository>,
+    pub team_shared_state: Arc<dyn SharedTaskStateRepository>,
+    pub team_event: Arc<dyn TeamEventRepository>,
     pub delegation: Arc<dyn DelegationRepository>,
     pub approval: Arc<dyn ApprovalRepository>,
     pub checkpoint_ext: Arc<dyn CheckpointRepositoryExt>,
