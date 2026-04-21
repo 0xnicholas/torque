@@ -214,6 +214,9 @@ struct TeamTaskRow {
     status: String,
     triage_result: Option<serde_json::Value>,
     mode_selected: Option<String>,
+    input_artifacts: serde_json::Value,
+    parent_task_id: Option<Uuid>,
+    idempotency_key: Option<String>,
     created_at: chrono::DateTime<Utc>,
     completed_at: Option<chrono::DateTime<Utc>>,
 }
@@ -225,6 +228,8 @@ impl From<TeamTaskRow> for TeamTask {
         let triage_result = row.triage_result.and_then(|tr| {
             serde_json::from_value(tr).ok()
         });
+        let input_artifacts: Vec<Uuid> = serde_json::from_value(row.input_artifacts)
+            .unwrap_or_default();
         TeamTask {
             id: row.id,
             team_instance_id: row.team_instance_id,
@@ -233,6 +238,9 @@ impl From<TeamTaskRow> for TeamTask {
             status,
             triage_result,
             mode_selected: row.mode_selected,
+            input_artifacts,
+            parent_task_id: row.parent_task_id,
+            idempotency_key: row.idempotency_key,
             created_at: row.created_at,
             completed_at: row.completed_at,
         }
@@ -241,8 +249,17 @@ impl From<TeamTaskRow> for TeamTask {
 
 #[async_trait]
 pub trait TeamTaskRepository: Send + Sync {
-    async fn create(&self, team_instance_id: Uuid, goal: &str, instructions: Option<&str>) -> anyhow::Result<TeamTask>;
+    async fn create(
+        &self,
+        team_instance_id: Uuid,
+        goal: &str,
+        instructions: Option<&str>,
+        input_artifacts: &[Uuid],
+        parent_task_id: Option<Uuid>,
+        idempotency_key: Option<&str>,
+    ) -> anyhow::Result<TeamTask>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<TeamTask>>;
+    async fn get_by_idempotency_key(&self, team_instance_id: Uuid, idempotency_key: &str) -> anyhow::Result<Option<TeamTask>>;
     async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamTask>>;
     async fn list_open(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamTask>>;
     async fn update_status(&self, id: Uuid, status: TeamTaskStatus) -> anyhow::Result<bool>;
@@ -263,16 +280,45 @@ impl PostgresTeamTaskRepository {
 
 #[async_trait]
 impl TeamTaskRepository for PostgresTeamTaskRepository {
-    async fn create(&self, team_instance_id: Uuid, goal: &str, instructions: Option<&str>) -> anyhow::Result<TeamTask> {
+    async fn create(
+        &self,
+        team_instance_id: Uuid,
+        goal: &str,
+        instructions: Option<&str>,
+        input_artifacts: &[Uuid],
+        parent_task_id: Option<Uuid>,
+        idempotency_key: Option<&str>,
+    ) -> anyhow::Result<TeamTask> {
+        if let Some(key) = idempotency_key {
+            if let Some(existing) = self.get_by_idempotency_key(team_instance_id, key).await? {
+                return Ok(existing);
+            }
+        }
+
+        let input_artifacts_json = serde_json::to_value(input_artifacts)?;
         let row = sqlx::query_as::<_, TeamTaskRow>(
-            "INSERT INTO v1_team_tasks (team_instance_id, goal, instructions) VALUES ($1, $2, $3) RETURNING *"
+            "INSERT INTO v1_team_tasks (team_instance_id, goal, instructions, input_artifacts, parent_task_id, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
         )
         .bind(team_instance_id)
         .bind(goal)
         .bind(instructions)
+        .bind(input_artifacts_json)
+        .bind(parent_task_id)
+        .bind(idempotency_key)
         .fetch_one(self.db.pool())
         .await?;
         Ok(row.into())
+    }
+
+    async fn get_by_idempotency_key(&self, team_instance_id: Uuid, idempotency_key: &str) -> anyhow::Result<Option<TeamTask>> {
+        let row = sqlx::query_as::<_, TeamTaskRow>(
+            "SELECT * FROM v1_team_tasks WHERE team_instance_id = $1 AND idempotency_key = $2"
+        )
+        .bind(team_instance_id)
+        .bind(idempotency_key)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row.map(|r| r.into()))
     }
 
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<TeamTask>> {

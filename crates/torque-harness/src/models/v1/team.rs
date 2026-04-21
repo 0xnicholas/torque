@@ -44,7 +44,8 @@ pub struct TeamInstanceCreate {
 pub struct TeamTaskCreate {
     pub goal: String,
     pub instructions: Option<String>,
-    pub idempotency_key: String,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
     #[serde(default)]
     pub input_artifacts: Vec<Uuid>,
     #[serde(default)]
@@ -83,6 +84,9 @@ pub struct TeamTask {
     pub status: TeamTaskStatus,
     pub triage_result: Option<TriageResult>,
     pub mode_selected: Option<String>,
+    pub input_artifacts: Vec<Uuid>,
+    pub parent_task_id: Option<Uuid>,
+    pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
 }

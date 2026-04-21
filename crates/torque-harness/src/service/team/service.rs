@@ -1,6 +1,6 @@
 use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTask,
+    TeamTask, TeamTaskCreate,
 };
 use crate::repository::{
     TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
@@ -104,8 +104,7 @@ impl TeamService {
     pub async fn create_team_task(
         &self,
         team_instance_id: Uuid,
-        goal: &str,
-        instructions: Option<&str>,
+        req: &TeamTaskCreate,
     ) -> anyhow::Result<TeamTask> {
         let _instance = self
             .instance_repo
@@ -113,7 +112,14 @@ impl TeamService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Team instance not found: {}", team_instance_id))?;
 
-        let task = self.team_task_repo.create(team_instance_id, goal, instructions).await?;
+        let task = self.team_task_repo.create(
+            team_instance_id,
+            &req.goal,
+            req.instructions.as_deref(),
+            &req.input_artifacts,
+            req.parent_task_id,
+            req.idempotency_key.as_deref(),
+        ).await?;
         Ok(task)
     }
 

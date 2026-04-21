@@ -5,12 +5,15 @@ use serial_test::serial;
 
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::task::{TaskStatus, TaskType};
-use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate};
+use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate};
 use torque_harness::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository, PostgresAgentDefinitionRepository,
-    PostgresAgentInstanceRepository, PostgresTaskRepository, PostgresTeamDefinitionRepository,
-    PostgresTeamInstanceRepository, PostgresTeamMemberRepository, TaskRepository,
-    TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
+    AgentDefinitionRepository, AgentInstanceRepository,
+    PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
+    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository,
+    PostgresTeamMemberRepository, PostgresTeamTaskRepository,
+    PostgresSharedTaskStateRepository, PostgresTeamEventRepository,
+    SharedTaskStateRepository, TeamDefinitionRepository, TeamEventRepository,
+    TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
 };
 use torque_harness::service::TeamService;
 use std::sync::Arc;
@@ -27,14 +30,18 @@ async fn test_team_task_lifecycle() {
     let team_def_repo = Arc::new(PostgresTeamDefinitionRepository::new(db.clone()));
     let team_inst_repo = Arc::new(PostgresTeamInstanceRepository::new(db.clone()));
     let team_member_repo = Arc::new(PostgresTeamMemberRepository::new(db.clone()));
-    let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
+    let team_task_repo = Arc::new(PostgresTeamTaskRepository::new(db.clone()));
+    let shared_state_repo = Arc::new(PostgresSharedTaskStateRepository::new(db.clone()));
+    let team_event_repo = Arc::new(PostgresTeamEventRepository::new(db.clone()));
 
     // Setup TeamService
     let team_service = TeamService::new(
         team_def_repo.clone(),
         team_inst_repo.clone(),
         team_member_repo.clone(),
-        task_repo.clone(),
+        team_task_repo.clone(),
+        shared_state_repo.clone(),
+        team_event_repo.clone(),
     );
 
     // 1. Create supervisor agent definition
@@ -76,15 +83,19 @@ async fn test_team_task_lifecycle() {
     let task = team_service
         .create_team_task(
             team_instance.id,
-            "Complete team objective",
-            Some("Work together to achieve the goal"),
+            &TeamTaskCreate {
+                goal: "Complete team objective".to_string(),
+                instructions: Some("Work together to achieve the goal".to_string()),
+                idempotency_key: None,
+                input_artifacts: vec![],
+                parent_task_id: None,
+            },
         )
         .await
         .expect("create team task");
 
     assert_eq!(task.goal, "Complete team objective");
-    assert!(matches!(task.task_type, TaskType::TeamTask));
-    assert!(matches!(task.status, TaskStatus::Created));
+    assert!(matches!(task.status, torque_harness::models::v1::team::TeamTaskStatus::Open));
 
     // 5. List team tasks
     let tasks = team_service
@@ -95,7 +106,7 @@ async fn test_team_task_lifecycle() {
     assert_eq!(tasks[0].id, task.id);
 
     // Cleanup
-    task_repo.cancel(task.id).await.expect("cancel task");
+    team_task_repo.mark_completed(task.id).await.expect("mark completed");
     team_inst_repo
         .delete(team_instance.id)
         .await
@@ -121,13 +132,17 @@ async fn test_team_member_management() {
     let team_def_repo = Arc::new(PostgresTeamDefinitionRepository::new(db.clone()));
     let team_inst_repo = Arc::new(PostgresTeamInstanceRepository::new(db.clone()));
     let team_member_repo = Arc::new(PostgresTeamMemberRepository::new(db.clone()));
-    let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
+    let team_task_repo = Arc::new(PostgresTeamTaskRepository::new(db.clone()));
+    let shared_state_repo = Arc::new(PostgresSharedTaskStateRepository::new(db.clone()));
+    let team_event_repo = Arc::new(PostgresTeamEventRepository::new(db.clone()));
 
     let team_service = TeamService::new(
         team_def_repo.clone(),
         team_inst_repo.clone(),
         team_member_repo.clone(),
-        task_repo.clone(),
+        team_task_repo.clone(),
+        shared_state_repo.clone(),
+        team_event_repo.clone(),
     );
 
     // Create definitions and instances
@@ -248,13 +263,31 @@ async fn test_team_task_for_nonexistent_team_fails() {
     let team_def_repo = Arc::new(PostgresTeamDefinitionRepository::new(db.clone()));
     let team_inst_repo = Arc::new(PostgresTeamInstanceRepository::new(db.clone()));
     let team_member_repo = Arc::new(PostgresTeamMemberRepository::new(db.clone()));
-    let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
+    let team_task_repo = Arc::new(PostgresTeamTaskRepository::new(db.clone()));
+    let shared_state_repo = Arc::new(PostgresSharedTaskStateRepository::new(db.clone()));
+    let team_event_repo = Arc::new(PostgresTeamEventRepository::new(db.clone()));
 
-    let team_service = TeamService::new(team_def_repo, team_inst_repo, team_member_repo, task_repo);
+    let team_service = TeamService::new(
+        team_def_repo,
+        team_inst_repo,
+        team_member_repo,
+        team_task_repo,
+        shared_state_repo,
+        team_event_repo,
+    );
 
     let fake_team_id = uuid::Uuid::new_v4();
     let result = team_service
-        .create_team_task(fake_team_id, "Test", None)
+        .create_team_task(
+            fake_team_id,
+            &TeamTaskCreate {
+                goal: "Test".to_string(),
+                instructions: None,
+                idempotency_key: None,
+                input_artifacts: vec![],
+                parent_task_id: None,
+            },
+        )
         .await;
 
     assert!(

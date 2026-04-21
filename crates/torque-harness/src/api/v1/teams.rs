@@ -167,7 +167,7 @@ pub async fn create_task(
 ) -> Result<(StatusCode, Json<TeamTask>), (StatusCode, Json<ErrorBody>)> {
     let task = services
         .team
-        .create_team_task(id, &req.goal, req.instructions.as_deref())
+        .create_team_task(id, &req)
         .await
         .map_err(|e| {
             (
