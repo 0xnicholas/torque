@@ -90,11 +90,18 @@ impl ContextManager {
             "summary_chain": self.summary_chain,
         });
 
-        sqlx::query(r#"UPDATE node_logs SET tool_calls = tool_calls || $1::jsonb WHERE node_id = $2"#)
-            .bind(&logs_json)
-            .bind(self.node_id)
-            .execute(&self.db)
-            .await?;
+        sqlx::query(
+            r#"
+            INSERT INTO node_logs (node_id, tool_calls, created_at, updated_at)
+            VALUES ($1, $2::jsonb, NOW(), NOW())
+            ON CONFLICT (node_id) DO UPDATE
+            SET tool_calls = node_logs.tool_calls || $2::jsonb, updated_at = NOW()
+            "#,
+        )
+        .bind(self.node_id)
+        .bind(&logs_json)
+        .execute(&self.db)
+        .await?;
 
         Ok(())
     }
@@ -122,24 +129,24 @@ impl ContextManager {
                 self.compressed_context = self.full_history[to_keep..].to_vec();
             }
             CompressionStrategy::SummarizeOlder { summarize_count } => {
-                if let Some(ref summarizer) = self.summarizer {
-                    let to_summarize = &self.full_history[0..*summarize_count];
-                    match summarizer.summarize(to_summarize).await {
-                        Ok(summary) => {
-                            self.compressed_context = vec![Message {
-                                role: "system".into(),
-                                content: format!("Previous conversation summary: {}", summary),
-                            }];
-                            self.compressed_context
-                                .extend(self.full_history[*summarize_count..].to_vec());
-                            self.summary_chain.push(Summary {
-                                covers_range: (0, *summarize_count),
-                                content: summary,
-                                created_at: chrono::Utc::now(),
-                            });
-                        }
-                        Err(e) => anyhow::bail!("Summarization failed: {}", e),
+                let summarizer = self.summarizer.as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("SummarizeOlder strategy requires a summarizer but none was configured"))?;
+                let to_summarize = &self.full_history[0..*summarize_count];
+                match summarizer.summarize(to_summarize).await {
+                    Ok(summary) => {
+                        self.compressed_context = vec![Message {
+                            role: "system".into(),
+                            content: format!("Previous conversation summary: {}", summary),
+                        }];
+                        self.compressed_context
+                            .extend(self.full_history[*summarize_count..].to_vec());
+                        self.summary_chain.push(Summary {
+                            covers_range: (0, *summarize_count),
+                            content: summary,
+                            created_at: chrono::Utc::now(),
+                        });
                     }
+                    Err(e) => anyhow::bail!("Summarization failed: {}", e),
                 }
             }
             CompressionStrategy::ExtractiveCompression => {

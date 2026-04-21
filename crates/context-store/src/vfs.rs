@@ -216,8 +216,9 @@ impl VirtualFileSystem for VfsOverlay {
 
     async fn write(&self, path: &str, content: &[u8]) -> Result<ArtifactPointer, VfsError> {
         let resolved = self.resolve_path(path);
-        
-        if resolved.contains("/workspace/") {
+        let needs_lock = resolved.contains("/workspace/");
+
+        if needs_lock {
             self.acquire_lock(path).await?;
         }
 
@@ -239,16 +240,22 @@ impl VirtualFileSystem for VfsOverlay {
                 crate::error::ContextStoreError::Serialization(s) => VfsError::Storage(s),
             })?;
 
-            self.upsert_metadata(path, Uuid::parse_str(&pointer.task_id).unwrap_or_default(), false).await?;
+            let artifact_id = Uuid::parse_str(&pointer.task_id)
+                .map_err(|_| VfsError::Storage(format!("Invalid artifact_id returned from storage: {}", pointer.task_id)))?;
+            self.upsert_metadata(path, artifact_id, false).await?;
 
             Ok(pointer)
-        };
+        }.await;
 
-        if resolved.contains("/workspace/") {
-            let _ = self.release_lock(path).await;
+        if needs_lock {
+            if let Err(e) = self.release_lock(path).await {
+                if result.is_ok() {
+                    return Err(e);
+                }
+            }
         }
 
-        result.await
+        result
     }
 
     async fn list(&self, dir: &str) -> Result<Vec<FileMeta>, VfsError> {

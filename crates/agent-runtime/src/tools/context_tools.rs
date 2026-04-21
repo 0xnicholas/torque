@@ -14,9 +14,10 @@ pub struct CompressArgs {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SummarizeRangeArgs {
+pub struct LabelRangeArgs {
     pub start_idx: usize,
     pub end_idx: usize,
+    pub label: Option<String>,
 }
 
 pub fn register_context_tools(
@@ -60,30 +61,29 @@ pub fn register_context_tools(
         }) as Pin<Box<dyn Future<Output = Result<ToolResult, String>> + Send>>
     });
     
-    registry.register("context_summarize_range", move |args: serde_json::Value| {
+    registry.register("context_label_range", move |args: serde_json::Value| {
         let ctx = context_mgr.clone();
         Box::pin(async move {
-            let args: SummarizeRangeArgs = serde_json::from_value(args)
+            let args: LabelRangeArgs = serde_json::from_value(args)
                 .map_err(|e| format!("Invalid args: {}", e))?;
-            
+
             let mut mgr = ctx.lock().await;
-            
-            let summary = format!(
-                "Summary of messages {} to {}",
-                args.start_idx, args.end_idx
-            );
-            
+
+            let label = args.label.unwrap_or_else(|| {
+                format!("Label for messages {} to {}", args.start_idx, args.end_idx)
+            });
+
             mgr.summary_chain.push(Summary {
                 covers_range: (args.start_idx, args.end_idx),
-                content: summary.clone(),
+                content: label.clone(),
                 created_at: chrono::Utc::now(),
             });
-            
+
             mgr.persist_to_logs().await
                 .map_err(|e| format!("Persist failed: {}", e))?;
-            
+
             Ok(ToolResult {
-                output: summary,
+                output: label,
                 error: None,
                 metadata: None,
             })

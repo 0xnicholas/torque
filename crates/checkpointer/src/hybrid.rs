@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use sha2::{Sha256, Digest};
 use uuid::Uuid;
 
 use crate::error::{CheckpointerError, Result};
-use crate::trait::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
+use crate::r#trait::{CheckpointId, CheckpointMeta, CheckpointState, Checkpointer};
 
 pub struct HybridCheckpointer {
     pool: sqlx::PgPool,
@@ -45,18 +45,10 @@ impl Checkpointer for HybridCheckpointer {
             CheckpointerError::Serialization(e.to_string())
         })?;
 
-        let mut conn = self.redis.clone();
-        redis::cmd("SETEX")
-            .arg(&redis_key)
-            .arg(86400)
-            .arg(&state_json)
-            .query_async(&mut conn)
-            .await?;
-
         sqlx::query(
             r#"
             INSERT INTO checkpoints (id, run_id, node_id, tenant_id, state_hash, storage, location, created_at, expires_at)
-            VALUES ($1, $2, $3, $4, $5, 'redis', $6, NOW(), NOW() + INTERVAL '24 hours')
+            VALUES ($1, $2, $3, $4, $5, 'pending', $6, NOW(), NOW() + INTERVAL '24 hours')
             "#,
         )
         .bind(checkpoint_id.0)
@@ -64,7 +56,30 @@ impl Checkpointer for HybridCheckpointer {
         .bind(node_id)
         .bind(self.tenant_id)
         .bind(&state_hash)
+        .bind(format!("pending:{}", redis_key))
+        .execute(&self.pool)
+        .await?;
+
+        let mut conn = self.redis.clone();
+        if let Err(e) = redis::cmd("SETEX")
+            .arg(&redis_key)
+            .arg(86400)
+            .arg(&state_json)
+            .query_async::<_, ()>(&mut conn)
+            .await
+        {
+            sqlx::query("DELETE FROM checkpoints WHERE id = $1")
+                .bind(checkpoint_id.0)
+                .execute(&self.pool)
+                .await?;
+            return Err(CheckpointerError::Redis(e));
+        }
+
+        sqlx::query(
+            r#"UPDATE checkpoints SET storage = 'redis', location = $1 WHERE id = $2"#,
+        )
         .bind(&redis_key)
+        .bind(checkpoint_id.0)
         .execute(&self.pool)
         .await?;
 
@@ -133,15 +148,15 @@ impl Checkpointer for HybridCheckpointer {
     async fn delete(&self, checkpoint_id: CheckpointId) -> Result<()> {
         let redis_key = self.redis_key(&checkpoint_id);
 
+        sqlx::query("DELETE FROM checkpoints WHERE id = $1")
+            .bind(checkpoint_id.0)
+            .execute(&self.pool)
+            .await?;
+
         let mut conn = self.redis.clone();
         let _: () = redis::cmd("DEL")
             .arg(&redis_key)
             .query_async(&mut conn)
-            .await?;
-
-        sqlx::query("DELETE FROM checkpoints WHERE id = $1")
-            .bind(checkpoint_id.0)
-            .execute(&self.pool)
             .await?;
 
         Ok(())
