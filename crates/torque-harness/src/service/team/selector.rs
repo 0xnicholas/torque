@@ -5,8 +5,7 @@ use uuid::Uuid;
 
 pub struct SelectorResolver {
     team_member_repo: Arc<dyn TeamMemberRepository>,
-    #[allow(dead_code)]
-    agent_instance_repo: Arc<dyn AgentInstanceRepository>, // TODO: Use for capability profile matching when implemented
+    agent_instance_repo: Arc<dyn AgentInstanceRepository>,
 }
 
 impl SelectorResolver {
@@ -27,13 +26,21 @@ impl SelectorResolver {
     ) -> anyhow::Result<Vec<CandidateMember>> {
         let members = self.team_member_repo.list_by_team(team_instance_id, 100).await?;
 
-        let candidates: Vec<CandidateMember> = members
-            .into_iter()
-            .filter(|member| self.member_matches_selector(member, selector))
-            .map(|member| CandidateMember {
+        let mut candidates = Vec::new();
+        for member in members.into_iter() {
+            if !self.member_matches_selector(&member, selector) {
+                continue;
+            }
+
+            let agent_definition_id = match self.agent_instance_repo.get(member.agent_instance_id).await {
+                Ok(Some(inst)) => inst.agent_definition_id,
+                _ => continue,
+            };
+
+            candidates.push(CandidateMember {
                 team_member_id: member.id,
                 agent_instance_id: member.agent_instance_id,
-                agent_definition_id: member.agent_instance_id,
+                agent_definition_id,
                 role: member.role.clone(),
                 capability_profiles: vec![],
                 selection_rationale: format!("Matched {:?} selector with role: {}", selector.selector_type, member.role),
@@ -42,8 +49,8 @@ impl SelectorResolver {
                     approval_required: false,
                     risk_level: "low".to_string(),
                 },
-            })
-            .collect();
+            });
+        }
 
         Ok(candidates)
     }

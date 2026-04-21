@@ -56,13 +56,9 @@ impl RouteModeHandler {
         events.delegation_created(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
         shared_state.update_delegation_status(team_instance_id, delegation.id, "PENDING").await?;
 
-        let _delegation_result = delegation_repo.get(delegation.id).await?;
-
-        events.member_result_received(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
-
         delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
         shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-        events.member_result_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+        events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
 
         shared_state.add_decision(
             team_instance_id,
@@ -130,7 +126,7 @@ impl BroadcastModeHandler {
         for (i, delegation_id) in delegation_ids.iter().enumerate() {
             delegation_repo.update_status(*delegation_id, "ACCEPTED").await?;
             shared_state.update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED").await?;
-            events.member_result_accepted(team_instance_id, task.id, *delegation_id, candidates[i].agent_instance_id, vec![]).await?;
+            events.delegation_accepted(team_instance_id, task.id, *delegation_id, candidates[i].agent_instance_id, vec![]).await?;
             accepted_count += 1;
         }
 
@@ -202,7 +198,7 @@ impl CoordinateModeHandler {
 
         delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
         shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-        events.member_result_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+        events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
 
         shared_state.add_decision(
             team_instance_id,
@@ -266,7 +262,7 @@ impl TasksModeHandler {
 
         delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
         shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-        events.member_result_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+        events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
 
         shared_state.add_decision(
             team_instance_id,
