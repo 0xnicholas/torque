@@ -70,13 +70,13 @@ The repository is in transition, so two truths must be held separately:
    defined by the spec set under `docs/superpowers/specs/`
 
 2. **Current implementation**
-   still centered on the early `agent-runtime-service` prototype and supporting crates
+   still centered on the early `torque-harness` prototype and supporting crates
 
 Current code paths of interest:
 
 - `crates/llm`
   OpenAI-compatible client, streaming, and tool-call primitives
-- `crates/agent-runtime-service`
+- `crates/torque-harness`
   the current product-facing MVP slice for a single persistent agent session
 - `crates/checkpointer`
   an emerging checkpoint abstraction
@@ -686,7 +686,7 @@ It does not yet demonstrate the full target architecture, especially around:
 
 The current MVP implementation path primarily lives in:
 
-- `crates/agent-runtime-service`
+- `crates/torque-harness`
 - `crates/llm`
 
 ---
@@ -804,7 +804,7 @@ an instance-centric agent runtime kernel, plus a harness layer that lowers highe
   +----------------------------------------------------------------------------------+
   |                              Infrastructure / Adapters                           |
   |----------------------------------------------------------------------------------|
-  | agent-runtime-service | llm | checkpointer | DB persistence | SSE/HTTP | tools   |
+  | torque-harness | llm | checkpointer | DB persistence | SSE/HTTP | tools   |
   | SQLx repos            | OpenAI-compatible client | Redis/Postgres | auth         |
   +----------------------------------------------------------------------------------+
 
@@ -816,6 +816,6 @@ an instance-centric agent runtime kernel, plus a harness layer that lowers highe
   crates/torque-kernel         <- first scaffold now
      ↓ consumed by
 
-  crates/agent-runtime-service <- current MVP adapter/service layer
+  crates/torque-harness <- current MVP adapter/service layer
   crates/llm                   <- model client adapter
   crates/checkpointer          <- recovery/checkpoint adapter

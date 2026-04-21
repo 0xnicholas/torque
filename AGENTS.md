@@ -40,7 +40,7 @@ Current codebase:
 
 - `crates/llm`
   OpenAI-compatible client, streaming, and tool-call primitives
-- `crates/agent-runtime-service`
+- `crates/torque-harness`
   lightweight session agent prototype with persistence and streaming
 - `crates/checkpointer`
   emerging checkpoint abstraction

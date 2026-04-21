@@ -1,0 +1,35 @@
+[package]
+name = "torque-harness"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+sqlx = { workspace = true, features = ["migrate"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+subtle = "2"
+pgvector = { version = "0.4", features = ["sqlx"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Internal dependencies
+llm = { path = "../llm" }
+torque-kernel = { path = "../torque-kernel" }
+checkpointer = { path = "../checkpointer" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
+serial_test = "3"

@@ -3,7 +3,9 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-use super::client::{ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage};
+use super::client::{
+    ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage,
+};
 use super::error::{LlmError, Result};
 use super::tools::ToolCall;
 
@@ -31,8 +33,8 @@ impl OpenAiClient {
             .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
         let api_key = std::env::var("LLM_API_KEY")
             .map_err(|_| LlmError::Config("LLM_API_KEY not set".to_string()))?;
-        let default_model = std::env::var("LLM_AGENT_MODEL")
-            .unwrap_or_else(|_| "gpt-4o-mini".to_string());
+        let default_model =
+            std::env::var("LLM_AGENT_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
 
         Ok(Self::new(base_url, api_key, default_model))
     }
@@ -56,8 +58,7 @@ impl OpenAiClient {
                         }
                     })
                 })
-                .collect::<Vec<_>>()
-            );
+                .collect::<Vec<_>>());
         }
 
         if let Some(max_tokens) = request.max_tokens {
@@ -170,7 +171,9 @@ impl LlmClient for OpenAiClient {
             };
             (msg, reason)
         } else {
-            return Err(LlmError::InvalidResponse("No choices in response".to_string()));
+            return Err(LlmError::InvalidResponse(
+                "No choices in response".to_string(),
+            ));
         };
 
         let finish_reason = Self::parse_finish_reason(Some(finish_reason_str.as_str()));
@@ -216,9 +219,10 @@ impl LlmClient for OpenAiClient {
             )));
         }
 
-        let bytes = response.bytes().await.map_err(|e| {
-            LlmError::Streaming(format!("Failed to read response: {}", e))
-        })?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| LlmError::Streaming(format!("Failed to read response: {}", e)))?;
 
         let text = String::from_utf8_lossy(&bytes);
         let lines: Vec<&str> = text.lines().collect();

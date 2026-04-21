@@ -28,7 +28,7 @@ The user-facing goals are:
 
 The architecture goals are:
 
-- reuse the current `agent-runtime-service` path instead of building a second throwaway demo stack
+- reuse the current `torque-harness` path instead of building a second throwaway demo stack
 - keep implementation boundaries compatible with later kernel evolution
 - avoid introducing concepts that imply team orchestration, capability resolution, or policy UI before they are needed
 
@@ -228,7 +228,7 @@ The exact payload shape may evolve, but the event model should stay simple and p
 
 ## Internal Architecture
 
-The MVP should reuse the current `crates/agent-runtime-service` direction and tighten it into a clean demo path.
+The MVP should reuse the current `crates/torque-harness` direction and tighten it into a clean demo path.
 
 Recommended internal layers:
 
@@ -400,7 +400,7 @@ The most important demo test is qualitative:
 
 This spec is intended to drive an MVP implementation that primarily evolves:
 
-- `crates/agent-runtime-service`
+- `crates/torque-harness`
 - `crates/llm`
 
 with minimal new surface area unless needed for clarity.

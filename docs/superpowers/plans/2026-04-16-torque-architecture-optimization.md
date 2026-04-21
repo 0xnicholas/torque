@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Refactor `agent-runtime-service` to establish clean api/service/repository/kernel-bridge layers, make `torque-kernel` actually drive execution, wire event persistence and checkpointing via `checkpointer`, and thin HTTP handlers to pure adapters.
+**Goal:** Refactor `torque-harness` to establish clean api/service/repository/kernel-bridge layers, make `torque-kernel` actually drive execution, wire event persistence and checkpointing via `checkpointer`, and thin HTTP handlers to pure adapters.
 
 **Architecture:** Introduce `repository/` (async traits over sqlx), `service/` (business logic), `kernel-bridge/` (runtime integration), and `infra/` (shared tools/LLM). Replace `AgentRunner` with `SessionService` + `KernelRuntimeHandle`. Keep MVP `/sessions` API working during migration.
 
@@ -13,45 +13,45 @@
 ## File Structure Map
 
 ### New / heavily modified modules
-- `crates/agent-runtime-service/src/repository/mod.rs` — trait definitions + `RepositoryContainer`
-- `crates/agent-runtime-service/src/repository/session.rs` — `SessionRepository` trait + `PostgresSessionRepository`
-- `crates/agent-runtime-service/src/repository/message.rs` — `MessageRepository` trait + `PostgresMessageRepository`
-- `crates/agent-runtime-service/src/repository/memory.rs` — `MemoryRepository` trait + `PostgresMemoryRepository`
-- `crates/agent-runtime-service/src/repository/event.rs` — `EventRepository` trait + `PostgresEventRepository`
-- `crates/agent-runtime-service/src/repository/checkpoint.rs` — `CheckpointRepository` trait + `PostgresCheckpointRepository`
-- `crates/agent-runtime-service/src/repository/agent_definition.rs` — `AgentDefinitionRepository` trait
-- `crates/agent-runtime-service/src/service/mod.rs` — `ServiceContainer`
-- `crates/agent-runtime-service/src/service/session.rs` — `SessionService`
-- `crates/agent-runtime-service/src/service/agent_instance.rs` — `AgentInstanceService`
-- `crates/agent-runtime-service/src/service/memory.rs` — `MemoryService`
-- `crates/agent-runtime-service/src/service/tool.rs` — `ToolService`
-- `crates/agent-runtime-service/src/kernel_bridge/mod.rs` — module exports
-- `crates/agent-runtime-service/src/kernel_bridge/runtime.rs` — `KernelRuntimeHandle`
-- `crates/agent-runtime-service/src/kernel_bridge/mapping.rs` — `session_to_execution_request`
-- `crates/agent-runtime-service/src/kernel_bridge/events.rs` — `EventRecorder`
-- `crates/agent-runtime-service/src/kernel_bridge/checkpointer.rs` — `PostgresCheckpointer`
-- `crates/agent-runtime-service/src/infra/mod.rs`
-- `crates/agent-runtime-service/src/infra/tool_registry.rs` — moved from `tools/registry.rs`
-- `crates/agent-runtime-service/src/infra/stream.rs` — SSE utilities
-- `crates/agent-runtime-service/src/infra/llm.rs` — LLM wrappers
+- `crates/torque-harness/src/repository/mod.rs` — trait definitions + `RepositoryContainer`
+- `crates/torque-harness/src/repository/session.rs` — `SessionRepository` trait + `PostgresSessionRepository`
+- `crates/torque-harness/src/repository/message.rs` — `MessageRepository` trait + `PostgresMessageRepository`
+- `crates/torque-harness/src/repository/memory.rs` — `MemoryRepository` trait + `PostgresMemoryRepository`
+- `crates/torque-harness/src/repository/event.rs` — `EventRepository` trait + `PostgresEventRepository`
+- `crates/torque-harness/src/repository/checkpoint.rs` — `CheckpointRepository` trait + `PostgresCheckpointRepository`
+- `crates/torque-harness/src/repository/agent_definition.rs` — `AgentDefinitionRepository` trait
+- `crates/torque-harness/src/service/mod.rs` — `ServiceContainer`
+- `crates/torque-harness/src/service/session.rs` — `SessionService`
+- `crates/torque-harness/src/service/agent_instance.rs` — `AgentInstanceService`
+- `crates/torque-harness/src/service/memory.rs` — `MemoryService`
+- `crates/torque-harness/src/service/tool.rs` — `ToolService`
+- `crates/torque-harness/src/kernel_bridge/mod.rs` — module exports
+- `crates/torque-harness/src/kernel_bridge/runtime.rs` — `KernelRuntimeHandle`
+- `crates/torque-harness/src/kernel_bridge/mapping.rs` — `session_to_execution_request`
+- `crates/torque-harness/src/kernel_bridge/events.rs` — `EventRecorder`
+- `crates/torque-harness/src/kernel_bridge/checkpointer.rs` — `PostgresCheckpointer`
+- `crates/torque-harness/src/infra/mod.rs`
+- `crates/torque-harness/src/infra/tool_registry.rs` — moved from `tools/registry.rs`
+- `crates/torque-harness/src/infra/stream.rs` — SSE utilities
+- `crates/torque-harness/src/infra/llm.rs` — LLM wrappers
 
 ### Modified existing modules
-- `crates/agent-runtime-service/src/api/mod.rs` — wire `ServiceContainer` into state
-- `crates/agent-runtime-service/src/api/sessions.rs` — thin to ~20 lines
-- `crates/agent-runtime-service/src/api/messages.rs` — thin to ~25 lines
-- `crates/agent-runtime-service/src/api/memory.rs` — thin to service calls
-- `crates/agent-runtime-service/src/app.rs` — build `ServiceContainer` and repositories
-- `crates/agent-runtime-service/src/lib.rs` — export new modules
-- `crates/agent-runtime-service/src/main.rs` — initialize repositories + services
-- `crates/agent-runtime-service/src/agent/runner.rs` — **delete**
-- `crates/agent-runtime-service/src/kernel/mapping.rs` — **delete** (move to kernel_bridge)
-- `crates/agent-runtime-service/src/kernel/mod.rs` — **delete**
-- `crates/agent-runtime-service/src/tools/registry.rs` — **delete** (move to infra)
-- `crates/agent-runtime-service/src/models/v1/event.rs` — new DB model
-- `crates/agent-runtime-service/migrations/20260416000003_create_v1_events.up.sql` — new table
-- `crates/agent-runtime-service/migrations/20260416000003_create_v1_events.down.sql`
-- `crates/agent-runtime-service/migrations/20260416000004_create_checkpoints.up.sql` — checkpoint table
-- `crates/agent-runtime-service/migrations/20260416000004_create_checkpoints.down.sql`
+- `crates/torque-harness/src/api/mod.rs` — wire `ServiceContainer` into state
+- `crates/torque-harness/src/api/sessions.rs` — thin to ~20 lines
+- `crates/torque-harness/src/api/messages.rs` — thin to ~25 lines
+- `crates/torque-harness/src/api/memory.rs` — thin to service calls
+- `crates/torque-harness/src/app.rs` — build `ServiceContainer` and repositories
+- `crates/torque-harness/src/lib.rs` — export new modules
+- `crates/torque-harness/src/main.rs` — initialize repositories + services
+- `crates/torque-harness/src/agent/runner.rs` — **delete**
+- `crates/torque-harness/src/kernel/mapping.rs` — **delete** (move to kernel_bridge)
+- `crates/torque-harness/src/kernel/mod.rs` — **delete**
+- `crates/torque-harness/src/tools/registry.rs` — **delete** (move to infra)
+- `crates/torque-harness/src/models/v1/event.rs` — new DB model
+- `crates/torque-harness/migrations/20260416000003_create_v1_events.up.sql` — new table
+- `crates/torque-harness/migrations/20260416000003_create_v1_events.down.sql`
+- `crates/torque-harness/migrations/20260416000004_create_checkpoints.up.sql` — checkpoint table
+- `crates/torque-harness/migrations/20260416000004_create_checkpoints.down.sql`
 
 ---
 
@@ -60,12 +60,12 @@
 ### Task 0.1: Add `v1_events` and `checkpoints` migrations
 
 **Files:**
-- Create: `crates/agent-runtime-service/migrations/20260416000003_create_v1_events.up.sql`
-- Create: `crates/agent-runtime-service/migrations/20260416000003_create_v1_events.down.sql`
-- Create: `crates/agent-runtime-service/migrations/20260416000004_create_checkpoints.up.sql`
-- Create: `crates/agent-runtime-service/migrations/20260416000004_create_checkpoints.down.sql`
-- Modify: `crates/agent-runtime-service/src/models/v1/mod.rs`
-- Create: `crates/agent-runtime-service/src/models/v1/event.rs`
+- Create: `crates/torque-harness/migrations/20260416000003_create_v1_events.up.sql`
+- Create: `crates/torque-harness/migrations/20260416000003_create_v1_events.down.sql`
+- Create: `crates/torque-harness/migrations/20260416000004_create_checkpoints.up.sql`
+- Create: `crates/torque-harness/migrations/20260416000004_create_checkpoints.down.sql`
+- Modify: `crates/torque-harness/src/models/v1/mod.rs`
+- Create: `crates/torque-harness/src/models/v1/event.rs`
 
 - [ ] **Step 1: Write events migration**
 
@@ -113,7 +113,7 @@ DROP TABLE IF EXISTS checkpoints;
 - [ ] **Step 3: Write Event model**
 
 ```rust
-// crates/agent-runtime-service/src/models/v1/event.rs
+// crates/torque-harness/src/models/v1/event.rs
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -140,8 +140,8 @@ pub mod event;
 - [ ] **Step 5: Run migrations locally**
 
 ```bash
-cd crates/agent-runtime-service
-export DATABASE_URL=postgres://postgres:postgres@localhost/agent_runtime_service
+cd crates/torque-harness
+export DATABASE_URL=postgres://postgres:postgres@localhost/torque_harness
 cargo sqlx migrate run
 ```
 
@@ -150,7 +150,7 @@ Expected: migrations apply successfully.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/agent-runtime-service/migrations/ crates/agent-runtime-service/src/models/v1/
+git add crates/torque-harness/migrations/ crates/torque-harness/src/models/v1/
 git commit -m "feat(v1): add events and checkpoints migrations and model"
 ```
 
@@ -161,14 +161,14 @@ git commit -m "feat(v1): add events and checkpoints migrations and model"
 ### Task 1.1: Create `RepositoryContainer` and `SessionRepository`
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/repository/mod.rs`
-- Create: `crates/agent-runtime-service/src/repository/session.rs`
-- Modify: `crates/agent-runtime-service/src/lib.rs`
+- Create: `crates/torque-harness/src/repository/mod.rs`
+- Create: `crates/torque-harness/src/repository/session.rs`
+- Modify: `crates/torque-harness/src/lib.rs`
 
 - [ ] **Step 1: Write repository module scaffold**
 
 ```rust
-// crates/agent-runtime-service/src/repository/mod.rs
+// crates/torque-harness/src/repository/mod.rs
 use std::sync::Arc;
 
 pub mod session;
@@ -187,7 +187,7 @@ pub struct RepositoryContainer {
 
 - [ ] **Step 1b: Create agent_definition stub**
 
-Create `crates/agent-runtime-service/src/repository/agent_definition.rs`:
+Create `crates/torque-harness/src/repository/agent_definition.rs`:
 ```rust
 // Stub: full trait and Postgres impl added during Platform API v1 implementation
 #[async_trait::async_trait]
@@ -197,7 +197,7 @@ pub trait AgentDefinitionRepository: Send + Sync {}
 - [ ] **Step 2: Write SessionRepository trait and Postgres impl**
 
 ```rust
-// crates/agent-runtime-service/src/repository/session.rs
+// crates/torque-harness/src/repository/session.rs
 use async_trait::async_trait;
 use crate::db::Database;
 use crate::models::{Session, SessionStatus};
@@ -329,7 +329,7 @@ Actually, to keep the plan clean, I'll add it as part of Task 0.1 or Task 1.1. L
 
 - [ ] **Step 0: Add session columns migration**
 
-Create `crates/agent-runtime-service/migrations/20260416000005_add_session_kernel_columns.up.sql`:
+Create `crates/torque-harness/migrations/20260416000005_add_session_kernel_columns.up.sql`:
 ```sql
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_definition_id UUID;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS agent_instance_id UUID;
@@ -359,7 +359,7 @@ pub mod infra;
 - [ ] **Step 4: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS (may need to adjust Session model sqlx mapping if columns changed).
@@ -367,7 +367,7 @@ Expected: PASS (may need to adjust Session model sqlx mapping if columns changed
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/ crates/agent-runtime-service/src/lib.rs crates/agent-runtime-service/migrations/
+git add crates/torque-harness/src/repository/ crates/torque-harness/src/lib.rs crates/torque-harness/migrations/
 git commit -m "feat(repo): add SessionRepository trait and Postgres implementation"
 ```
 
@@ -376,14 +376,14 @@ git commit -m "feat(repo): add SessionRepository trait and Postgres implementati
 ### Task 1.2: Create `MessageRepository` and `MemoryRepository`
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/repository/mod.rs`
-- Create: `crates/agent-runtime-service/src/repository/message.rs`
-- Create: `crates/agent-runtime-service/src/repository/memory.rs`
+- Modify: `crates/torque-harness/src/repository/mod.rs`
+- Create: `crates/torque-harness/src/repository/message.rs`
+- Create: `crates/torque-harness/src/repository/memory.rs`
 
 - [ ] **Step 1: Write MessageRepository**
 
 ```rust
-// crates/agent-runtime-service/src/repository/message.rs
+// crates/torque-harness/src/repository/message.rs
 use async_trait::async_trait;
 use crate::db::Database;
 use crate::models::Message;
@@ -469,7 +469,7 @@ impl MessageRepository for PostgresMessageRepository {
 - [ ] **Step 2: Write MemoryRepository**
 
 ```rust
-// crates/agent-runtime-service/src/repository/memory.rs
+// crates/torque-harness/src/repository/memory.rs
 use async_trait::async_trait;
 use crate::db::Database;
 use crate::models::{MemoryCandidate, MemoryEntry, MemoryEntryStatus};
@@ -546,7 +546,7 @@ For this architecture optimization plan, the memory repository stubs are accepta
 - [ ] **Step 3: Update RepositoryContainer**
 
 ```rust
-// crates/agent-runtime-service/src/repository/mod.rs
+// crates/torque-harness/src/repository/mod.rs
 pub use message::{MessageRepository, PostgresMessageRepository};
 pub use memory::{MemoryRepository, PostgresMemoryRepository};
 
@@ -560,7 +560,7 @@ pub struct RepositoryContainer {
 - [ ] **Step 4: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS (with todo!() warnings).
@@ -568,7 +568,7 @@ Expected: PASS (with todo!() warnings).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/
+git add crates/torque-harness/src/repository/
 git commit -m "feat(repo): add MessageRepository and MemoryRepository stubs"
 ```
 
@@ -577,14 +577,14 @@ git commit -m "feat(repo): add MessageRepository and MemoryRepository stubs"
 ### Task 1.3: Create `EventRepository` and `CheckpointRepository`
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/repository/mod.rs`
-- Create: `crates/agent-runtime-service/src/repository/event.rs`
-- Create: `crates/agent-runtime-service/src/repository/checkpoint.rs`
+- Modify: `crates/torque-harness/src/repository/mod.rs`
+- Create: `crates/torque-harness/src/repository/event.rs`
+- Create: `crates/torque-harness/src/repository/checkpoint.rs`
 
 - [ ] **Step 1: Write EventRepository**
 
 ```rust
-// crates/agent-runtime-service/src/repository/event.rs
+// crates/torque-harness/src/repository/event.rs
 use async_trait::async_trait;
 use crate::db::Database;
 use crate::models::v1::event::Event;
@@ -665,7 +665,7 @@ impl EventRepository for PostgresEventRepository {
 - [ ] **Step 2: Write CheckpointRepository**
 
 ```rust
-// crates/agent-runtime-service/src/repository/checkpoint.rs
+// crates/torque-harness/src/repository/checkpoint.rs
 use async_trait::async_trait;
 use crate::db::Database;
 use uuid::Uuid;
@@ -723,7 +723,7 @@ pub struct RepositoryContainer {
 - [ ] **Step 4: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS.
@@ -731,7 +731,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/
+git add crates/torque-harness/src/repository/
 git commit -m "feat(repo): add EventRepository and CheckpointRepository"
 ```
 
@@ -742,37 +742,37 @@ git commit -m "feat(repo): add EventRepository and CheckpointRepository"
 ### Task 2.1: Create `ToolService` and move `ToolRegistry` to `infra/`
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/infra/mod.rs`
-- Create: `crates/agent-runtime-service/src/infra/tool_registry.rs`
-- Create: `crates/agent-runtime-service/src/infra/stream.rs`
-- Create: `crates/agent-runtime-service/src/infra/llm.rs`
-- Create: `crates/agent-runtime-service/src/service/tool.rs`
-- Modify: `crates/agent-runtime-service/src/tools/registry.rs`
-- Modify: `crates/agent-runtime-service/src/tools/mod.rs`
+- Create: `crates/torque-harness/src/infra/mod.rs`
+- Create: `crates/torque-harness/src/infra/tool_registry.rs`
+- Create: `crates/torque-harness/src/infra/stream.rs`
+- Create: `crates/torque-harness/src/infra/llm.rs`
+- Create: `crates/torque-harness/src/service/tool.rs`
+- Modify: `crates/torque-harness/src/tools/registry.rs`
+- Modify: `crates/torque-harness/src/tools/mod.rs`
 
 - [ ] **Step 1: Move ToolRegistry to infra**
 
-Copy the entire contents of `crates/agent-runtime-service/src/tools/registry.rs` to `crates/agent-runtime-service/src/infra/tool_registry.rs`.
+Copy the entire contents of `crates/torque-harness/src/tools/registry.rs` to `crates/torque-harness/src/infra/tool_registry.rs`.
 
-Then modify `crates/agent-runtime-service/src/infra/tool_registry.rs` to make sure all internal imports use `crate::tools::builtin` etc. properly.
+Then modify `crates/torque-harness/src/infra/tool_registry.rs` to make sure all internal imports use `crate::tools::builtin` etc. properly.
 
 - [ ] **Step 2: Create infra module files**
 
 ```rust
-// crates/agent-runtime-service/src/infra/mod.rs
+// crates/torque-harness/src/infra/mod.rs
 pub mod llm;
 pub mod stream;
 pub mod tool_registry;
 ```
 
 ```rust
-// crates/agent-runtime-service/src/infra/llm.rs
+// crates/torque-harness/src/infra/llm.rs
 // Re-export or thin wrapper around llm crate types for infra consistency
 pub use llm::{Chunk, FinishReason, LlmClient, Message as LlmMessage, OpenAiClient, ToolCall, ToolDef};
 ```
 
 ```rust
-// crates/agent-runtime-service/src/infra/stream.rs
+// crates/torque-harness/src/infra/stream.rs
 use crate::agent::stream::StreamEvent;
 
 pub fn event_to_sse(event: StreamEvent) -> Result<axum::response::sse::Event, std::convert::Infallible> {
@@ -783,7 +783,7 @@ pub fn event_to_sse(event: StreamEvent) -> Result<axum::response::sse::Event, st
 - [ ] **Step 3: Create ToolService**
 
 ```rust
-// crates/agent-runtime-service/src/service/tool.rs
+// crates/torque-harness/src/service/tool.rs
 use crate::infra::tool_registry::ToolRegistry;
 use std::sync::Arc;
 
@@ -822,7 +822,7 @@ pub use crate::infra::tool_registry::*;
 - [ ] **Step 5: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS.
@@ -830,7 +830,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/infra/ crates/agent-runtime-service/src/service/tool.rs crates/agent-runtime-service/src/tools/
+git add crates/torque-harness/src/infra/ crates/torque-harness/src/service/tool.rs crates/torque-harness/src/tools/
 git commit -m "feat(infra): move ToolRegistry to infra and add ToolService singleton"
 ```
 
@@ -839,15 +839,15 @@ git commit -m "feat(infra): move ToolRegistry to infra and add ToolService singl
 ### Task 2.2: Create `SessionService` (without kernel integration first)
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/service/mod.rs`
-- Create: `crates/agent-runtime-service/src/service/session.rs`
-- Create: `crates/agent-runtime-service/src/service/agent_instance.rs`
-- Create: `crates/agent-runtime-service/src/service/memory.rs`
-- Modify: `crates/agent-runtime-service/src/api/sessions.rs`
+- Create: `crates/torque-harness/src/service/mod.rs`
+- Create: `crates/torque-harness/src/service/session.rs`
+- Create: `crates/torque-harness/src/service/agent_instance.rs`
+- Create: `crates/torque-harness/src/service/memory.rs`
+- Modify: `crates/torque-harness/src/api/sessions.rs`
 
 - [ ] **Step 0: Create service stubs**
 
-Create `crates/agent-runtime-service/src/service/agent_instance.rs`:
+Create `crates/torque-harness/src/service/agent_instance.rs`:
 ```rust
 use std::sync::Arc;
 
@@ -864,7 +864,7 @@ impl AgentInstanceService {
 }
 ```
 
-Create `crates/agent-runtime-service/src/service/memory.rs`:
+Create `crates/torque-harness/src/service/memory.rs`:
 ```rust
 use crate::repository::MemoryRepository;
 use std::sync::Arc;
@@ -883,7 +883,7 @@ impl MemoryService {
 - [ ] **Step 1: Write ServiceContainer**
 
 ```rust
-// crates/agent-runtime-service/src/service/mod.rs
+// crates/torque-harness/src/service/mod.rs
 use std::sync::Arc;
 
 pub mod session;
@@ -938,7 +938,7 @@ impl ServiceContainer {
 - [ ] **Step 2: Write SessionService skeleton**
 
 ```rust
-// crates/agent-runtime-service/src/service/session.rs
+// crates/torque-harness/src/service/session.rs
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::LlmClient;
 use crate::infra::tool_registry::ToolRegistry;
@@ -1030,7 +1030,7 @@ impl SessionService {
 - [ ] **Step 3: Thin `api/sessions.rs` to use SessionService**
 
 ```rust
-// crates/agent-runtime-service/src/api/sessions.rs
+// crates/torque-harness/src/api/sessions.rs
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -1083,7 +1083,7 @@ pub async fn get(
 
 - [ ] **Step 4: Wire ServiceContainer into app state**
 
-Modify `crates/agent-runtime-service/src/app.rs`:
+Modify `crates/torque-harness/src/app.rs`:
 
 ```rust
 use axum::Router;
@@ -1116,7 +1116,7 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
 }
 ```
 
-Modify `crates/agent-runtime-service/src/api/mod.rs` to accept services:
+Modify `crates/torque-harness/src/api/mod.rs` to accept services:
 
 ```rust
 pub fn router(
@@ -1178,7 +1178,7 @@ In `api/memory.rs`, change all `State((db, _))` or `State((db, llm))` to `State(
 - [ ] **Step 5: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS.
@@ -1186,7 +1186,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/service/ crates/agent-runtime-service/src/api/sessions.rs crates/agent-runtime-service/src/api/mod.rs crates/agent-runtime-service/src/app.rs crates/agent-runtime-service/src/api/messages.rs crates/agent-runtime-service/src/api/memory.rs
+git add crates/torque-harness/src/service/ crates/torque-harness/src/api/sessions.rs crates/torque-harness/src/api/mod.rs crates/torque-harness/src/app.rs crates/torque-harness/src/api/messages.rs crates/torque-harness/src/api/memory.rs
 git commit -m "feat(service): add SessionService and thin sessions handler"
 ```
 
@@ -1197,16 +1197,16 @@ git commit -m "feat(service): add SessionService and thin sessions handler"
 ### Task 3.1: Create `kernel-bridge/mapping.rs` and `kernel-bridge/mod.rs`
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/kernel_bridge/mod.rs`
-- Create: `crates/agent-runtime-service/src/kernel_bridge/mapping.rs`
-- Delete: `crates/agent-runtime-service/src/kernel/mapping.rs`
-- Delete: `crates/agent-runtime-service/src/kernel/mod.rs`
-- Modify: `crates/agent-runtime-service/src/lib.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/mod.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/mapping.rs`
+- Delete: `crates/torque-harness/src/kernel/mapping.rs`
+- Delete: `crates/torque-harness/src/kernel/mod.rs`
+- Modify: `crates/torque-harness/src/lib.rs`
 
 - [ ] **Step 1: Write mapping.rs**
 
 ```rust
-// crates/agent-runtime-service/src/kernel_bridge/mapping.rs
+// crates/torque-harness/src/kernel_bridge/mapping.rs
 use crate::models::Session;
 use torque_kernel::{
     AgentDefinition, ExecutionMode, ExecutionRequest, KernelError,
@@ -1250,9 +1250,9 @@ pub use checkpointer::PostgresCheckpointer;
 - [ ] **Step 3: Delete old kernel/ module**
 
 ```bash
-rm crates/agent-runtime-service/src/kernel/mod.rs
-rm crates/agent-runtime-service/src/kernel/mapping.rs
-rmdir crates/agent-runtime-service/src/kernel
+rm crates/torque-harness/src/kernel/mod.rs
+rm crates/torque-harness/src/kernel/mapping.rs
+rmdir crates/torque-harness/src/kernel
 ```
 
 If `kernel/` directory doesn't exist or has other files, adjust. Looking at our earlier exploration, it only had `mod.rs` and `mapping.rs`.
@@ -1266,7 +1266,7 @@ Also update `agent/runner.rs` imports — it currently uses `crate::kernel::buil
 - [ ] **Step 5: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS (except references to deleted `kernel` module in runner.rs, which we'll fix next).
@@ -1274,8 +1274,8 @@ Expected: PASS (except references to deleted `kernel` module in runner.rs, which
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/kernel_bridge/ crates/agent-runtime-service/src/lib.rs
-git rm -r crates/agent-runtime-service/src/kernel/
+git add crates/torque-harness/src/kernel_bridge/ crates/torque-harness/src/lib.rs
+git rm -r crates/torque-harness/src/kernel/
 git commit -m "feat(kernel-bridge): add mapping layer and delete old kernel module"
 ```
 
@@ -1284,13 +1284,13 @@ git commit -m "feat(kernel-bridge): add mapping layer and delete old kernel modu
 ### Task 3.2: Create `EventRecorder` and `PostgresCheckpointer`
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/kernel_bridge/events.rs`
-- Create: `crates/agent-runtime-service/src/kernel_bridge/checkpointer.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/events.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/checkpointer.rs`
 
 - [ ] **Step 1: Write EventRecorder**
 
 ```rust
-// crates/agent-runtime-service/src/kernel_bridge/events.rs
+// crates/torque-harness/src/kernel_bridge/events.rs
 use crate::models::v1::event::Event;
 use chrono::Utc;
 use torque_kernel::{
@@ -1390,7 +1390,7 @@ impl EventRecorder {
 - [ ] **Step 2: Write PostgresCheckpointer**
 
 ```rust
-// crates/agent-runtime-service/src/kernel_bridge/checkpointer.rs
+// crates/torque-harness/src/kernel_bridge/checkpointer.rs
 use checkpointer::{Checkpointer, CheckpointId, CheckpointMeta, CheckpointState};
 use crate::db::Database;
 use async_trait::async_trait;
@@ -1476,7 +1476,7 @@ Actually I can just write it as `CheckpointId::new()` or similar and note that t
 - [ ] **Step 3: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS (may need minor adjustments to match `checkpointer` trait exactly).
@@ -1484,7 +1484,7 @@ Expected: PASS (may need minor adjustments to match `checkpointer` trait exactly
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/kernel_bridge/events.rs crates/agent-runtime-service/src/kernel_bridge/checkpointer.rs
+git add crates/torque-harness/src/kernel_bridge/events.rs crates/torque-harness/src/kernel_bridge/checkpointer.rs
 git commit -m "feat(kernel-bridge): add EventRecorder and PostgresCheckpointer"
 ```
 
@@ -1493,12 +1493,12 @@ git commit -m "feat(kernel-bridge): add EventRecorder and PostgresCheckpointer"
 ### Task 3.3: Implement `KernelRuntimeHandle`
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/kernel_bridge/runtime.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/runtime.rs`
 
 - [ ] **Step 1: Write KernelRuntimeHandle**
 
 ```rust
-// crates/agent-runtime-service/src/kernel_bridge/runtime.rs
+// crates/torque-harness/src/kernel_bridge/runtime.rs
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::LlmClient;
 use crate::infra::tool_registry::ToolRegistry;
@@ -1760,7 +1760,7 @@ Fix `reconstruct_request` to use the runtime store:
 - [ ] **Step 2: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS (with possible minor adjustments to `checkpointer` API).
@@ -1768,7 +1768,7 @@ Expected: PASS (with possible minor adjustments to `checkpointer` API).
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/kernel_bridge/runtime.rs
+git add crates/torque-harness/src/kernel_bridge/runtime.rs
 git commit -m "feat(kernel-bridge): add KernelRuntimeHandle"
 ```
 
@@ -1779,16 +1779,16 @@ git commit -m "feat(kernel-bridge): add KernelRuntimeHandle"
 ### Task 4.1: Integrate KernelRuntimeHandle into SessionService and thin chat handler
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/service/session.rs`
-- Modify: `crates/agent-runtime-service/src/service/mod.rs`
-- Modify: `crates/agent-runtime-service/src/api/messages.rs`
-- Modify: `crates/agent-runtime-service/src/app.rs`
-- Delete: `crates/agent-runtime-service/src/agent/runner.rs`
+- Modify: `crates/torque-harness/src/service/session.rs`
+- Modify: `crates/torque-harness/src/service/mod.rs`
+- Modify: `crates/torque-harness/src/api/messages.rs`
+- Modify: `crates/torque-harness/src/app.rs`
+- Delete: `crates/torque-harness/src/agent/runner.rs`
 
 - [ ] **Step 1: Update SessionService to use KernelRuntimeHandle**
 
 ```rust
-// crates/agent-runtime-service/src/service/session.rs
+// crates/torque-harness/src/service/session.rs
 use crate::kernel_bridge::{session_to_execution_request, KernelRuntimeHandle};
 use crate::repository::{EventRepository, CheckpointRepository, MessageRepository, SessionRepository};
 use crate::service::{MemoryService, ToolService};
@@ -1964,7 +1964,7 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
 - [ ] **Step 4: Thin messages.rs chat handler**
 
 ```rust
-// crates/agent-runtime-service/src/api/messages.rs
+// crates/torque-harness/src/api/messages.rs
 use axum::{
     body::Body,
     extract::{Extension, Path, State},
@@ -2072,15 +2072,15 @@ pub async fn list_messages(&self, session_id: Uuid) -> Result<Vec<crate::models:
 - [ ] **Step 5: Delete AgentRunner**
 
 ```bash
-rm crates/agent-runtime-service/src/agent/runner.rs
+rm crates/torque-harness/src/agent/runner.rs
 ```
 
-Update `crates/agent-runtime-service/src/agent/mod.rs` to remove `pub mod runner;`.
+Update `crates/torque-harness/src/agent/mod.rs` to remove `pub mod runner;`.
 
 - [ ] **Step 6: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS.
@@ -2088,8 +2088,8 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/service/ crates/agent-runtime-service/src/api/messages.rs crates/agent-runtime-service/src/app.rs crates/agent-runtime-service/src/agent/mod.rs
-git rm crates/agent-runtime-service/src/agent/runner.rs
+git add crates/torque-harness/src/service/ crates/torque-harness/src/api/messages.rs crates/torque-harness/src/app.rs crates/torque-harness/src/agent/mod.rs
+git rm crates/torque-harness/src/agent/runner.rs
 git commit -m "feat(service): wire KernelRuntimeHandle into SessionService, delete AgentRunner"
 ```
 
@@ -2098,8 +2098,8 @@ git commit -m "feat(service): wire KernelRuntimeHandle into SessionService, dele
 ### Task 4.2: Thin memory handlers to use MemoryService
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/api/memory.rs`
-- Modify: `crates/agent-runtime-service/src/service/memory.rs`
+- Modify: `crates/torque-harness/src/api/memory.rs`
+- Modify: `crates/torque-harness/src/service/memory.rs`
 
 - [ ] **Step 1: Implement MemoryService methods**
 
@@ -2121,7 +2121,7 @@ Each handler in `api/memory.rs` should be reduced to:
 - [ ] **Step 3: Verify compilation**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: PASS.
@@ -2129,7 +2129,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/memory.rs crates/agent-runtime-service/src/service/memory.rs crates/agent-runtime-service/src/repository/memory.rs
+git add crates/torque-harness/src/api/memory.rs crates/torque-harness/src/service/memory.rs crates/torque-harness/src/repository/memory.rs
 git commit -m "feat(service): migrate memory endpoints to MemoryService"
 ```
 
@@ -2142,7 +2142,7 @@ git commit -m "feat(service): migrate memory endpoints to MemoryService"
 - [ ] **Step 1: Build**
 
 ```bash
-cargo build -p agent-runtime-service
+cargo build -p torque-harness
 ```
 
 Expected: PASS.
@@ -2150,7 +2150,7 @@ Expected: PASS.
 - [ ] **Step 2: Run existing tests**
 
 ```bash
-cargo test -p agent-runtime-service
+cargo test -p torque-harness
 ```
 
 Expected: All existing tests pass (or pre-existing failures documented).
@@ -2160,7 +2160,7 @@ Expected: All existing tests pass (or pre-existing failures documented).
 - [ ] **Step 1: Start service locally**
 
 ```bash
-cargo run -p agent-runtime-service
+cargo run -p torque-harness
 ```
 
 - [ ] **Step 2: Create session**

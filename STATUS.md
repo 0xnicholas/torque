@@ -144,13 +144,13 @@ This builds on top of the completed Architecture Optimization and Platform API v
 
 ### Compilation
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 ✅ Clean (no errors)
 
 ### Tests
 ```bash
-cargo test -p agent-runtime-service
+cargo test -p torque-harness
 ```
 ✅ 17/17 tests passing:
 - 2 project_scope_tests
@@ -236,7 +236,7 @@ Working tree: clean
 - [ ] Document gradual labeling strategy for historical data
 
 ### Implementation Details
-- **Custom Vector type:** `crates/agent-runtime-service/src/vector_type.rs` — handles pgvector text format `[1.0,2.0,3.0]`
+- **Custom Vector type:** `crates/torque-harness/src/vector_type.rs` — handles pgvector text format `[1.0,2.0,3.0]`
 - **MemoryEntryRow:** Internal DB row struct with embedding field
 - **MemoryEntry:** Public API model without embedding (clean API responses)
 - **sqlx 0.8 upgrade:** Required for pgvector compatibility; workspace-wide upgrade completed
@@ -247,13 +247,13 @@ Working tree: clean
 
 ### Compilation
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 ✅ Clean (no errors, 3 warnings from existing code)
 
 ### Tests
 ```bash
-cargo test -p agent-runtime-service
+cargo test -p torque-harness
 ```
 ✅ All tests passing (including existing tests updated for new MemoryService signature)
 

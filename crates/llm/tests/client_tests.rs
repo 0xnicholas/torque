@@ -64,8 +64,7 @@ fn test_token_estimation() {
 
 #[test]
 fn test_request_serialization() {
-    let request = ChatRequest::new("gpt-4", vec![Message::user("Hi")])
-        .with_max_tokens(100);
+    let request = ChatRequest::new("gpt-4", vec![Message::user("Hi")]).with_max_tokens(100);
 
     let json = serde_json::to_string(&request).unwrap();
     assert!(json.contains("\"model\":\"gpt-4\""));

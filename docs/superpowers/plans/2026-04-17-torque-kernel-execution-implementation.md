@@ -31,8 +31,8 @@
 Before starting, verify the codebase state:
 
 ```bash
-cargo check -p agent-runtime-service
-cargo test -p agent-runtime-service
+cargo check -p torque-harness
+cargo test -p torque-harness
 ```
 
 Both should pass. The current `runs::run` handler returns a dummy SSE stream.
@@ -42,7 +42,7 @@ Both should pass. The current `runs::run` handler returns a dummy SSE stream.
 ## Task 1: Extend Task Model with Status Enum
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/models/v1/task.rs`
+- Modify: `crates/torque-harness/src/models/v1/task.rs`
 
 **Context:** The current `Task` model stores `status` as a plain `String`. We need a typed enum with valid transitions.
 
@@ -122,7 +122,7 @@ pub struct Task {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/task.rs
+git add crates/torque-harness/src/models/v1/task.rs
 git commit -m "feat(task): add TaskStatus enum with valid transitions"
 ```
 
@@ -131,7 +131,7 @@ git commit -m "feat(task): add TaskStatus enum with valid transitions"
 ## Task 2: Extend Task Repository with State Management
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/repository/task.rs`
+- Modify: `crates/torque-harness/src/repository/task.rs`
 
 **Context:** Current TaskRepository only supports `list`, `get`, `cancel`. We need creation and state updates.
 
@@ -232,8 +232,8 @@ async fn cancel(&self, id: Uuid) -> anyhow::Result<bool> {
 - [ ] **Step 6: Run tests**
 
 ```bash
-cargo check -p agent-runtime-service
-cargo test -p agent-runtime-service
+cargo check -p torque-harness
+cargo test -p torque-harness
 ```
 
 Expected: PASS
@@ -241,7 +241,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/task.rs
+git add crates/torque-harness/src/repository/task.rs
 git commit -m "feat(task): add create, update_status, update_produced_artifacts to TaskRepository"
 ```
 
@@ -250,7 +250,7 @@ git commit -m "feat(task): add create, update_status, update_produced_artifacts 
 ## Task 3: Extend AgentInstance Repository with Execution State
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/repository/agent_instance.rs`
+- Modify: `crates/torque-harness/src/repository/agent_instance.rs`
 
 **Context:** Need to track current task and status transitions during execution.
 
@@ -286,7 +286,7 @@ async fn update_current_task(&self, id: Uuid, task_id: Option<Uuid>) -> anyhow::
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/agent_instance.rs
+git add crates/torque-harness/src/repository/agent_instance.rs
 git commit -m "feat(agent-instance): add update_current_task to repository"
 ```
 
@@ -295,8 +295,8 @@ git commit -m "feat(agent-instance): add update_current_task to repository"
 ## Task 4: Create v1 Execution Mapping
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/kernel_bridge/v1_mapping.rs`
-- Modify: `crates/agent-runtime-service/src/kernel_bridge/mod.rs`
+- Create: `crates/torque-harness/src/kernel_bridge/v1_mapping.rs`
+- Modify: `crates/torque-harness/src/kernel_bridge/mod.rs`
 
 **Context:** Bridge v1 RunRequest to torque-kernel ExecutionRequest.
 
@@ -344,7 +344,7 @@ pub use v1_mapping::run_request_to_execution_request;
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/kernel_bridge/v1_mapping.rs crates/agent-runtime-service/src/kernel_bridge/mod.rs
+git add crates/torque-harness/src/kernel_bridge/v1_mapping.rs crates/torque-harness/src/kernel_bridge/mod.rs
 git commit -m "feat(kernel-bridge): add v1 RunRequest to ExecutionRequest mapping"
 ```
 
@@ -353,7 +353,7 @@ git commit -m "feat(kernel-bridge): add v1 RunRequest to ExecutionRequest mappin
 ## Task 5: Create Run Service
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/service/run.rs`
+- Create: `crates/torque-harness/src/service/run.rs`
 
 **Context:** Orchestrate a run: create Task, update AgentInstance status, execute, record events.
 
@@ -513,7 +513,7 @@ impl RunService {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/service/run.rs
+git add crates/torque-harness/src/service/run.rs
 git commit -m "feat(run): create RunService orchestrating task lifecycle and execution"
 ```
 
@@ -522,7 +522,7 @@ git commit -m "feat(run): create RunService orchestrating task lifecycle and exe
 ## Task 6: Wire RunService into ServiceContainer
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/service/mod.rs`
+- Modify: `crates/torque-harness/src/service/mod.rs`
 
 - [ ] **Step 1: Add run module to mod.rs**
 
@@ -560,7 +560,7 @@ let run = std::sync::Arc::new(RunService::new(
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/service/mod.rs
+git add crates/torque-harness/src/service/mod.rs
 git commit -m "feat(service): wire RunService into ServiceContainer"
 ```
 
@@ -569,7 +569,7 @@ git commit -m "feat(service): wire RunService into ServiceContainer"
 ## Task 7: Implement Real v1 Runs Handler
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/api/v1/runs.rs`
+- Modify: `crates/torque-harness/src/api/v1/runs.rs`
 
 **Context:** Replace dummy SSE with real execution.
 
@@ -648,7 +648,7 @@ impl StreamEvent {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/v1/runs.rs crates/agent-runtime-service/src/agent/stream.rs
+git add crates/torque-harness/src/api/v1/runs.rs crates/torque-harness/src/agent/stream.rs
 git commit -m "feat(runs): implement real execution via RunService with SSE streaming"
 ```
 
@@ -657,7 +657,7 @@ git commit -m "feat(runs): implement real execution via RunService with SSE stre
 ## Task 8: Refactor KernelRuntimeHandle for Shared Use
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/kernel_bridge/runtime.rs`
+- Modify: `crates/torque-harness/src/kernel_bridge/runtime.rs`
 
 **Context:** The current `execute_chat` is tightly coupled to Session. Refactor to accept AgentDefinition directly.
 
@@ -707,7 +707,7 @@ In `src/service/run.rs`, change `run_execution` to call `execute_v1` instead of 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/kernel_bridge/runtime.rs crates/agent-runtime-service/src/service/run.rs
+git add crates/torque-harness/src/kernel_bridge/runtime.rs crates/torque-harness/src/service/run.rs
 git commit -m "refactor(kernel): extract execute_v1 for shared use between session and v1"
 ```
 
@@ -716,7 +716,7 @@ git commit -m "refactor(kernel): extract execute_v1 for shared use between sessi
 ## Task 9: Add Run Execution Integration Tests
 
 **Files:**
-- Create: `crates/agent-runtime-service/tests/v1_execution_tests.rs`
+- Create: `crates/torque-harness/tests/v1_execution_tests.rs`
 
 - [ ] **Step 1: Create test file**
 
@@ -725,16 +725,16 @@ mod common;
 
 use common::setup_test_db_or_skip;
 use serial_test::serial;
-use agent_runtime_service::repository::{
+use torque_harness::repository::{
     AgentDefinitionRepository, PostgresAgentDefinitionRepository,
     AgentInstanceRepository, PostgresAgentInstanceRepository,
     TaskRepository, PostgresTaskRepository,
 };
-use agent_runtime_service::models::v1::agent_definition::AgentDefinitionCreate;
-use agent_runtime_service::models::v1::agent_instance::AgentInstanceCreate;
-use agent_runtime_service::models::v1::run::RunRequest;
-use agent_runtime_service::models::v1::task::TaskStatus;
-use agent_runtime_service::service::RunService;
+use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
+use torque_harness::models::v1::agent_instance::AgentInstanceCreate;
+use torque_harness::models::v1::run::RunRequest;
+use torque_harness::models::v1::task::TaskStatus;
+use torque_harness::service::RunService;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -797,7 +797,7 @@ async fn test_run_creates_task_and_updates_status() {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add crates/agent-runtime-service/tests/v1_execution_tests.rs
+git add crates/torque-harness/tests/v1_execution_tests.rs
 git commit -m "test(run): add v1 execution integration test scaffold"
 ```
 
@@ -869,7 +869,7 @@ git commit -m "docs(openapi): update RunRequest and add RunEvent schemas"
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-cargo test -p agent-runtime-service
+cargo test -p torque-harness
 ```
 
 Expected: All tests pass
@@ -877,7 +877,7 @@ Expected: All tests pass
 - [ ] **Step 2: Run compilation check**
 
 ```bash
-cargo check -p agent-runtime-service
+cargo check -p torque-harness
 ```
 
 Expected: No errors
@@ -915,7 +915,7 @@ git commit -m "feat(kernel-execution): complete v1 AgentInstance execution engin
 
 ### Manual Verification
 ```bash
-cargo run -p agent-runtime-service
+cargo run -p torque-harness
 
 # Create agent definition
 curl -X POST http://localhost:3000/v1/agent-definitions \

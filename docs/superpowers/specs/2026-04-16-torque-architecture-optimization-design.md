@@ -1,7 +1,7 @@
 # Torque Architecture Optimization Design
 
 > Date: 2026-04-16  
-> Scope: `agent-runtime-service` internal refactoring + `torque-kernel` integration + `checkpointer` bridge  
+> Scope: `torque-harness` internal refactoring + `torque-kernel` integration + `checkpointer` bridge  
 > Goal: Make the kernel actually run, establish clean api/service/repository layers, and wire event persistence and checkpoints.
 
 ---
@@ -12,10 +12,10 @@
 
 The current codebase has six structural issues:
 
-1. **Kernel is bypassed** — `torque-kernel` defines a full state machine, execution engine, and recovery model, but `agent-runtime-service` constructs kernel objects and discards them; `AgentRunner` calls the LLM client directly.
+1. **Kernel is bypassed** — `torque-kernel` defines a full state machine, execution engine, and recovery model, but `torque-harness` constructs kernel objects and discards them; `AgentRunner` calls the LLM client directly.
 2. **HTTP layer contains all business logic** — Handlers like `messages::chat` are 150+ lines, mixing auth, DB gating, tool registration, orchestration, and SSE assembly.
 3. **ToolRegistry is rebuilt on every request** — No shared lifecycle; builtin tools are re-registered inside every chat handler.
-4. **Checkpointer is isolated** — `crates/checkpointer` has a trait and hybrid impl, but `agent-runtime-service` never uses it; `torque-kernel` defines its own `Checkpoint`.
+4. **Checkpointer is isolated** — `crates/checkpointer` has a trait and hybrid impl, but `torque-harness` never uses it; `torque-kernel` defines its own `Checkpoint`.
 5. **Semantic gap between MVP and v1** — MVP uses `Session` as the core model; Kernel and the v1 spec use `AgentInstance`. There is no migration strategy.
 6. **No event persistence** — `ExecutionEngine` emits `ExecutionEvent` vectors in memory, but there is no table or repository to persist them.
 
@@ -42,7 +42,7 @@ The current codebase has six structural issues:
 
 ## 2. Service Internal Layering
 
-The `agent-runtime-service/src` tree is reorganized into five layers with strict downward dependencies:
+The `torque-harness/src` tree is reorganized into five layers with strict downward dependencies:
 
 ```
 api/           → HTTP adapters; may call service and repository
@@ -661,7 +661,7 @@ MVP `sessions` status and v1 events are both written during the transition:
 ### 6.1 Final File Structure
 
 ```
-crates/agent-runtime-service/src/
+crates/torque-harness/src/
 ├── main.rs
 ├── app.rs
 ├── lib.rs
@@ -754,9 +754,9 @@ crates/agent-runtime-service/src/
 
 ## 7. Success Criteria
 
-1. `cargo check -p agent-runtime-service` passes after each task.
+1. `cargo check -p torque-harness` passes after each task.
 2. MVP `/sessions` and `/chat` endpoints continue to function.
 3. `v1_events` is populated on every chat request.
-4. `checkpointer` crate is referenced in `agent-runtime-service` source.
+4. `checkpointer` crate is referenced in `torque-harness` source.
 5. Handlers are under 30 lines; services are independently unit-testable.
 6. `torque-kernel` objects are actually advanced by runtime code.

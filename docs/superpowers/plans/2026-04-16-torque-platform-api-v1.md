@@ -4,7 +4,7 @@
 
 **Goal:** Implement the Torque Platform API v1 REST service with SSE streaming runs, async team tasks, and full CRUD for all v1 resources, while keeping the existing MVP API functional.
 
-**Architecture:** Extend `crates/agent-runtime-service` with a parallel `/v1/` router hierarchy, built on top of the `repository/` + `service/` + `kernel-bridge/` layers established by the architecture optimization. HTTP handlers are thin adapters (<30 lines) that delegate to `service/` only. DB access is isolated behind `repository/` async traits. Keep MVP routes intact during migration. Use tokio streams for SSE. Use sqlx for all persistence.
+**Architecture:** Extend `crates/torque-harness` with a parallel `/v1/` router hierarchy, built on top of the `repository/` + `service/` + `kernel-bridge/` layers established by the architecture optimization. HTTP handlers are thin adapters (<30 lines) that delegate to `service/` only. DB access is isolated behind `repository/` async traits. Keep MVP routes intact during migration. Use tokio streams for SSE. Use sqlx for all persistence.
 
 **Tech Stack:** Rust, axum 0.7, tokio, sqlx, serde, uuid, chrono, tracing, tower-http
 
@@ -13,70 +13,70 @@
 ## File Structure Map
 
 ### New API route modules
-- `crates/agent-runtime-service/src/api/v1/mod.rs` — v1 router assembly
-- `crates/agent-runtime-service/src/api/v1/agent_definitions.rs` — `POST|GET /v1/agent-definitions`
-- `crates/agent-runtime-service/src/api/v1/agent_instances.rs` — `POST|GET /v1/agent-instances`, `GET|DELETE /v1/agent-instances/{id}`, `POST /v1/agent-instances/{id}/cancel`, `POST /v1/agent-instances/{id}/resume`, `POST /v1/agent-instances/{id}/time-travel`, `GET /v1/agent-instances/{id}/delegations`, `GET /v1/agent-instances/{id}/artifacts`, `GET /v1/agent-instances/{id}/events`, `GET /v1/agent-instances/{id}/checkpoints`
-- `crates/agent-runtime-service/src/api/v1/runs.rs` — `POST /v1/agent-instances/{id}/runs` (SSE)
-- `crates/agent-runtime-service/src/api/v1/tasks.rs` — `GET /v1/tasks`, `GET /v1/tasks/{id}`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/events`, `GET /v1/tasks/{id}/approvals`, `GET /v1/tasks/{id}/delegations`
-- `crates/agent-runtime-service/src/api/v1/artifacts.rs` — `POST|GET /v1/artifacts`, `GET|DELETE /v1/artifacts/{id}`, `content`, `publish`
-- `crates/agent-runtime-service/src/api/v1/memory.rs` — `POST|GET /v1/memory-write-candidates`, `GET /v1/memory-write-candidates/{id}`, `approve|reject`, `GET /v1/memory-entries`, `GET /v1/memory-entries/{id}`, `search`
-- `crates/agent-runtime-service/src/api/v1/capabilities.rs` — `POST|GET /v1/capability-profiles`, `GET|DELETE /v1/capability-profiles/{id}`, `bindings`, `resolve`, `POST|GET /v1/capability-registry-bindings`, `GET|DELETE /v1/capability-registry-bindings/{id}`
-- `crates/agent-runtime-service/src/api/v1/teams.rs` — `POST|GET /v1/team-definitions`, `GET|DELETE /v1/team-definitions/{id}`, `POST|GET /v1/team-instances`, `GET|DELETE /v1/team-instances/{id}`, `GET /v1/team-instances/{id}/tasks`, `GET /v1/team-instances/{id}/members`, `GET /v1/team-instances/{id}/shared-state`, `GET /v1/team-instances/{id}/artifacts`, `GET /v1/team-instances/{id}/events`, `POST /v1/team-instances/{id}/tasks` (team task creation)
-- `crates/agent-runtime-service/src/api/v1/delegations.rs` — `POST|GET /v1/delegations`, `GET /v1/delegations/{id}`, `accept|reject`
-- `crates/agent-runtime-service/src/api/v1/approvals.rs` — `GET /v1/approvals`, `GET /v1/approvals/{id}`, `resolve`
-- `crates/agent-runtime-service/src/api/v1/checkpoints.rs` — `GET /v1/checkpoints`, `GET /v1/checkpoints/{id}`, `restore`
-- `crates/agent-runtime-service/src/api/v1/events.rs` — `GET /v1/events`, `GET /v1/agent-instances/{id}/events`, `GET /v1/team-instances/{id}/events`
+- `crates/torque-harness/src/api/v1/mod.rs` — v1 router assembly
+- `crates/torque-harness/src/api/v1/agent_definitions.rs` — `POST|GET /v1/agent-definitions`
+- `crates/torque-harness/src/api/v1/agent_instances.rs` — `POST|GET /v1/agent-instances`, `GET|DELETE /v1/agent-instances/{id}`, `POST /v1/agent-instances/{id}/cancel`, `POST /v1/agent-instances/{id}/resume`, `POST /v1/agent-instances/{id}/time-travel`, `GET /v1/agent-instances/{id}/delegations`, `GET /v1/agent-instances/{id}/artifacts`, `GET /v1/agent-instances/{id}/events`, `GET /v1/agent-instances/{id}/checkpoints`
+- `crates/torque-harness/src/api/v1/runs.rs` — `POST /v1/agent-instances/{id}/runs` (SSE)
+- `crates/torque-harness/src/api/v1/tasks.rs` — `GET /v1/tasks`, `GET /v1/tasks/{id}`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/events`, `GET /v1/tasks/{id}/approvals`, `GET /v1/tasks/{id}/delegations`
+- `crates/torque-harness/src/api/v1/artifacts.rs` — `POST|GET /v1/artifacts`, `GET|DELETE /v1/artifacts/{id}`, `content`, `publish`
+- `crates/torque-harness/src/api/v1/memory.rs` — `POST|GET /v1/memory-write-candidates`, `GET /v1/memory-write-candidates/{id}`, `approve|reject`, `GET /v1/memory-entries`, `GET /v1/memory-entries/{id}`, `search`
+- `crates/torque-harness/src/api/v1/capabilities.rs` — `POST|GET /v1/capability-profiles`, `GET|DELETE /v1/capability-profiles/{id}`, `bindings`, `resolve`, `POST|GET /v1/capability-registry-bindings`, `GET|DELETE /v1/capability-registry-bindings/{id}`
+- `crates/torque-harness/src/api/v1/teams.rs` — `POST|GET /v1/team-definitions`, `GET|DELETE /v1/team-definitions/{id}`, `POST|GET /v1/team-instances`, `GET|DELETE /v1/team-instances/{id}`, `GET /v1/team-instances/{id}/tasks`, `GET /v1/team-instances/{id}/members`, `GET /v1/team-instances/{id}/shared-state`, `GET /v1/team-instances/{id}/artifacts`, `GET /v1/team-instances/{id}/events`, `POST /v1/team-instances/{id}/tasks` (team task creation)
+- `crates/torque-harness/src/api/v1/delegations.rs` — `POST|GET /v1/delegations`, `GET /v1/delegations/{id}`, `accept|reject`
+- `crates/torque-harness/src/api/v1/approvals.rs` — `GET /v1/approvals`, `GET /v1/approvals/{id}`, `resolve`
+- `crates/torque-harness/src/api/v1/checkpoints.rs` — `GET /v1/checkpoints`, `GET /v1/checkpoints/{id}`, `restore`
+- `crates/torque-harness/src/api/v1/events.rs` — `GET /v1/events`, `GET /v1/agent-instances/{id}/events`, `GET /v1/team-instances/{id}/events`
 
 ### Shared models
-- `crates/agent-runtime-service/src/models/v1/mod.rs`
-- `crates/agent-runtime-service/src/models/v1/common.rs` — Error, Pagination, ListQuery
-- `crates/agent-runtime-service/src/models/v1/agent_definition.rs`
-- `crates/agent-runtime-service/src/models/v1/agent_instance.rs`
-- `crates/agent-runtime-service/src/models/v1/run.rs`
-- `crates/agent-runtime-service/src/models/v1/task.rs`
-- `crates/agent-runtime-service/src/models/v1/artifact.rs`
-- `crates/agent-runtime-service/src/models/v1/memory.rs`
-- `crates/agent-runtime-service/src/models/v1/capability.rs`
-- `crates/agent-runtime-service/src/models/v1/team.rs`
-- `crates/agent-runtime-service/src/models/v1/delegation.rs`
-- `crates/agent-runtime-service/src/models/v1/approval.rs`
-- `crates/agent-runtime-service/src/models/v1/checkpoint.rs`
-- `crates/agent-runtime-service/src/models/v1/event.rs`
+- `crates/torque-harness/src/models/v1/mod.rs`
+- `crates/torque-harness/src/models/v1/common.rs` — Error, Pagination, ListQuery
+- `crates/torque-harness/src/models/v1/agent_definition.rs`
+- `crates/torque-harness/src/models/v1/agent_instance.rs`
+- `crates/torque-harness/src/models/v1/run.rs`
+- `crates/torque-harness/src/models/v1/task.rs`
+- `crates/torque-harness/src/models/v1/artifact.rs`
+- `crates/torque-harness/src/models/v1/memory.rs`
+- `crates/torque-harness/src/models/v1/capability.rs`
+- `crates/torque-harness/src/models/v1/team.rs`
+- `crates/torque-harness/src/models/v1/delegation.rs`
+- `crates/torque-harness/src/models/v1/approval.rs`
+- `crates/torque-harness/src/models/v1/checkpoint.rs`
+- `crates/torque-harness/src/models/v1/event.rs`
 
 ### Repository modules (v1 extensions)
 Extends the `repository/` layer established by the architecture optimization.
-- `crates/agent-runtime-service/src/repository/agent_definition.rs` — `AgentDefinitionRepository` trait + `PostgresAgentDefinitionRepository`
-- `crates/agent-runtime-service/src/repository/agent_instance.rs` — `AgentInstanceRepository` trait + impl
-- `crates/agent-runtime-service/src/repository/task.rs` — `TaskRepository` trait + impl
-- `crates/agent-runtime-service/src/repository/artifact.rs` — `ArtifactRepository` trait + impl
-- `crates/agent-runtime-service/src/repository/memory.rs` — filled `MemoryRepository` + `MemoryWriteCandidateRepository`
-- `crates/agent-runtime-service/src/repository/capability.rs` — `CapabilityProfileRepository` + `CapabilityRegistryBindingRepository`
-- `crates/agent-runtime-service/src/repository/team.rs` — `TeamDefinitionRepository` + `TeamInstanceRepository`
-- `crates/agent-runtime-service/src/repository/delegation.rs` — `DelegationRepository`
-- `crates/agent-runtime-service/src/repository/approval.rs` — `ApprovalRepository`
+- `crates/torque-harness/src/repository/agent_definition.rs` — `AgentDefinitionRepository` trait + `PostgresAgentDefinitionRepository`
+- `crates/torque-harness/src/repository/agent_instance.rs` — `AgentInstanceRepository` trait + impl
+- `crates/torque-harness/src/repository/task.rs` — `TaskRepository` trait + impl
+- `crates/torque-harness/src/repository/artifact.rs` — `ArtifactRepository` trait + impl
+- `crates/torque-harness/src/repository/memory.rs` — filled `MemoryRepository` + `MemoryWriteCandidateRepository`
+- `crates/torque-harness/src/repository/capability.rs` — `CapabilityProfileRepository` + `CapabilityRegistryBindingRepository`
+- `crates/torque-harness/src/repository/team.rs` — `TeamDefinitionRepository` + `TeamInstanceRepository`
+- `crates/torque-harness/src/repository/delegation.rs` — `DelegationRepository`
+- `crates/torque-harness/src/repository/approval.rs` — `ApprovalRepository`
 
 ### Service modules (v1)
-- `crates/agent-runtime-service/src/service/agent_definition.rs` — `AgentDefinitionService`
-- `crates/agent-runtime-service/src/service/agent_instance.rs` — `AgentInstanceService`
-- `crates/agent-runtime-service/src/service/task.rs` — `TaskService`
-- `crates/agent-runtime-service/src/service/artifact.rs` — `ArtifactService`
-- `crates/agent-runtime-service/src/service/memory.rs` — filled `MemoryService`
-- `crates/agent-runtime-service/src/service/capability.rs` — `CapabilityService`
-- `crates/agent-runtime-service/src/service/team.rs` — `TeamService`
-- `crates/agent-runtime-service/src/service/delegation.rs` — `DelegationService`
-- `crates/agent-runtime-service/src/service/approval.rs` — `ApprovalService`
-- `crates/agent-runtime-service/src/service/mod.rs` — extended `ServiceContainer` with v1 services
+- `crates/torque-harness/src/service/agent_definition.rs` — `AgentDefinitionService`
+- `crates/torque-harness/src/service/agent_instance.rs` — `AgentInstanceService`
+- `crates/torque-harness/src/service/task.rs` — `TaskService`
+- `crates/torque-harness/src/service/artifact.rs` — `ArtifactService`
+- `crates/torque-harness/src/service/memory.rs` — filled `MemoryService`
+- `crates/torque-harness/src/service/capability.rs` — `CapabilityService`
+- `crates/torque-harness/src/service/team.rs` — `TeamService`
+- `crates/torque-harness/src/service/delegation.rs` — `DelegationService`
+- `crates/torque-harness/src/service/approval.rs` — `ApprovalService`
+- `crates/torque-harness/src/service/mod.rs` — extended `ServiceContainer` with v1 services
 
 ### Tests
-- `crates/agent-runtime-service/tests/v1_agent_definitions.rs`
-- `crates/agent-runtime-service/tests/v1_agent_instances.rs`
-- `crates/agent-runtime-service/tests/v1_runs.rs`
-- `crates/agent-runtime-service/tests/v1_teams.rs`
-- `crates/agent-runtime-service/tests/v1_end_to_end.rs`
+- `crates/torque-harness/tests/v1_agent_definitions.rs`
+- `crates/torque-harness/tests/v1_agent_instances.rs`
+- `crates/torque-harness/tests/v1_runs.rs`
+- `crates/torque-harness/tests/v1_teams.rs`
+- `crates/torque-harness/tests/v1_end_to_end.rs`
 
 ### Migrations
-- `crates/agent-runtime-service/migrations/20260416000001_create_v1_agent_definitions.up.sql`
-- `crates/agent-runtime-service/migrations/20260416000001_create_v1_agent_definitions.down.sql`
+- `crates/torque-harness/migrations/20260416000001_create_v1_agent_definitions.up.sql`
+- `crates/torque-harness/migrations/20260416000001_create_v1_agent_definitions.down.sql`
 - (similar for instances, tasks, artifacts, memory, capabilities, teams, delegations, approvals, checkpoints, events)
 
 ### OpenAPI
@@ -89,8 +89,8 @@ Extends the `repository/` layer established by the architecture optimization.
 ### Task 0.1: Create v1 common request/response models
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/common.rs`
-- Modify: `crates/agent-runtime-service/src/models/mod.rs`
+- Create: `crates/torque-harness/src/models/v1/common.rs`
+- Modify: `crates/torque-harness/src/models/mod.rs`
 
 - [ ] **Step 1: Write the model file**
 
@@ -152,7 +152,7 @@ pub struct EventListQuery {
 
 - [ ] **Step 2: Export from models/mod.rs**
 
-Add to `crates/agent-runtime-service/src/models/mod.rs`:
+Add to `crates/torque-harness/src/models/mod.rs`:
 ```rust
 pub mod v1;
 ```
@@ -167,13 +167,13 @@ pub mod agent_definition;
 
 - [ ] **Step 4: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/
+git add crates/torque-harness/src/models/
 git commit -m "feat(v1): add common request/response models"
 ```
 
@@ -182,8 +182,8 @@ git commit -m "feat(v1): add common request/response models"
 ### Task 0.2: Add v1 router scaffold
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/api/v1/mod.rs`
-- Modify: `crates/agent-runtime-service/src/api/mod.rs`
+- Create: `crates/torque-harness/src/api/v1/mod.rs`
+- Modify: `crates/torque-harness/src/api/mod.rs`
 
 - [ ] **Step 1: Write v1 router module**
 
@@ -219,7 +219,7 @@ pub fn router(services: Arc<ServiceContainer>) -> Router {
 
 - [ ] **Step 2: Mount v1 router in main api router**
 
-Modify `crates/agent-runtime-service/src/api/mod.rs`:
+Modify `crates/torque-harness/src/api/mod.rs`:
 ```rust
 pub mod v1;
 ```
@@ -246,7 +246,7 @@ pub fn router(
 
 - [ ] **Step 3: Add placeholder handler**
 
-Create `crates/agent-runtime-service/src/api/v1/agent_definitions.rs`:
+Create `crates/torque-harness/src/api/v1/agent_definitions.rs`:
 ```rust
 use axum::{extract::State, http::StatusCode, Json};
 use crate::service::ServiceContainer;
@@ -279,13 +279,13 @@ pub async fn delete(
 
 - [ ] **Step 4: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/
+git add crates/torque-harness/src/api/
 git commit -m "feat(v1): add v1 router scaffold"
 ```
 
@@ -294,8 +294,8 @@ git commit -m "feat(v1): add v1 router scaffold"
 ### Task 0.3: Add lifecycle guards, idempotency, and run-gate infrastructure
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/v1_guards.rs`
-- Modify: `crates/agent-runtime-service/src/lib.rs`
+- Create: `crates/torque-harness/src/v1_guards.rs`
+- Modify: `crates/torque-harness/src/lib.rs`
 
 - [ ] **Step 1: Write guard module**
 
@@ -382,7 +382,7 @@ impl RunGate {
 
 - [ ] **Step 4: Export from lib.rs**
 
-Add to `crates/agent-runtime-service/src/lib.rs`:
+Add to `crates/torque-harness/src/lib.rs`:
 ```rust
 pub mod v1_guards;
 ```
@@ -392,7 +392,7 @@ pub mod v1_guards;
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/v1_guards.rs crates/agent-runtime-service/src/lib.rs
+git add crates/torque-harness/src/v1_guards.rs crates/torque-harness/src/lib.rs
 git commit -m "feat(v1): add lifecycle guards, idempotency store, and run gate"
 ```
 
@@ -403,9 +403,9 @@ git commit -m "feat(v1): add lifecycle guards, idempotency store, and run gate"
 ### Task 1.1: Add AgentDefinition model and migration
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/agent_definition.rs`
-- Create: `crates/agent-runtime-service/migrations/20260416000001_create_v1_agent_definitions.up.sql`
-- Create: `crates/agent-runtime-service/migrations/20260416000001_create_v1_agent_definitions.down.sql`
+- Create: `crates/torque-harness/src/models/v1/agent_definition.rs`
+- Create: `crates/torque-harness/migrations/20260416000001_create_v1_agent_definitions.up.sql`
+- Create: `crates/torque-harness/migrations/20260416000001_create_v1_agent_definitions.down.sql`
 
 - [ ] **Step 1: Write the model**
 
@@ -478,15 +478,15 @@ DROP TABLE IF EXISTS v1_agent_definitions;
 - [ ] **Step 3: Run migration locally**
 
 ```bash
-cd crates/agent-runtime-service
-export DATABASE_URL=postgres://postgres:postgres@localhost/agent_runtime_service
+cd crates/torque-harness
+export DATABASE_URL=postgres://postgres:postgres@localhost/torque_harness
 cargo sqlx migrate run
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/agent_definition.rs crates/agent-runtime-service/migrations/
+git add crates/torque-harness/src/models/v1/agent_definition.rs crates/torque-harness/migrations/
 git commit -m "feat(v1): add AgentDefinition model and migration"
 ```
 
@@ -495,13 +495,13 @@ git commit -m "feat(v1): add AgentDefinition model and migration"
 ### Task 1.2: Implement AgentDefinitionRepository and AgentDefinitionService
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/repository/agent_definition.rs`
-- Create: `crates/agent-runtime-service/src/service/agent_definition.rs`
-- Modify: `crates/agent-runtime-service/src/service/mod.rs`
+- Modify: `crates/torque-harness/src/repository/agent_definition.rs`
+- Create: `crates/torque-harness/src/service/agent_definition.rs`
+- Modify: `crates/torque-harness/src/service/mod.rs`
 
 - [ ] **Step 1: Implement AgentDefinitionRepository trait and Postgres impl**
 
-Modify `crates/agent-runtime-service/src/repository/agent_definition.rs`:
+Modify `crates/torque-harness/src/repository/agent_definition.rs`:
 ```rust
 use async_trait::async_trait;
 use crate::db::Database;
@@ -596,7 +596,7 @@ impl AgentDefinitionRepository for PostgresAgentDefinitionRepository {
 
 - [ ] **Step 2: Implement AgentDefinitionService**
 
-Create `crates/agent-runtime-service/src/service/agent_definition.rs`:
+Create `crates/torque-harness/src/service/agent_definition.rs`:
 ```rust
 use crate::models::v1::agent_definition::{AgentDefinition, AgentDefinitionCreate};
 use crate::repository::AgentDefinitionRepository;
@@ -632,7 +632,7 @@ impl AgentDefinitionService {
 
 - [ ] **Step 3: Wire into RepositoryContainer and ServiceContainer**
 
-Modify `crates/agent-runtime-service/src/repository/mod.rs`:
+Modify `crates/torque-harness/src/repository/mod.rs`:
 ```rust
 pub mod agent_definition;
 pub use agent_definition::{AgentDefinitionRepository, PostgresAgentDefinitionRepository};
@@ -648,7 +648,7 @@ And in `app.rs`, when constructing `RepositoryContainer`, add:
 agent_definition: Arc::new(crate::repository::PostgresAgentDefinitionRepository::new(db.clone())),
 ```
 
-Modify `crates/agent-runtime-service/src/service/mod.rs`:
+Modify `crates/torque-harness/src/service/mod.rs`:
 ```rust
 pub mod agent_definition;
 pub use agent_definition::AgentDefinitionService;
@@ -668,13 +668,13 @@ Update the `Self { ... }` return to include `agent_definition,`.
 
 - [ ] **Step 4: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/repository/agent_definition.rs crates/agent-runtime-service/src/service/
+git add crates/torque-harness/src/repository/agent_definition.rs crates/torque-harness/src/service/
 git commit -m "feat(v1): add AgentDefinitionRepository and AgentDefinitionService"
 ```
 
@@ -683,8 +683,8 @@ git commit -m "feat(v1): add AgentDefinitionRepository and AgentDefinitionServic
 ### Task 1.3: Implement AgentDefinition HTTP handlers
 
 **Files:**
-- Modify: `crates/agent-runtime-service/src/api/v1/agent_definitions.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/mod.rs`
+- Modify: `crates/torque-harness/src/api/v1/agent_definitions.rs`
+- Modify: `crates/torque-harness/src/api/v1/mod.rs`
 
 - [ ] **Step 1: Implement handlers**
 
@@ -770,14 +770,14 @@ In `src/api/v1/mod.rs`, verify the routes exist:
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 4: Write integration test**
 
-Create `crates/agent-runtime-service/tests/v1_agent_definitions.rs`:
+Create `crates/torque-harness/tests/v1_agent_definitions.rs`:
 ```rust
-use agent_runtime_service::models::v1::agent_definition::AgentDefinition;
+use torque_harness::models::v1::agent_definition::AgentDefinition;
 
 #[tokio::test]
 async fn test_create_and_get_agent_definition() {
@@ -802,7 +802,7 @@ async fn test_create_and_get_agent_definition() {
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/v1/agent_definitions.rs crates/agent-runtime-service/tests/v1_agent_definitions.rs
+git add crates/torque-harness/src/api/v1/agent_definitions.rs crates/torque-harness/tests/v1_agent_definitions.rs
 git commit -m "feat(v1): implement AgentDefinition handlers and tests"
 ```
 
@@ -813,10 +813,10 @@ git commit -m "feat(v1): implement AgentDefinition handlers and tests"
 ### Task 2.1: Add AgentInstance model, migration, and DB layer
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/agent_instance.rs`
-- Create: `crates/agent-runtime-service/migrations/20260416000002_create_v1_agent_instances.up.sql`
-- Create: `crates/agent-runtime-service/src/repository/agent_instance.rs`
-- Create: `crates/agent-runtime-service/src/service/agent_instance.rs`
+- Create: `crates/torque-harness/src/models/v1/agent_instance.rs`
+- Create: `crates/torque-harness/migrations/20260416000002_create_v1_agent_instances.up.sql`
+- Create: `crates/torque-harness/src/repository/agent_instance.rs`
+- Create: `crates/torque-harness/src/service/agent_instance.rs`
 
 - [ ] **Step 1: Write model**
 
@@ -890,7 +890,7 @@ Functions: `create`, `list`, `get`, `delete`, `update_status`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/agent_instance.rs crates/agent-runtime-service/src/repository/agent_instance.rs crates/agent-runtime-service/src/service/agent_instance.rs crates/agent-runtime-service/migrations/
+git add crates/torque-harness/src/models/v1/agent_instance.rs crates/torque-harness/src/repository/agent_instance.rs crates/torque-harness/src/service/agent_instance.rs crates/torque-harness/migrations/
 git commit -m "feat(v1): add AgentInstance model, migration, and DB layer"
 ```
 
@@ -899,8 +899,8 @@ git commit -m "feat(v1): add AgentInstance model, migration, and DB layer"
 ### Task 2.2: Implement AgentInstance HTTP handlers
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/api/v1/agent_instances.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/mod.rs`
+- Create: `crates/torque-harness/src/api/v1/agent_instances.rs`
+- Modify: `crates/torque-harness/src/api/v1/mod.rs`
 
 - [ ] **Step 1: Implement CRUD + lifecycle handlers**
 
@@ -926,13 +926,13 @@ git commit -m "feat(v1): add AgentInstance model, migration, and DB layer"
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/v1/agent_instances.rs crates/agent-runtime-service/src/api/v1/mod.rs
+git add crates/torque-harness/src/api/v1/agent_instances.rs crates/torque-harness/src/api/v1/mod.rs
 git commit -m "feat(v1): implement AgentInstance handlers"
 ```
 
@@ -941,9 +941,9 @@ git commit -m "feat(v1): implement AgentInstance handlers"
 ### Task 2.3: Add Run model and SSE streaming handler
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/run.rs`
-- Create: `crates/agent-runtime-service/src/api/v1/runs.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/mod.rs`
+- Create: `crates/torque-harness/src/models/v1/run.rs`
+- Create: `crates/torque-harness/src/api/v1/runs.rs`
+- Modify: `crates/torque-harness/src/api/v1/mod.rs`
 
 - [ ] **Step 1: Write RunRequest model**
 
@@ -1027,13 +1027,13 @@ pub async fn run(
 
 - [ ] **Step 4: Verify compilation**
 
-Run: `cargo check -p agent-runtime-service`
+Run: `cargo check -p torque-harness`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/api/v1/runs.rs crates/agent-runtime-service/src/models/v1/run.rs
+git add crates/torque-harness/src/api/v1/runs.rs crates/torque-harness/src/models/v1/run.rs
 git commit -m "feat(v1): add Run model and SSE handler scaffold"
 ```
 
@@ -1044,11 +1044,11 @@ git commit -m "feat(v1): add Run model and SSE handler scaffold"
 ### Task 3.1: Task model, migration, DB, and handlers
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/task.rs`
+- Create: `crates/torque-harness/src/models/v1/task.rs`
 - Create: migration
-- Create: `crates/agent-runtime-service/src/repository/task.rs`
-- Create: `crates/agent-runtime-service/src/service/task.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/tasks.rs`
+- Create: `crates/torque-harness/src/repository/task.rs`
+- Create: `crates/torque-harness/src/service/task.rs`
+- Modify: `crates/torque-harness/src/api/v1/tasks.rs`
 
 - [ ] **Step 1: Write model**
 
@@ -1120,7 +1120,7 @@ CREATE TABLE v1_tasks (
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/task.rs crates/agent-runtime-service/src/repository/task.rs crates/agent-runtime-service/src/service/task.rs crates/agent-runtime-service/src/api/v1/tasks.rs
+git add crates/torque-harness/src/models/v1/task.rs crates/torque-harness/src/repository/task.rs crates/torque-harness/src/service/task.rs crates/torque-harness/src/api/v1/tasks.rs
 git commit -m "feat(v1): implement Task resource"
 ```
 
@@ -1129,11 +1129,11 @@ git commit -m "feat(v1): implement Task resource"
 ### Task 3.2: Artifact model, migration, DB, and handlers
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/artifact.rs`
+- Create: `crates/torque-harness/src/models/v1/artifact.rs`
 - Create: migration
-- Create: `crates/agent-runtime-service/src/repository/artifact.rs`
-- Create: `crates/agent-runtime-service/src/service/artifact.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/artifacts.rs`
+- Create: `crates/torque-harness/src/repository/artifact.rs`
+- Create: `crates/torque-harness/src/service/artifact.rs`
+- Modify: `crates/torque-harness/src/api/v1/artifacts.rs`
 
 - [ ] **Step 1: Write model**
 
@@ -1185,7 +1185,7 @@ CREATE TABLE v1_artifacts (
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/artifact.rs crates/agent-runtime-service/src/repository/artifact.rs crates/agent-runtime-service/src/service/artifact.rs crates/agent-runtime-service/src/api/v1/artifacts.rs
+git add crates/torque-harness/src/models/v1/artifact.rs crates/torque-harness/src/repository/artifact.rs crates/torque-harness/src/service/artifact.rs crates/torque-harness/src/api/v1/artifacts.rs
 git commit -m "feat(v1): implement Artifact resource"
 ```
 
@@ -1194,9 +1194,9 @@ git commit -m "feat(v1): implement Artifact resource"
 ### Task 3.3: Event read-only endpoint
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/event.rs`
-- Create: `crates/agent-runtime-service/src/repository/event.rs` (already exists from architecture optimization — extend with `list_by_types` if missing)
-- Modify: `crates/agent-runtime-service/src/api/v1/events.rs`
+- Create: `crates/torque-harness/src/models/v1/event.rs`
+- Create: `crates/torque-harness/src/repository/event.rs` (already exists from architecture optimization — extend with `list_by_types` if missing)
+- Modify: `crates/torque-harness/src/api/v1/events.rs`
 
 - [ ] **Step 1: Write model**
 
@@ -1234,7 +1234,7 @@ The `v1_events` table and `Event` model were created by the Architecture Optimiz
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/event.rs crates/agent-runtime-service/src/repository/event.rs crates/agent-runtime-service/src/api/v1/events.rs
+git add crates/torque-harness/src/models/v1/event.rs crates/torque-harness/src/repository/event.rs crates/torque-harness/src/api/v1/events.rs
 git commit -m "feat(v1): implement Event read-only endpoint"
 ```
 
@@ -1245,11 +1245,11 @@ git commit -m "feat(v1): implement Event read-only endpoint"
 ### Task 4.1: MemoryWriteCandidate and MemoryEntry
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/memory.rs`
+- Create: `crates/torque-harness/src/models/v1/memory.rs`
 - Create: migrations
-- Modify: `crates/agent-runtime-service/src/repository/memory.rs`
-- Modify: `crates/agent-runtime-service/src/service/memory.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/memory.rs`
+- Modify: `crates/torque-harness/src/repository/memory.rs`
+- Modify: `crates/torque-harness/src/service/memory.rs`
+- Modify: `crates/torque-harness/src/api/v1/memory.rs`
 
 - [ ] **Step 1: Write models**
 
@@ -1327,7 +1327,7 @@ CREATE TABLE v1_memory_entries (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/memory.rs crates/agent-runtime-service/src/repository/memory.rs crates/agent-runtime-service/src/service/memory.rs crates/agent-runtime-service/src/api/v1/memory.rs
+git add crates/torque-harness/src/models/v1/memory.rs crates/torque-harness/src/repository/memory.rs crates/torque-harness/src/service/memory.rs crates/torque-harness/src/api/v1/memory.rs
 git commit -m "feat(v1): implement Memory resources"
 ```
 
@@ -1336,11 +1336,11 @@ git commit -m "feat(v1): implement Memory resources"
 ### Task 4.2: CapabilityProfile and CapabilityRegistryBinding
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/capability.rs`
+- Create: `crates/torque-harness/src/models/v1/capability.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/repository/capability.rs`
-- Create: `crates/agent-runtime-service/src/service/capability.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/capabilities.rs`
+- Create: `crates/torque-harness/src/repository/capability.rs`
+- Create: `crates/torque-harness/src/service/capability.rs`
+- Modify: `crates/torque-harness/src/api/v1/capabilities.rs`
 
 - [ ] **Step 1: Write models**
 
@@ -1431,7 +1431,7 @@ CREATE TABLE v1_capability_registry_bindings (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/capability.rs crates/agent-runtime-service/src/repository/capability.rs crates/agent-runtime-service/src/service/capability.rs crates/agent-runtime-service/src/api/v1/capabilities.rs
+git add crates/torque-harness/src/models/v1/capability.rs crates/torque-harness/src/repository/capability.rs crates/torque-harness/src/service/capability.rs crates/torque-harness/src/api/v1/capabilities.rs
 git commit -m "feat(v1): implement Capability resources"
 ```
 
@@ -1442,11 +1442,11 @@ git commit -m "feat(v1): implement Capability resources"
 ### Task 5.1: TeamDefinition and TeamInstance
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/team.rs`
+- Create: `crates/torque-harness/src/models/v1/team.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/repository/team.rs`
-- Create: `crates/agent-runtime-service/src/service/team.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/teams.rs`
+- Create: `crates/torque-harness/src/repository/team.rs`
+- Create: `crates/torque-harness/src/service/team.rs`
+- Modify: `crates/torque-harness/src/api/v1/teams.rs`
 
 - [ ] **Step 1: Write models**
 
@@ -1498,7 +1498,7 @@ CREATE TABLE v1_team_instances (...);
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/team.rs crates/agent-runtime-service/src/repository/team.rs crates/agent-runtime-service/src/service/team.rs crates/agent-runtime-service/src/api/v1/teams.rs
+git add crates/torque-harness/src/models/v1/team.rs crates/torque-harness/src/repository/team.rs crates/torque-harness/src/service/team.rs crates/torque-harness/src/api/v1/teams.rs
 git commit -m "feat(v1): implement Team resources"
 ```
 
@@ -1507,15 +1507,15 @@ git commit -m "feat(v1): implement Team resources"
 ### Task 5.2: Delegation and Approval
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/delegation.rs`
-- Create: `crates/agent-runtime-service/src/models/v1/approval.rs`
+- Create: `crates/torque-harness/src/models/v1/delegation.rs`
+- Create: `crates/torque-harness/src/models/v1/approval.rs`
 - Create: migrations
-- Create: `crates/agent-runtime-service/src/repository/delegation.rs`
-- Create: `crates/agent-runtime-service/src/repository/approval.rs`
-- Create: `crates/agent-runtime-service/src/service/delegation.rs`
-- Create: `crates/agent-runtime-service/src/service/approval.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/delegations.rs`
-- Modify: `crates/agent-runtime-service/src/api/v1/approvals.rs`
+- Create: `crates/torque-harness/src/repository/delegation.rs`
+- Create: `crates/torque-harness/src/repository/approval.rs`
+- Create: `crates/torque-harness/src/service/delegation.rs`
+- Create: `crates/torque-harness/src/service/approval.rs`
+- Modify: `crates/torque-harness/src/api/v1/delegations.rs`
+- Modify: `crates/torque-harness/src/api/v1/approvals.rs`
 
 - [ ] **Step 1: Write models and migrations**
 
@@ -1549,7 +1549,7 @@ Approvals: `GET /v1/approvals`, `POST /v1/approvals/:id/resolve`.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/delegation.rs crates/agent-runtime-service/src/models/v1/approval.rs crates/agent-runtime-service/src/repository/delegation.rs crates/agent-runtime-service/src/repository/approval.rs crates/agent-runtime-service/src/service/delegation.rs crates/agent-runtime-service/src/service/approval.rs crates/agent-runtime-service/src/api/v1/delegations.rs crates/agent-runtime-service/src/api/v1/approvals.rs
+git add crates/torque-harness/src/models/v1/delegation.rs crates/torque-harness/src/models/v1/approval.rs crates/torque-harness/src/repository/delegation.rs crates/torque-harness/src/repository/approval.rs crates/torque-harness/src/service/delegation.rs crates/torque-harness/src/service/approval.rs crates/torque-harness/src/api/v1/delegations.rs crates/torque-harness/src/api/v1/approvals.rs
 git commit -m "feat(v1): implement Delegation and Approval resources"
 ```
 
@@ -1558,10 +1558,10 @@ git commit -m "feat(v1): implement Delegation and Approval resources"
 ### Task 5.3: Checkpoint
 
 **Files:**
-- Create: `crates/agent-runtime-service/src/models/v1/checkpoint.rs`
+- Create: `crates/torque-harness/src/models/v1/checkpoint.rs`
 - Create: migration
-- Modify: `crates/agent-runtime-service/src/repository/checkpoint.rs` (already exists from architecture optimization)
-- Modify: `crates/agent-runtime-service/src/api/v1/checkpoints.rs`
+- Modify: `crates/torque-harness/src/repository/checkpoint.rs` (already exists from architecture optimization)
+- Modify: `crates/torque-harness/src/api/v1/checkpoints.rs`
 
 - [ ] **Step 1: Write model and migration**
 
@@ -1583,7 +1583,7 @@ pub struct Checkpoint {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/agent-runtime-service/src/models/v1/checkpoint.rs crates/agent-runtime-service/src/repository/checkpoint.rs crates/agent-runtime-service/src/api/v1/checkpoints.rs
+git add crates/torque-harness/src/models/v1/checkpoint.rs crates/torque-harness/src/repository/checkpoint.rs crates/torque-harness/src/api/v1/checkpoints.rs
 git commit -m "feat(v1): implement Checkpoint resource"
 ```
 
@@ -1620,14 +1620,14 @@ git commit -m "docs: add OpenAPI 3.1 spec for v1 Platform API"
 ### Task 6.2: Integration tests for v1 end-to-end flows
 
 **Files:**
-- Create: `crates/agent-runtime-service/tests/v1_end_to_end.rs`
+- Create: `crates/torque-harness/tests/v1_end_to_end.rs`
 
 - [ ] **Step 1: Write test helpers**
 
 ```rust
 pub mod test_helpers {
-    use agent_runtime_service::app::build_app;
-    use agent_runtime_service::db::Database;
+    use torque_harness::app::build_app;
+    use torque_harness::db::Database;
     use reqwest::Client;
     use sqlx::PgPool;
     use std::sync::Arc;
@@ -1648,13 +1648,13 @@ Tests:
 
 - [ ] **Step 3: Run tests**
 
-Run: `cargo test -p agent-runtime-service --test v1_end_to_end`
+Run: `cargo test -p torque-harness --test v1_end_to_end`
 Expected: PASS (or document expected failures for unimplemented phases)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/agent-runtime-service/tests/v1_end_to_end.rs
+git add crates/torque-harness/tests/v1_end_to_end.rs
 git commit -m "test(v1): add end-to-end integration tests"
 ```
 
@@ -1663,7 +1663,7 @@ git commit -m "test(v1): add end-to-end integration tests"
 ### Task 6.3: MVP-to-v1 migration notes and cleanup
 
 **Files:**
-- Modify: `crates/agent-runtime-service/README.md`
+- Modify: `crates/torque-harness/README.md`
 - Modify: `docs/superpowers/specs/2026-04-16-torque-platform-api-design.md` (if needed)
 
 - [ ] **Step 1: Document migration path**
@@ -1679,7 +1679,7 @@ In README, add a section:
 - [ ] **Step 2: Commit**
 
 ```bash
-git add crates/agent-runtime-service/README.md
+git add crates/torque-harness/README.md
 git commit -m "docs: document v1 API and MVP deprecation"
 ```
 
