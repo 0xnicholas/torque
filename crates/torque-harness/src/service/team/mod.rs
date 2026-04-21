@@ -8,6 +8,7 @@ pub mod member_agent;
 pub mod local_member_agent;
 pub mod circuit_breaker;
 pub mod retry;
+pub mod event_listener;
 
 pub use service::TeamService;
 pub use supervisor::{TeamSupervisor, SupervisorResult};
@@ -18,3 +19,4 @@ pub use member_agent::{MemberAgent, MemberTask, MemberHealth};
 pub use local_member_agent::LocalMemberAgent;
 pub use circuit_breaker::{CircuitBreaker, CircuitState};
 pub use retry::{MemberHealthTracker, RetryBudget, RetryDecision, classify_rejection};
+pub use event_listener::{EventListener, RedisStreamEventListener};

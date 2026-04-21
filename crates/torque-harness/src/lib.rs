@@ -7,6 +7,7 @@ pub mod embedding;
 pub mod harness;
 pub mod infra;
 pub mod kernel_bridge;
+pub mod message_bus;
 pub mod metrics;
 pub mod models;
 pub mod policy;

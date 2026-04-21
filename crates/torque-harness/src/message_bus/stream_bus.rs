@@ -61,10 +61,11 @@ impl RedisStreamBus {
 impl StreamBus for RedisStreamBus {
     async fn xadd(&self, stream: &str, message: &StreamMessage) -> anyhow::Result<String> {
         let mut conn = self.conn.clone();
+        let data_str = serde_json::to_string(&message.data)?;
         let id: String = redis::cmd("XADD")
             .arg(stream)
             .arg("*")
-            .arg(&message.data)
+            .arg(data_str)
             .query_async(&mut conn)
             .await?;
         Ok(id)
@@ -73,8 +74,8 @@ impl StreamBus for RedisStreamBus {
     async fn xread(&self, streams: &[(&str, &str)], count: usize) -> anyhow::Result<Vec<StreamReadResult>> {
         let mut conn = self.conn.clone();
         let mut args: Vec<String> = vec!["COUNT".to_string(), count.to_string()];
-        for (stream, id) in streams {
-            args.push(stream.to_string());
+        for (s, id) in streams {
+            args.push(s.to_string());
             args.push(id.to_string());
         }
         let result: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREAD")
@@ -83,12 +84,12 @@ impl StreamBus for RedisStreamBus {
             .await?;
 
         let mut results = Vec::new();
-        for (stream, entries) in result {
-            for (id, fields) in entries {
+        for (stream_name, entries) in result {
+            for (entry_id, fields) in entries {
                 let data: serde_json::Value = fields.into_iter().collect();
                 results.push(StreamReadResult {
-                    stream,
-                    id,
+                    stream: stream_name.clone(),
+                    id: entry_id,
                     data,
                 });
             }
@@ -111,8 +112,8 @@ impl StreamBus for RedisStreamBus {
             "COUNT".to_string(),
             count.to_string(),
         ];
-        for (stream, id) in streams {
-            args.push(stream.to_string());
+        for (s, id) in streams {
+            args.push(s.to_string());
             args.push(id.to_string());
         }
         let result: Vec<(String, Vec<(String, Vec<(String, String)>)>)> =
@@ -122,12 +123,12 @@ impl StreamBus for RedisStreamBus {
                 .await?;
 
         let mut results = Vec::new();
-        for (stream, entries) in result {
-            for (id, fields) in entries {
+        for (stream_name, entries) in result {
+            for (entry_id, fields) in entries {
                 let data: serde_json::Value = fields.into_iter().collect();
                 results.push(StreamReadResult {
-                    stream,
-                    id,
+                    stream: stream_name.clone(),
+                    id: entry_id,
                     data,
                 });
             }
