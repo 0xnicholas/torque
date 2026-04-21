@@ -2813,6 +2813,7 @@ dependencies = [
  "futures",
  "llm",
  "pgvector",
+ "redis",
  "reqwest",
  "serde",
  "serde_json",
