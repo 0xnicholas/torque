@@ -1,7 +1,7 @@
 use crate::db::Database;
-use crate::models::v1::agent_instance::AgentInstance;
 use crate::models::v1::checkpoint::Checkpoint;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
+use crate::models::v1::recovery::{RecoveryAssessmentSummary, RecoveryResult};
 use crate::service::ServiceContainer;
 use axum::{
     extract::{Path, Query, State},
@@ -57,7 +57,23 @@ pub async fn get(
 pub async fn restore(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
-) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
+) -> Result<Json<RecoveryResult>, (StatusCode, Json<ErrorBody>)> {
+    let assessment = services
+        .recovery
+        .assess_recovery(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "ASSESSMENT_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
     let instance = services
         .recovery
         .restore_from_checkpoint(id)
@@ -73,5 +89,18 @@ pub async fn restore(
                 }),
             )
         })?;
-    Ok(Json(instance))
+
+    let result = RecoveryResult {
+        instance_id: instance.id,
+        checkpoint_id: id,
+        restored_status: format!("{:?}", instance.status),
+        assessment: RecoveryAssessmentSummary {
+            disposition: format!("{:?}", assessment.disposition),
+            requires_replay: assessment.requires_replay,
+            terminal: assessment.terminal,
+        },
+        recommended_action: format!("{:?}", assessment.recommended_action),
+    };
+
+    Ok(Json(result))
 }
