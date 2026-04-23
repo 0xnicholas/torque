@@ -70,9 +70,10 @@ impl RecoveryService {
 
         // 4. Apply recovery
         // Step 4a: Restore status from checkpoint snapshot
-        // Note: snapshot is stored as CheckpointState { data: {...} }, so we access data.instance_state
-        if let Some(data) = checkpoint.snapshot.get("data") {
-            if let Some(status) = data.get("instance_state").and_then(|s| s.as_str()) {
+        // Note: snapshot is stored as CheckpointState serialized directly
+        // custom_state field contains the instance state info
+        if let Some(custom) = checkpoint.snapshot.get("custom_state") {
+            if let Some(status) = custom.get("instance_state").and_then(|s| s.as_str()) {
                 let restored_status = match status {
                     "Ready" => AgentInstanceStatus::Ready,
                     "Running" => AgentInstanceStatus::Running,
