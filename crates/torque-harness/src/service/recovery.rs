@@ -2,8 +2,63 @@ use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
 use crate::models::v1::event::Event;
 use crate::repository::{AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt};
 use crate::service::event_replay::EventReplayRegistry;
+use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
+
+fn normalize_status(s: &str) -> String {
+    if s.contains('_') {
+        s.to_string()
+    } else {
+        let mut result = String::new();
+        for (i, c) in s.chars().enumerate() {
+            if c.is_uppercase() && i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_uppercase());
+        }
+        result
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum RecoveryDisposition {
+    ResumeCurrent,
+    AwaitingApproval,
+    AwaitingTool,
+    AwaitingDelegation,
+    Suspended,
+    Completed,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum RecoveryAction {
+    ReplayTailEvents,
+    ResumeExecution,
+    AwaitApprovalDecision,
+    AwaitToolCompletion,
+    AwaitDelegationCompletion,
+    StaySuspended,
+    AcceptCompletedState,
+    EscalateFailure,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RecoveryAssessmentResult {
+    pub instance_id: Uuid,
+    pub checkpoint_id: Uuid,
+    pub disposition: RecoveryDisposition,
+    pub requires_replay: bool,
+    pub recommended_action: RecoveryAction,
+    pub terminal: bool,
+}
+
+impl RecoveryAssessmentResult {
+    pub fn is_terminal(&self) -> bool {
+        self.terminal
+    }
+}
 
 pub struct RecoveryService {
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
@@ -24,6 +79,80 @@ impl RecoveryService {
             event_repo,
             event_registry: EventReplayRegistry::new(),
         }
+    }
+
+    /// Assess recovery for a checkpoint without applying it.
+    ///
+    /// This provides a synchronous-style assessment using persistence data
+    /// without requiring kernel runtime hydration.
+    pub async fn assess_recovery(
+        &self,
+        checkpoint_id: Uuid,
+    ) -> anyhow::Result<RecoveryAssessmentResult> {
+        let checkpoint = self
+            .checkpoint_repo
+            .get(checkpoint_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Checkpoint not found: {}", checkpoint_id))?;
+
+        let instance_id = checkpoint.agent_instance_id;
+
+        let events = self
+            .event_repo
+            .list_by_types("agent_instance", instance_id, &[], 1000)
+            .await?;
+
+        let checkpoint_time = checkpoint.created_at;
+        let tail_events: Vec<&Event> = events
+            .iter()
+            .filter(|e| e.timestamp > checkpoint_time)
+            .collect();
+
+        let custom = checkpoint.snapshot.get("custom_state");
+        let state_str = custom
+            .and_then(|c| c.get("instance_state"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("CREATED");
+
+        let normalized = normalize_status(state_str);
+        let disposition = match normalized.as_str() {
+            "WAITING_APPROVAL" => RecoveryDisposition::AwaitingApproval,
+            "WAITING_TOOL" => RecoveryDisposition::AwaitingTool,
+            "WAITING_SUBAGENT" => RecoveryDisposition::AwaitingDelegation,
+            "SUSPENDED" => RecoveryDisposition::Suspended,
+            "COMPLETED" => RecoveryDisposition::Completed,
+            "FAILED" => RecoveryDisposition::Failed,
+            _ => RecoveryDisposition::ResumeCurrent,
+        };
+
+        let requires_replay = !tail_events.is_empty();
+        let recommended_action = if requires_replay {
+            RecoveryAction::ReplayTailEvents
+        } else {
+            match disposition {
+                RecoveryDisposition::ResumeCurrent => RecoveryAction::ResumeExecution,
+                RecoveryDisposition::AwaitingApproval => RecoveryAction::AwaitApprovalDecision,
+                RecoveryDisposition::AwaitingTool => RecoveryAction::AwaitToolCompletion,
+                RecoveryDisposition::AwaitingDelegation => RecoveryAction::AwaitDelegationCompletion,
+                RecoveryDisposition::Suspended => RecoveryAction::StaySuspended,
+                RecoveryDisposition::Completed => RecoveryAction::AcceptCompletedState,
+                RecoveryDisposition::Failed => RecoveryAction::EscalateFailure,
+            }
+        };
+
+        let terminal = matches!(
+            disposition,
+            RecoveryDisposition::Completed | RecoveryDisposition::Failed
+        );
+
+        Ok(RecoveryAssessmentResult {
+            instance_id,
+            checkpoint_id,
+            disposition,
+            requires_replay,
+            recommended_action,
+            terminal,
+        })
     }
 
     /// Restore agent instance from checkpoint.
