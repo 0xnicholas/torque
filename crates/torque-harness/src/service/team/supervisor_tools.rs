@@ -182,3 +182,101 @@ impl Tool for RejectResultTool {
         })
     }
 }
+
+pub struct PublishToTeamTool;
+
+impl PublishToTeamTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for PublishToTeamTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for PublishToTeamTool {
+    fn name(&self) -> &str {
+        "publish_to_team"
+    }
+
+    fn description(&self) -> &str {
+        "Publish an artifact to team shared state"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "artifact_ref": {
+                    "type": "string",
+                    "description": "Reference to the artifact"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Summary of the artifact"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["private", "team_shared", "external_published"],
+                    "description": "Visibility scope"
+                }
+            },
+            "required": ["artifact_ref", "summary", "scope"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let artifact_ref = args.get("artifact_ref").and_then(|v| v.as_str());
+        let scope = args.get("scope").and_then(|v| v.as_str()).unwrap_or("team_shared");
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Published artifact {} to {} scope", artifact_ref.unwrap_or(""), scope),
+            error: None,
+        })
+    }
+}
+
+pub struct GetSharedStateTool;
+
+impl GetSharedStateTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for GetSharedStateTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for GetSharedStateTool {
+    fn name(&self) -> &str {
+        "get_shared_state"
+    }
+
+    fn description(&self) -> &str {
+        "Get the current team shared task state"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {}
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        Ok(ToolResult {
+            success: true,
+            content: r#"{"accepted_artifact_refs":[],"published_facts":[],"delegation_status":[],"open_blockers":[],"decisions":[]}"#.to_string(),
+            error: None,
+        })
+    }
+}

@@ -30,3 +30,22 @@ async fn test_reject_result_tool() {
     assert!(schema.pointer("/properties/reason").is_some());
     assert!(schema.pointer("/properties/reroute").is_some());
 }
+
+#[tokio::test]
+async fn test_publish_to_team_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::PublishToTeamTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "publish_to_team");
+    assert!(schema.pointer("/properties/artifact_ref").is_some());
+    assert!(schema.pointer("/properties/summary").is_some());
+    assert!(schema.pointer("/properties/scope").is_some());
+}
+
+#[tokio::test]
+async fn test_get_shared_state_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::GetSharedStateTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "get_shared_state");
+}
