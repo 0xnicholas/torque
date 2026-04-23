@@ -49,3 +49,21 @@ async fn test_get_shared_state_tool() {
 
     assert_eq!(tool.name(), "get_shared_state");
 }
+
+#[tokio::test]
+async fn test_complete_team_task_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::CompleteTeamTaskTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "complete_team_task");
+    assert!(schema.pointer("/properties/summary").is_some());
+    assert!(schema.pointer("/properties/output_artifacts").is_some());
+}
+
+#[tokio::test]
+async fn test_list_team_members_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::ListTeamMembersTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "list_team_members");
+}

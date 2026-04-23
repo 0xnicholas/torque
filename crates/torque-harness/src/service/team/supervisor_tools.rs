@@ -290,3 +290,99 @@ impl Tool for GetSharedStateTool {
         })
     }
 }
+
+pub struct CompleteTeamTaskTool;
+
+impl CompleteTeamTaskTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for CompleteTeamTaskTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for CompleteTeamTaskTool {
+    fn name(&self) -> &str {
+        "complete_team_task"
+    }
+
+    fn description(&self) -> &str {
+        "Mark a team task as complete"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": "Summary of the completed task"
+                },
+                "output_artifacts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of output artifact references"
+                }
+            },
+            "required": ["summary"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let summary = args
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("summary required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Task completed: {}", summary),
+            error: None,
+        })
+    }
+}
+
+pub struct ListTeamMembersTool;
+
+impl ListTeamMembersTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for ListTeamMembersTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for ListTeamMembersTool {
+    fn name(&self) -> &str {
+        "list_team_members"
+    }
+
+    fn description(&self) -> &str {
+        "List available team members"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {}
+        })
+    }
+
+    async fn execute(&self, _args: Value) -> anyhow::Result<ToolResult> {
+        Ok(ToolResult {
+            success: true,
+            content: "[]".to_string(),
+            error: None,
+        })
+    }
+}
