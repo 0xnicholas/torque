@@ -84,3 +84,21 @@ async fn test_supervisor_tools_registry() {
     assert!(tool_names.contains(&"complete_team_task"));
     assert!(tool_names.contains(&"list_team_members"));
 }
+
+#[tokio::test]
+async fn test_tools_in_registry() {
+    use torque_harness::tools::ToolRegistry;
+    use torque_harness::service::team::supervisor_tools::create_supervisor_tools;
+
+    let mut registry = ToolRegistry::new();
+    let supervisor_tools = create_supervisor_tools();
+
+    for tool in supervisor_tools {
+        registry.register(tool).await;
+    }
+
+    let tools = registry.list().await;
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+    assert!(tool_names.contains(&"delegate_task"));
+    assert!(tool_names.contains(&"accept_result"));
+}
