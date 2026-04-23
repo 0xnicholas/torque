@@ -150,7 +150,7 @@ impl RecoveryService {
             }
         }
 
-        let data = checkpoint.snapshot.get("data");
+        let data = checkpoint.snapshot.get("custom_state");
         if let Some(data) = data {
             if let Some(pending_approvals) = data.get("pending_approval_ids") {
                 if let Some(approvals) = pending_approvals.as_array() {
