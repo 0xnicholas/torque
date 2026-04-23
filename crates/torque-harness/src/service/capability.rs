@@ -7,9 +7,21 @@ use crate::repository::{CapabilityProfileRepository, CapabilityRegistryBindingRe
 use std::sync::Arc;
 use uuid::Uuid;
 
+#[derive(Clone, Debug)]
+pub struct ResolveOptions {
+    pub max_candidates: i64,
+}
+
+impl Default for ResolveOptions {
+    fn default() -> Self {
+        Self { max_candidates: 10 }
+    }
+}
+
 pub struct CapabilityService {
     profile_repo: Arc<dyn CapabilityProfileRepository>,
     binding_repo: Arc<dyn CapabilityRegistryBindingRepository>,
+    resolve_options: ResolveOptions,
 }
 
 impl CapabilityService {
@@ -20,7 +32,13 @@ impl CapabilityService {
         Self {
             profile_repo,
             binding_repo,
+            resolve_options: ResolveOptions::default(),
         }
+    }
+
+    pub fn with_resolve_options(mut self, options: ResolveOptions) -> Self {
+        self.resolve_options = options;
+        self
     }
 
     pub async fn create_profile(
@@ -72,7 +90,7 @@ impl CapabilityService {
         let profile = self.profile_repo.get_by_name(capability_ref).await?
             .ok_or_else(|| anyhow::anyhow!("Capability profile not found: {}", capability_ref))?;
 
-        let bindings = self.binding_repo.list_by_profile(profile.id, 10).await?;
+        let bindings = self.binding_repo.list_by_profile(profile.id, self.resolve_options.max_candidates).await?;
 
         let candidates: Vec<ResolvedCandidate> = bindings.into_iter().map(|b| {
             ResolvedCandidate {

@@ -95,7 +95,7 @@ pub async fn resolve(
 ) -> Result<Json<CapabilityResolution>, (StatusCode, Json<ErrorBody>)> {
     let resolution = services
         .capability
-        .resolve_by_ref(&req.capability_ref, req.constraints)
+        .resolve_by_ref(req.capability_ref.as_str(), req.constraints)
         .await
         .map_err(|e| {
             (

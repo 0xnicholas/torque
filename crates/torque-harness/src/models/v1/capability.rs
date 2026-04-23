@@ -220,6 +220,6 @@ impl CapabilityRef {
 
 #[derive(Debug, Deserialize)]
 pub struct CapabilityResolveByRefRequest {
-    pub capability_ref: String,
+    pub capability_ref: CapabilityRef,
     pub constraints: Option<serde_json::Value>,
 }

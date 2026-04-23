@@ -12,6 +12,7 @@ use torque_harness::repository::{
     PostgresCapabilityRegistryBindingRepository,
 };
 use torque_harness::service::CapabilityService;
+use uuid::Uuid;
 
 async fn setup_test_db() -> Option<Database> {
     let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
@@ -34,8 +35,11 @@ async fn test_capability_resolve_by_ref() {
     let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
     let service = CapabilityService::new(profile_repo.clone(), binding_repo.clone());
 
+    let unique_name = format!("test.resolution.{}", Uuid::new_v4());
+    let agent_name = format!("test-agent.{}", Uuid::new_v4());
+
     let def = def_repo.create(&torque_harness::models::v1::agent_definition::AgentDefinitionCreate {
-        name: "test-agent".to_string(),
+        name: agent_name,
         description: None,
         system_prompt: None,
         tool_policy: serde_json::json!({}),
@@ -46,7 +50,7 @@ async fn test_capability_resolve_by_ref() {
     }).await.unwrap();
 
     let profile = service.create_profile(CapabilityProfileCreate {
-        name: "test.resolution".to_string(),
+        name: unique_name.clone(),
         description: Some("Test capability".to_string()),
         input_contract: None,
         output_contract: None,
@@ -62,9 +66,9 @@ async fn test_capability_resolve_by_ref() {
         metadata: None,
     }).await.unwrap();
 
-    let resolution = service.resolve_by_ref("test.resolution", None).await.unwrap();
+    let resolution = service.resolve_by_ref(&unique_name, None).await.unwrap();
 
-    assert_eq!(resolution.capability_ref, "test.resolution");
+    assert_eq!(resolution.capability_ref, unique_name);
     assert_eq!(resolution.capability_profile_id, profile.id);
     assert_eq!(resolution.candidates.len(), 1);
     assert_eq!(resolution.candidates[0].agent_definition_id, def.id);
@@ -80,7 +84,35 @@ async fn test_capability_resolve_not_found() {
     let binding_repo = Arc::new(PostgresCapabilityRegistryBindingRepository::new(db.clone()));
     let service = CapabilityService::new(profile_repo.clone(), binding_repo.clone());
 
-    let result = service.resolve_by_ref("nonexistent.capability", None).await;
+    let unique_name = format!("nonexistent.{}", Uuid::new_v4());
+    let result = service.resolve_by_ref(&unique_name, None).await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_capability_resolve_empty_candidates() {
+    let Some(db) = setup_test_db().await else { return; };
+
+    let profile_repo = Arc::new(PostgresCapabilityProfileRepository::new(db.clone()));
+    let binding_repo = Arc::new(PostgresCapabilityRegistryBindingRepository::new(db.clone()));
+    let service = CapabilityService::new(profile_repo.clone(), binding_repo.clone());
+
+    let unique_name = format!("empty.{}", Uuid::new_v4());
+
+    let profile = service.create_profile(CapabilityProfileCreate {
+        name: unique_name.clone(),
+        description: Some("Profile with no bindings".to_string()),
+        input_contract: None,
+        output_contract: None,
+        risk_level: RiskLevel::Low,
+        default_agent_definition_id: None,
+    }).await.unwrap();
+
+    let resolution = service.resolve_by_ref(&unique_name, None).await.unwrap();
+
+    assert_eq!(resolution.capability_ref, unique_name);
+    assert_eq!(resolution.capability_profile_id, profile.id);
+    assert_eq!(resolution.candidates.len(), 0);
 }
