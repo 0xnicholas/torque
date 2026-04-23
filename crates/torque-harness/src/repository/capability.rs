@@ -11,6 +11,7 @@ pub trait CapabilityProfileRepository: Send + Sync {
     async fn create(&self, req: &CapabilityProfileCreate) -> anyhow::Result<CapabilityProfile>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<CapabilityProfile>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<CapabilityProfile>>;
+    async fn get_by_name(&self, name: &str) -> anyhow::Result<Option<CapabilityProfile>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
 }
 
@@ -67,6 +68,16 @@ impl CapabilityProfileRepository for PostgresCapabilityProfileRepository {
             .execute(self.db.pool())
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn get_by_name(&self, name: &str) -> anyhow::Result<Option<CapabilityProfile>> {
+        let row = sqlx::query_as::<_, CapabilityProfile>(
+            "SELECT * FROM v1_capability_profiles WHERE name = $1"
+        )
+        .bind(name)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row)
     }
 }
 
