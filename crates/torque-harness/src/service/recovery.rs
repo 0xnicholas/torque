@@ -78,6 +78,9 @@ impl RecoveryService {
                     "Ready" => AgentInstanceStatus::Ready,
                     "Running" => AgentInstanceStatus::Running,
                     "Suspended" => AgentInstanceStatus::Suspended,
+                    "WaitingSubagent" => AgentInstanceStatus::WaitingSubagent,
+                    "WaitingApproval" => AgentInstanceStatus::WaitingApproval,
+                    "WaitingTool" => AgentInstanceStatus::WaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo
@@ -150,8 +153,8 @@ impl RecoveryService {
             }
         }
 
-        let data = checkpoint.snapshot.get("custom_state");
-        if let Some(data) = data {
+        let custom = checkpoint.snapshot.get("custom_state");
+        if let Some(data) = custom {
             if let Some(pending_approvals) = data.get("pending_approval_ids") {
                 if let Some(approvals) = pending_approvals.as_array() {
                     let approval_count = approvals.len();
@@ -167,13 +170,40 @@ impl RecoveryService {
 
             if let Some(child_delegations) = data.get("child_delegation_ids") {
                 if let Some(delegations) = child_delegations.as_array() {
-                    let delegation_count = delegations.len();
-                    if delegation_count > 0 {
-                        tracing::info!(
-                            "Reconciliation: checkpoint indicates {} child delegations for instance {}",
-                            delegation_count,
-                            instance_id
-                        );
+                    for deleg_id in delegations {
+                        if let Some(id_str) = deleg_id.as_str() {
+                            if let Ok(child_id) = uuid::Uuid::parse_str(id_str) {
+                                if let Ok(Some(child)) = self.agent_instance_repo.get(child_id).await {
+                                    match child.status {
+                                        AgentInstanceStatus::Failed => {
+                                            tracing::warn!(
+                                                "Reconciliation: child {} is Failed but parent {} expects active delegation, marking parent for re-delegation",
+                                                child_id,
+                                                instance_id
+                                            );
+                                            self.agent_instance_repo
+                                                .update_status(instance_id, AgentInstanceStatus::Ready)
+                                                .await?;
+                                        }
+                                        AgentInstanceStatus::Completed => {
+                                            tracing::info!(
+                                                "Reconciliation: child {} completed but parent {} still WaitingSubagent",
+                                                child_id,
+                                                instance_id
+                                            );
+                                        }
+                                        _ => {
+                                            tracing::debug!(
+                                                "Reconciliation: child {} status {:?} for parent {}",
+                                                child_id,
+                                                child.status,
+                                                instance_id
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -265,9 +295,10 @@ impl RecoveryService {
         }
 
         // 4. Restore status from checkpoint
-        // Note: snapshot is stored as CheckpointState { data: {...} }, so we access data.instance_state
-        if let Some(data) = checkpoint.snapshot.get("data") {
-            if let Some(status) = data.get("instance_state").and_then(|s| s.as_str()) {
+        // Note: snapshot is stored as CheckpointState serialized directly
+        // custom_state field contains the instance state info
+        if let Some(custom) = checkpoint.snapshot.get("custom_state") {
+            if let Some(status) = custom.get("instance_state").and_then(|s| s.as_str()) {
                 let restored_status = match status {
                     "Ready" => AgentInstanceStatus::Ready,
                     "Running" => AgentInstanceStatus::Running,
