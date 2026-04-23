@@ -9,6 +9,7 @@ pub mod local_member_agent;
 pub mod circuit_breaker;
 pub mod retry;
 pub mod event_listener;
+pub mod supervisor_tools;
 
 pub use service::TeamService;
 pub use supervisor::{TeamSupervisor, SupervisorResult};
