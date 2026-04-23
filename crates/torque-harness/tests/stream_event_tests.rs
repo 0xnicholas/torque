@@ -1,5 +1,5 @@
-use torque_harness::agent::StreamEvent;
 use serde_json::json;
+use torque_harness::agent::StreamEvent;
 use uuid::Uuid;
 
 #[test]

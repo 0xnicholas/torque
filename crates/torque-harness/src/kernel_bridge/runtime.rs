@@ -85,7 +85,13 @@ impl KernelRuntimeHandle {
             .await;
 
         let final_content = self
-            .run_llm_conversation(instance_id, llm, tools, event_sink.clone(), initial_messages)
+            .run_llm_conversation(
+                instance_id,
+                llm,
+                tools,
+                event_sink.clone(),
+                initial_messages,
+            )
             .await?;
 
         let complete_request = self.reconstruct_request(instance_id)?;
@@ -102,7 +108,9 @@ impl KernelRuntimeHandle {
                 reason: "task_complete".to_string(),
             })
             .await;
-        let _ = self.record_checkpoint_event(checkpoint_id, instance_id, "task_complete").await;
+        let _ = self
+            .record_checkpoint_event(checkpoint_id, instance_id, "task_complete")
+            .await;
 
         let mut result = result;
         result.summary = Some(final_content);
@@ -236,16 +244,17 @@ impl KernelRuntimeHandle {
                     }
 
                     if self.checkpoint_config.should_checkpoint("awaiting_llm") {
-                        let checkpoint_id = self
-                            .create_checkpoint(instance_id, "awaiting_llm")
-                            .await?;
+                        let checkpoint_id =
+                            self.create_checkpoint(instance_id, "awaiting_llm").await?;
                         let _ = event_sink
                             .send(StreamEvent::CheckpointCreated {
                                 checkpoint_id,
                                 reason: "awaiting_llm".to_string(),
                             })
                             .await;
-                        let _ = self.record_checkpoint_event(checkpoint_id, instance_id, "awaiting_llm").await;
+                        let _ = self
+                            .record_checkpoint_event(checkpoint_id, instance_id, "awaiting_llm")
+                            .await;
                     }
                 }
                 _ => {
@@ -295,7 +304,8 @@ impl KernelRuntimeHandle {
         instance_id: AgentInstanceId,
         reason: &str,
     ) -> Result<(), KernelBridgeError> {
-        let event = EventRecorder::checkpoint_created_event(checkpoint_id, instance_id.as_uuid(), reason);
+        let event =
+            EventRecorder::checkpoint_created_event(checkpoint_id, instance_id.as_uuid(), reason);
         self.event_repo.create(event).await?;
         Ok(())
     }
@@ -511,12 +521,9 @@ impl KernelRuntimeHandle {
                 msgs.push(LlmMessage::user(result_msg));
                 self.step(None, llm, tools, event_sink, msgs).await
             }
-            ResumeSignal::Continue => {
-                self.step(None, llm, tools, event_sink, messages).await
-            }
+            ResumeSignal::Continue => self.step(None, llm, tools, event_sink, messages).await,
         }
     }
-
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -14,9 +14,8 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting torque-harness service...");
 
-    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost/torque_harness".to_string()
-    });
+    let database_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/torque_harness".to_string());
 
     let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 

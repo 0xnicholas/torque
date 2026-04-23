@@ -40,10 +40,10 @@ pub use rule::{PostgresRuleRepository, RuleRepository};
 pub use session::{PostgresSessionRepository, SessionKernelState, SessionRepository};
 pub use task::{PostgresTaskRepository, TaskRepository};
 pub use team::{
-    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository, PostgresTeamMemberRepository,
-    PostgresTeamTaskRepository, PostgresSharedTaskStateRepository, PostgresTeamEventRepository,
-    TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
-    TeamTaskRepository, SharedTaskStateRepository, TeamEventRepository,
+    PostgresSharedTaskStateRepository, PostgresTeamDefinitionRepository,
+    PostgresTeamEventRepository, PostgresTeamInstanceRepository, PostgresTeamMemberRepository,
+    PostgresTeamTaskRepository, SharedTaskStateRepository, TeamDefinitionRepository,
+    TeamEventRepository, TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
 };
 
 pub struct RepositoryContainer {

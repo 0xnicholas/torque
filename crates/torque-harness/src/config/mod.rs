@@ -1,5 +1,5 @@
-pub mod memory;
 pub mod checkpoint;
+pub mod memory;
 
-pub use memory::*;
 pub use checkpoint::*;
+pub use memory::*;

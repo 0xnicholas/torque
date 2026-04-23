@@ -1,5 +1,5 @@
-use torque_harness::service::team::event_listener::parse_delegation_event;
 use torque_harness::models::v1::delegation_event::DelegationEvent;
+use torque_harness::service::team::event_listener::parse_delegation_event;
 use uuid::Uuid;
 
 #[test]
@@ -14,10 +14,7 @@ fn test_parse_delegation_event_completed() {
     });
     let event = parse_delegation_event(&data);
 
-    assert!(matches!(
-        event,
-        Some(DelegationEvent::Completed { .. })
-    ));
+    assert!(matches!(event, Some(DelegationEvent::Completed { .. })));
 }
 
 #[test]
@@ -32,10 +29,7 @@ fn test_parse_delegation_event_failed() {
     });
     let event = parse_delegation_event(&data);
 
-    assert!(matches!(
-        event,
-        Some(DelegationEvent::Failed { .. })
-    ));
+    assert!(matches!(event, Some(DelegationEvent::Failed { .. })));
 }
 
 #[test]
@@ -49,10 +43,7 @@ fn test_parse_delegation_event_accepted() {
     });
     let event = parse_delegation_event(&data);
 
-    assert!(matches!(
-        event,
-        Some(DelegationEvent::Accepted { .. })
-    ));
+    assert!(matches!(event, Some(DelegationEvent::Accepted { .. })));
 }
 
 #[test]
@@ -78,10 +69,7 @@ fn test_parse_delegation_event_rejected() {
     });
     let event = parse_delegation_event(&data);
 
-    assert!(matches!(
-        event,
-        Some(DelegationEvent::Rejected { .. })
-    ));
+    assert!(matches!(event, Some(DelegationEvent::Rejected { .. })));
 }
 
 #[test]

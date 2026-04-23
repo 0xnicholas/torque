@@ -33,9 +33,14 @@ impl SelectorResolver {
         selector: &MemberSelector,
         team_instance_id: Uuid,
     ) -> anyhow::Result<Vec<CandidateMember>> {
-        let members = self.team_member_repo.list_by_team(team_instance_id, 100).await?;
+        let members = self
+            .team_member_repo
+            .list_by_team(team_instance_id, 100)
+            .await?;
 
-        let capable_agent_ids = self.resolve_capable_agents(&selector.capability_profiles).await?;
+        let capable_agent_ids = self
+            .resolve_capable_agents(&selector.capability_profiles)
+            .await?;
 
         let mut candidates = Vec::new();
         for member in members.into_iter() {
@@ -43,12 +48,15 @@ impl SelectorResolver {
                 continue;
             }
 
-            let agent_instance = match self.agent_instance_repo.get(member.agent_instance_id).await {
+            let agent_instance = match self.agent_instance_repo.get(member.agent_instance_id).await
+            {
                 Ok(Some(inst)) => inst,
                 _ => continue,
             };
 
-            if selector.selector_type == SelectorType::Capability && !capable_agent_ids.contains(&agent_instance.agent_definition_id) {
+            if selector.selector_type == SelectorType::Capability
+                && !capable_agent_ids.contains(&agent_instance.agent_definition_id)
+            {
                 continue;
             }
 
@@ -58,7 +66,9 @@ impl SelectorResolver {
                 }
             }
 
-            let member_capabilities = self.get_member_capabilities(agent_instance.agent_definition_id).await?;
+            let member_capabilities = self
+                .get_member_capabilities(agent_instance.agent_definition_id)
+                .await?;
 
             candidates.push(CandidateMember {
                 team_member_id: member.id,
@@ -81,7 +91,10 @@ impl SelectorResolver {
         Ok(candidates)
     }
 
-    async fn resolve_capable_agents(&self, profile_names: &[String]) -> anyhow::Result<std::collections::HashSet<Uuid>> {
+    async fn resolve_capable_agents(
+        &self,
+        profile_names: &[String],
+    ) -> anyhow::Result<std::collections::HashSet<Uuid>> {
         if profile_names.is_empty() {
             return Ok(std::collections::HashSet::new());
         }
@@ -89,7 +102,11 @@ impl SelectorResolver {
         let profiles = self.capability_profile_repo.list(100).await?;
         let matching_profile_ids: Vec<Uuid> = profiles
             .into_iter()
-            .filter(|p| profile_names.iter().any(|name| p.name.to_lowercase().contains(&name.to_lowercase())))
+            .filter(|p| {
+                profile_names
+                    .iter()
+                    .any(|name| p.name.to_lowercase().contains(&name.to_lowercase()))
+            })
             .map(|p| p.id)
             .collect();
 
@@ -107,7 +124,10 @@ impl SelectorResolver {
         Ok(capable_agents)
     }
 
-    async fn get_member_capabilities(&self, agent_definition_id: Uuid) -> anyhow::Result<Vec<String>> {
+    async fn get_member_capabilities(
+        &self,
+        agent_definition_id: Uuid,
+    ) -> anyhow::Result<Vec<String>> {
         let bindings = self.capability_binding_repo.list(500).await?;
         let profile_ids: Vec<Uuid> = bindings
             .into_iter()
@@ -135,9 +155,7 @@ impl SelectorResolver {
         selector: &MemberSelector,
     ) -> bool {
         match selector.selector_type {
-            SelectorType::Role => {
-                selector.role.as_ref().map_or(true, |r| &member.role == r)
-            }
+            SelectorType::Role => selector.role.as_ref().map_or(true, |r| &member.role == r),
             SelectorType::Any => true,
             SelectorType::Capability | SelectorType::Direct => true,
         }

@@ -1,10 +1,10 @@
 mod common;
 
+use common::{setup_test_db_or_skip, test_api_key};
+use serial_test::serial;
 use torque_harness::repository::{
     MessageRepository, PostgresMessageRepository, PostgresSessionRepository, SessionRepository,
 };
-use common::{setup_test_db_or_skip, test_api_key};
-use serial_test::serial;
 
 #[tokio::test]
 #[serial]
@@ -42,8 +42,7 @@ async fn test_create_and_get_message() {
         .await
         .expect("Failed to create session");
 
-    let message =
-        torque_harness::models::Message::user(session.id, "Hello, world!".to_string());
+    let message = torque_harness::models::Message::user(session.id, "Hello, world!".to_string());
 
     let saved = message_repo
         .create(&message)

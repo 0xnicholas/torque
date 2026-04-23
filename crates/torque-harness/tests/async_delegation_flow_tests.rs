@@ -1,7 +1,7 @@
 use torque_harness::models::v1::delegation::DelegationStatus;
-use torque_harness::service::team::circuit_breaker::{CircuitBreaker, CircuitState};
-use torque_harness::service::team::retry::{RetryBudget, RetryDecision, classify_rejection};
 use torque_harness::models::v1::delegation_event::RejectionReason;
+use torque_harness::service::team::circuit_breaker::{CircuitBreaker, CircuitState};
+use torque_harness::service::team::retry::{classify_rejection, RetryBudget, RetryDecision};
 
 #[tokio::test]
 async fn test_circuit_breaker_initial_closed() {

@@ -1,10 +1,10 @@
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTask, TeamTaskCreate,
+    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTask,
+    TeamTaskCreate,
 };
 use crate::repository::{
-    TeamDefinitionRepository, TeamInstanceRepository, TeamMemberRepository,
-    TeamTaskRepository, SharedTaskStateRepository, TeamEventRepository,
+    SharedTaskStateRepository, TeamDefinitionRepository, TeamEventRepository,
+    TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -112,14 +112,17 @@ impl TeamService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Team instance not found: {}", team_instance_id))?;
 
-        let task = self.team_task_repo.create(
-            team_instance_id,
-            &req.goal,
-            req.instructions.as_deref(),
-            &req.input_artifacts,
-            req.parent_task_id,
-            req.idempotency_key.as_deref(),
-        ).await?;
+        let task = self
+            .team_task_repo
+            .create(
+                team_instance_id,
+                &req.goal,
+                req.instructions.as_deref(),
+                &req.input_artifacts,
+                req.parent_task_id,
+                req.idempotency_key.as_deref(),
+            )
+            .await?;
         Ok(task)
     }
 
@@ -128,22 +131,36 @@ impl TeamService {
         team_instance_id: Uuid,
         limit: i64,
     ) -> anyhow::Result<Vec<TeamTask>> {
-        self.team_task_repo.list_by_team(team_instance_id, limit).await
+        self.team_task_repo
+            .list_by_team(team_instance_id, limit)
+            .await
     }
 
     pub async fn get_team_task(&self, id: Uuid) -> anyhow::Result<Option<TeamTask>> {
         self.team_task_repo.get(id).await
     }
 
-    pub async fn get_shared_state(&self, team_instance_id: Uuid) -> anyhow::Result<Option<crate::models::v1::team::SharedTaskState>> {
+    pub async fn get_shared_state(
+        &self,
+        team_instance_id: Uuid,
+    ) -> anyhow::Result<Option<crate::models::v1::team::SharedTaskState>> {
         self.shared_state_repo.get(team_instance_id).await
     }
 
-    pub async fn get_or_create_shared_state(&self, team_instance_id: Uuid) -> anyhow::Result<crate::models::v1::team::SharedTaskState> {
+    pub async fn get_or_create_shared_state(
+        &self,
+        team_instance_id: Uuid,
+    ) -> anyhow::Result<crate::models::v1::team::SharedTaskState> {
         self.shared_state_repo.get_or_create(team_instance_id).await
     }
 
-    pub async fn get_team_events(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<crate::models::v1::team::TeamEvent>> {
-        self.team_event_repo.list_by_team(team_instance_id, limit).await
+    pub async fn get_team_events(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<crate::models::v1::team::TeamEvent>> {
+        self.team_event_repo
+            .list_by_team(team_instance_id, limit)
+            .await
     }
 }

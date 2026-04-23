@@ -1,3 +1,5 @@
+use crate::message_bus::stream_bus::{RedisStreamBus, StreamBus};
+use crate::models::v1::delegation_event::DelegationEvent;
 use async_stream::stream as async_stream;
 use async_trait::async_trait;
 use futures::Stream;
@@ -5,8 +7,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
-use crate::message_bus::stream_bus::{RedisStreamBus, StreamBus};
-use crate::models::v1::delegation_event::DelegationEvent;
 
 #[async_trait]
 pub trait EventListener: Send + Sync {
@@ -51,37 +51,29 @@ pub fn parse_delegation_event(data: &serde_json::Value) -> Option<DelegationEven
         .and_then(|s| Uuid::parse_str(s).ok())?;
 
     match type_field {
-        "created" => {
-            Some(DelegationEvent::Created {
-                delegation_id,
-                task_id: event_data.get("task_id")?.as_str()?.parse().ok()?,
-                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
-                created_at: chrono::Utc::now(),
-            })
-        }
-        "accepted" => {
-            Some(DelegationEvent::Accepted {
-                delegation_id,
-                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
-                accepted_at: chrono::Utc::now(),
-            })
-        }
-        "completed" => {
-            Some(DelegationEvent::Completed {
-                delegation_id,
-                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
-                artifact_id: event_data.get("artifact_id")?.as_str()?.parse().ok()?,
-                completed_at: chrono::Utc::now(),
-            })
-        }
-        "failed" => {
-            Some(DelegationEvent::Failed {
-                delegation_id,
-                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
-                error: event_data.get("error")?.as_str()?.to_string(),
-                failed_at: chrono::Utc::now(),
-            })
-        }
+        "created" => Some(DelegationEvent::Created {
+            delegation_id,
+            task_id: event_data.get("task_id")?.as_str()?.parse().ok()?,
+            member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+            created_at: chrono::Utc::now(),
+        }),
+        "accepted" => Some(DelegationEvent::Accepted {
+            delegation_id,
+            member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+            accepted_at: chrono::Utc::now(),
+        }),
+        "completed" => Some(DelegationEvent::Completed {
+            delegation_id,
+            member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+            artifact_id: event_data.get("artifact_id")?.as_str()?.parse().ok()?,
+            completed_at: chrono::Utc::now(),
+        }),
+        "failed" => Some(DelegationEvent::Failed {
+            delegation_id,
+            member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+            error: event_data.get("error")?.as_str()?.to_string(),
+            failed_at: chrono::Utc::now(),
+        }),
         "rejected" => {
             let reason = if let Some(reason_str) = event_data.get("reason")?.as_str() {
                 crate::models::v1::delegation_event::RejectionReason::Other(reason_str.to_string())
@@ -96,15 +88,9 @@ pub fn parse_delegation_event(data: &serde_json::Value) -> Option<DelegationEven
             })
         }
         "timeout_partial" => {
-            let completeness = event_data
-                .get("completeness")?
-                .as_f64()? as f32;
-            let correctness_confidence = event_data
-                .get("correctness_confidence")?
-                .as_f64()? as f32;
-            let usable_as_is = event_data
-                .get("usable_as_is")?
-                .as_bool()?;
+            let completeness = event_data.get("completeness")?.as_f64()? as f32;
+            let correctness_confidence = event_data.get("correctness_confidence")?.as_f64()? as f32;
+            let usable_as_is = event_data.get("usable_as_is")?.as_bool()?;
             let requires_repair: Vec<String> = event_data
                 .get("requires_repair")?
                 .as_array()?
@@ -129,22 +115,18 @@ pub fn parse_delegation_event(data: &serde_json::Value) -> Option<DelegationEven
                 timed_out_at: chrono::Utc::now(),
             })
         }
-        "extension_requested" => {
-            Some(DelegationEvent::ExtensionRequested {
-                delegation_id,
-                member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
-                requested_seconds: event_data.get("requested_seconds")?.as_u64()? as u32,
-                reason: event_data.get("reason")?.as_str()?.to_string(),
-                requested_at: chrono::Utc::now(),
-            })
-        }
-        "extension_granted" => {
-            Some(DelegationEvent::ExtensionGranted {
-                delegation_id,
-                granted_seconds: event_data.get("granted_seconds")?.as_u64()? as u32,
-                new_deadline: chrono::Utc::now(),
-            })
-        }
+        "extension_requested" => Some(DelegationEvent::ExtensionRequested {
+            delegation_id,
+            member_id: event_data.get("member_id")?.as_str()?.parse().ok()?,
+            requested_seconds: event_data.get("requested_seconds")?.as_u64()? as u32,
+            reason: event_data.get("reason")?.as_str()?.to_string(),
+            requested_at: chrono::Utc::now(),
+        }),
+        "extension_granted" => Some(DelegationEvent::ExtensionGranted {
+            delegation_id,
+            granted_seconds: event_data.get("granted_seconds")?.as_u64()? as u32,
+            new_deadline: chrono::Utc::now(),
+        }),
         _ => None,
     }
 }
@@ -160,7 +142,9 @@ impl EventListener for RedisStreamEventListener {
         let consumer_id = self.consumer_id.clone();
         let dg_id = delegation_id;
 
-        let _ = bus.create_consumer_group(&stream_key, "delegation-group", "$").await;
+        let _ = bus
+            .create_consumer_group(&stream_key, "delegation-group", "$")
+            .await;
 
         let stream = async_stream! {
             let mut last_id = "$".to_string();
@@ -207,7 +191,9 @@ impl EventListener for RedisStreamEventListener {
         let consumer_id = self.consumer_id.clone();
         let group_name = format!("team-{}", team_id);
 
-        let _ = bus.create_consumer_group(&stream_key, &group_name, "$").await;
+        let _ = bus
+            .create_consumer_group(&stream_key, &group_name, "$")
+            .await;
 
         let stream = async_stream! {
             let mut last_id = "$".to_string();
@@ -254,7 +240,9 @@ impl EventListener for RedisStreamEventListener {
         let consumer_id = self.consumer_id.clone();
         let group_name = format!("member-{}", member_id);
 
-        let _ = bus.create_consumer_group(&stream_key, &group_name, "$").await;
+        let _ = bus
+            .create_consumer_group(&stream_key, &group_name, "$")
+            .await;
 
         let stream = async_stream! {
             let mut last_id = "$".to_string();

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamMessage {
@@ -28,7 +28,11 @@ impl StreamMessage {
 #[async_trait]
 pub trait StreamBus: Send + Sync {
     async fn xadd(&self, stream: &str, message: &StreamMessage) -> anyhow::Result<String>;
-    async fn xread(&self, streams: &[(&str, &str)], count: usize) -> anyhow::Result<Vec<StreamReadResult>>;
+    async fn xread(
+        &self,
+        streams: &[(&str, &str)],
+        count: usize,
+    ) -> anyhow::Result<Vec<StreamReadResult>>;
     async fn xreadgroup(
         &self,
         group: &str,
@@ -37,7 +41,12 @@ pub trait StreamBus: Send + Sync {
         count: usize,
     ) -> anyhow::Result<Vec<StreamReadResult>>;
     async fn xack(&self, stream: &str, group: &str, ids: &[&str]) -> anyhow::Result<()>;
-    async fn create_consumer_group(&self, stream: &str, group: &str, start_id: &str) -> anyhow::Result<()>;
+    async fn create_consumer_group(
+        &self,
+        stream: &str,
+        group: &str,
+        start_id: &str,
+    ) -> anyhow::Result<()>;
 }
 
 #[derive(Debug)]
@@ -74,14 +83,15 @@ impl StreamBus for RedisStreamBus {
             args.push(serde_json::to_string(&message.data)?);
         }
 
-        let id: String = redis::cmd("XADD")
-            .arg(&args)
-            .query_async(&mut conn)
-            .await?;
+        let id: String = redis::cmd("XADD").arg(&args).query_async(&mut conn).await?;
         Ok(id)
     }
 
-    async fn xread(&self, streams: &[(&str, &str)], count: usize) -> anyhow::Result<Vec<StreamReadResult>> {
+    async fn xread(
+        &self,
+        streams: &[(&str, &str)],
+        count: usize,
+    ) -> anyhow::Result<Vec<StreamReadResult>> {
         let mut conn = self.conn.clone();
         let mut args: Vec<String> = vec!["COUNT".to_string(), count.to_string()];
         for (s, id) in streams {
@@ -133,11 +143,10 @@ impl StreamBus for RedisStreamBus {
             args.push(s.to_string());
             args.push(id.to_string());
         }
-        let result: Vec<(String, Vec<(String, Vec<(String, String)>)>)> =
-            redis::cmd("XREADGROUP")
-                .arg(&args)
-                .query_async(&mut conn)
-                .await?;
+        let result: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREADGROUP")
+            .arg(&args)
+            .query_async(&mut conn)
+            .await?;
 
         let mut results = Vec::new();
         for (stream_name, entries) in result {
@@ -164,14 +173,16 @@ impl StreamBus for RedisStreamBus {
         let mut conn = self.conn.clone();
         let mut args = vec![stream.to_string(), group.to_string()];
         args.extend(ids.iter().map(|s| s.to_string()));
-        let _: () = redis::cmd("XACK")
-            .arg(&args)
-            .query_async(&mut conn)
-            .await?;
+        let _: () = redis::cmd("XACK").arg(&args).query_async(&mut conn).await?;
         Ok(())
     }
 
-    async fn create_consumer_group(&self, stream: &str, group: &str, start_id: &str) -> anyhow::Result<()> {
+    async fn create_consumer_group(
+        &self,
+        stream: &str,
+        group: &str,
+        start_id: &str,
+    ) -> anyhow::Result<()> {
         let mut conn = self.conn.clone();
         let _: () = redis::cmd("XGROUP")
             .arg("CREATE")

@@ -331,17 +331,21 @@ pub async fn merge_candidate(
         ));
     }
 
-    let target_entry = services.memory.v1_get_entry(req.target_id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                code: "DB_ERROR".into(),
-                message: e.to_string(),
-                details: None,
-                request_id: None,
-            }),
-        )
-    })?;
+    let target_entry = services
+        .memory
+        .v1_get_entry(req.target_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
 
     let target_entry = match target_entry {
         Some(e) => e,
@@ -619,7 +623,10 @@ pub async fn backfill(
 
 pub async fn review_notifications_sse(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>>, StatusCode> {
+) -> Result<
+    Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>>,
+    StatusCode,
+> {
     let notification_service = services.notification_service.as_ref();
 
     let mut receiver = match notification_service.subscribe() {

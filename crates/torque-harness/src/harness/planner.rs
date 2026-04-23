@@ -29,10 +29,7 @@ pub struct Planner {
 
 impl Planner {
     pub fn new(llm: Arc<dyn LlmClient>) -> Self {
-        Self {
-            llm,
-            max_tasks: 10,
-        }
+        Self { llm, max_tasks: 10 }
     }
 
     pub fn with_max_tasks(mut self, max: usize) -> Self {
@@ -73,7 +70,10 @@ The first task should have empty depends_on. Subsequent tasks should list IDs of
 Generate 3-8 subtasks maximum."#;
 
         let user_prompt = if let Some(ctx) = context {
-            format!("Goal: {}\n\nContext:\n{}\n\nDecompose this into subtasks.", goal, ctx)
+            format!(
+                "Goal: {}\n\nContext:\n{}\n\nDecompose this into subtasks.",
+                goal, ctx
+            )
         } else {
             format!("Goal: {}\n\nDecompose this into subtasks.", goal)
         };

@@ -1,10 +1,10 @@
+use super::circuit_breaker::{CircuitBreaker, CircuitState};
+use crate::models::v1::delegation_event::RejectionReason;
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use super::circuit_breaker::{CircuitBreaker, CircuitState};
-use crate::models::v1::delegation_event::RejectionReason;
 
 #[derive(Debug, Clone)]
 pub struct MemberHealth {
@@ -126,16 +126,12 @@ pub fn classify_rejection(reason: &RejectionReason, budget: &RetryBudget) -> Ret
                 }
             }
         }
-        RejectionReason::CapabilityMismatch => {
-            RetryDecision::DoNotRetry {
-                reason: "Capability mismatch".to_string(),
-            }
-        }
-        RejectionReason::PolicyViolation => {
-            RetryDecision::DoNotRetry {
-                reason: "Policy violation".to_string(),
-            }
-        }
+        RejectionReason::CapabilityMismatch => RetryDecision::DoNotRetry {
+            reason: "Capability mismatch".to_string(),
+        },
+        RejectionReason::PolicyViolation => RetryDecision::DoNotRetry {
+            reason: "Policy violation".to_string(),
+        },
         RejectionReason::MemberUnavailable => {
             if budget.can_retry() {
                 RetryDecision::RetryWithOtherMember
@@ -145,10 +141,8 @@ pub fn classify_rejection(reason: &RejectionReason, budget: &RetryBudget) -> Ret
                 }
             }
         }
-        RejectionReason::Other(_) => {
-            RetryDecision::DoNotRetry {
-                reason: "Unknown error".to_string(),
-            }
-        }
+        RejectionReason::Other(_) => RetryDecision::DoNotRetry {
+            reason: "Unknown error".to_string(),
+        },
     }
 }

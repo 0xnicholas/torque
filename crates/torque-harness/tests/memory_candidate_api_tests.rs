@@ -1,12 +1,5 @@
 mod common;
 
-use torque_harness::db::Database;
-use torque_harness::models::{
-    MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus, MemoryLayer,
-};
-use torque_harness::repository::{
-    MemoryRepository, PostgresMemoryRepository, PostgresSessionRepository, SessionRepository,
-};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use chrono::Utc;
@@ -15,6 +8,13 @@ use llm::OpenAiClient;
 use serde_json::{json, Value};
 use serial_test::serial;
 use std::sync::Arc;
+use torque_harness::db::Database;
+use torque_harness::models::{
+    MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus, MemoryLayer,
+};
+use torque_harness::repository::{
+    MemoryRepository, PostgresMemoryRepository, PostgresSessionRepository, SessionRepository,
+};
 use tower::util::ServiceExt;
 use uuid::Uuid;
 

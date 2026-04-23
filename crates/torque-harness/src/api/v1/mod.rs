@@ -126,7 +126,10 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         )
         .route("/v1/team-instances/:id/members", get(teams::list_members))
         .route("/v1/team-instances/:id/publish", post(teams::publish))
-        .route("/v1/team-instances/:id/supervisor/execute", post(teams::execute_supervisor))
+        .route(
+            "/v1/team-instances/:id/supervisor/execute",
+            post(teams::execute_supervisor),
+        )
         .route(
             "/v1/delegations",
             post(delegations::create).get(delegations::list),

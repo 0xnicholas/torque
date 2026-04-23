@@ -29,10 +29,7 @@ impl MemoryCompactionJob {
     }
 
     pub async fn run(&self) -> anyhow::Result<CompactionResult> {
-        let recent_entries = self
-            .memory_repo
-            .list_entries(self.batch_size, 0)
-            .await?;
+        let recent_entries = self.memory_repo.list_entries(self.batch_size, 0).await?;
 
         let entries_count = recent_entries.len();
         let mut candidates_created = 0;

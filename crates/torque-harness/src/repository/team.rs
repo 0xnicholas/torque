@@ -1,8 +1,8 @@
 use crate::db::Database;
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTask, TeamTaskStatus, TriageResult, SharedTaskState, ArtifactRef, PublishedFact,
-    DelegationStatusEntry, Blocker, Decision, TeamEvent,
+    ArtifactRef, Blocker, Decision, DelegationStatusEntry, PublishedFact, SharedTaskState,
+    TeamDefinition, TeamDefinitionCreate, TeamEvent, TeamInstance, TeamInstanceCreate, TeamMember,
+    TeamTask, TeamTaskStatus, TriageResult,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -223,13 +223,12 @@ struct TeamTaskRow {
 
 impl From<TeamTaskRow> for TeamTask {
     fn from(row: TeamTaskRow) -> Self {
-        let status = TeamTaskStatus::try_from(row.status.as_str())
-            .unwrap_or(TeamTaskStatus::Open);
-        let triage_result = row.triage_result.and_then(|tr| {
-            serde_json::from_value(tr).ok()
-        });
-        let input_artifacts: Vec<Uuid> = serde_json::from_value(row.input_artifacts)
-            .unwrap_or_default();
+        let status = TeamTaskStatus::try_from(row.status.as_str()).unwrap_or(TeamTaskStatus::Open);
+        let triage_result = row
+            .triage_result
+            .and_then(|tr| serde_json::from_value(tr).ok());
+        let input_artifacts: Vec<Uuid> =
+            serde_json::from_value(row.input_artifacts).unwrap_or_default();
         TeamTask {
             id: row.id,
             team_instance_id: row.team_instance_id,
@@ -259,8 +258,16 @@ pub trait TeamTaskRepository: Send + Sync {
         idempotency_key: Option<&str>,
     ) -> anyhow::Result<TeamTask>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<TeamTask>>;
-    async fn get_by_idempotency_key(&self, team_instance_id: Uuid, idempotency_key: &str) -> anyhow::Result<Option<TeamTask>>;
-    async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamTask>>;
+    async fn get_by_idempotency_key(
+        &self,
+        team_instance_id: Uuid,
+        idempotency_key: &str,
+    ) -> anyhow::Result<Option<TeamTask>>;
+    async fn list_by_team(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<TeamTask>>;
     async fn list_open(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamTask>>;
     async fn update_status(&self, id: Uuid, status: TeamTaskStatus) -> anyhow::Result<bool>;
     async fn update_triage_result(&self, id: Uuid, triage: &TriageResult) -> anyhow::Result<bool>;
@@ -310,9 +317,13 @@ impl TeamTaskRepository for PostgresTeamTaskRepository {
         Ok(row.into())
     }
 
-    async fn get_by_idempotency_key(&self, team_instance_id: Uuid, idempotency_key: &str) -> anyhow::Result<Option<TeamTask>> {
+    async fn get_by_idempotency_key(
+        &self,
+        team_instance_id: Uuid,
+        idempotency_key: &str,
+    ) -> anyhow::Result<Option<TeamTask>> {
         let row = sqlx::query_as::<_, TeamTaskRow>(
-            "SELECT * FROM v1_team_tasks WHERE team_instance_id = $1 AND idempotency_key = $2"
+            "SELECT * FROM v1_team_tasks WHERE team_instance_id = $1 AND idempotency_key = $2",
         )
         .bind(team_instance_id)
         .bind(idempotency_key)
@@ -329,7 +340,11 @@ impl TeamTaskRepository for PostgresTeamTaskRepository {
         Ok(row.map(|r| r.into()))
     }
 
-    async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamTask>> {
+    async fn list_by_team(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<TeamTask>> {
         let rows = sqlx::query_as::<_, TeamTaskRow>(
             "SELECT * FROM v1_team_tasks WHERE team_instance_id = $1 ORDER BY created_at DESC LIMIT $2"
         )
@@ -405,7 +420,8 @@ impl From<SharedTaskStateRow> for SharedTaskState {
         SharedTaskState {
             id: row.id,
             team_instance_id: row.team_instance_id,
-            accepted_artifact_refs: serde_json::from_value(row.accepted_artifact_refs).unwrap_or_default(),
+            accepted_artifact_refs: serde_json::from_value(row.accepted_artifact_refs)
+                .unwrap_or_default(),
             published_facts: serde_json::from_value(row.published_facts).unwrap_or_default(),
             delegation_status: serde_json::from_value(row.delegation_status).unwrap_or_default(),
             open_blockers: serde_json::from_value(row.open_blockers).unwrap_or_default(),
@@ -419,12 +435,32 @@ impl From<SharedTaskStateRow> for SharedTaskState {
 pub trait SharedTaskStateRepository: Send + Sync {
     async fn get_or_create(&self, team_instance_id: Uuid) -> anyhow::Result<SharedTaskState>;
     async fn get(&self, team_instance_id: Uuid) -> anyhow::Result<Option<SharedTaskState>>;
-    async fn add_accepted_artifact(&self, team_instance_id: Uuid, artifact_ref: ArtifactRef) -> anyhow::Result<bool>;
-    async fn add_published_fact(&self, team_instance_id: Uuid, fact: PublishedFact) -> anyhow::Result<bool>;
-    async fn update_delegation_status(&self, team_instance_id: Uuid, entry: DelegationStatusEntry) -> anyhow::Result<bool>;
+    async fn add_accepted_artifact(
+        &self,
+        team_instance_id: Uuid,
+        artifact_ref: ArtifactRef,
+    ) -> anyhow::Result<bool>;
+    async fn add_published_fact(
+        &self,
+        team_instance_id: Uuid,
+        fact: PublishedFact,
+    ) -> anyhow::Result<bool>;
+    async fn update_delegation_status(
+        &self,
+        team_instance_id: Uuid,
+        entry: DelegationStatusEntry,
+    ) -> anyhow::Result<bool>;
     async fn add_blocker(&self, team_instance_id: Uuid, blocker: Blocker) -> anyhow::Result<bool>;
-    async fn resolve_blocker(&self, team_instance_id: Uuid, blocker_id: Uuid) -> anyhow::Result<bool>;
-    async fn add_decision(&self, team_instance_id: Uuid, decision: Decision) -> anyhow::Result<bool>;
+    async fn resolve_blocker(
+        &self,
+        team_instance_id: Uuid,
+        blocker_id: Uuid,
+    ) -> anyhow::Result<bool>;
+    async fn add_decision(
+        &self,
+        team_instance_id: Uuid,
+        decision: Decision,
+    ) -> anyhow::Result<bool>;
 }
 
 pub struct PostgresSharedTaskStateRepository {
@@ -451,7 +487,7 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
 
     async fn get(&self, team_instance_id: Uuid) -> anyhow::Result<Option<SharedTaskState>> {
         let row = sqlx::query_as::<_, SharedTaskStateRow>(
-            "SELECT * FROM v1_team_shared_state WHERE team_instance_id = $1"
+            "SELECT * FROM v1_team_shared_state WHERE team_instance_id = $1",
         )
         .bind(team_instance_id)
         .fetch_optional(self.db.pool())
@@ -459,7 +495,11 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         Ok(row.map(|r| r.into()))
     }
 
-    async fn add_accepted_artifact(&self, team_instance_id: Uuid, artifact_ref: ArtifactRef) -> anyhow::Result<bool> {
+    async fn add_accepted_artifact(
+        &self,
+        team_instance_id: Uuid,
+        artifact_ref: ArtifactRef,
+    ) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "UPDATE v1_team_shared_state SET accepted_artifact_refs = accepted_artifact_refs || $1::jsonb, updated_at = NOW() WHERE team_instance_id = $2"
         )
@@ -470,7 +510,11 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn add_published_fact(&self, team_instance_id: Uuid, fact: PublishedFact) -> anyhow::Result<bool> {
+    async fn add_published_fact(
+        &self,
+        team_instance_id: Uuid,
+        fact: PublishedFact,
+    ) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "UPDATE v1_team_shared_state SET published_facts = published_facts || $1::jsonb, updated_at = NOW() WHERE team_instance_id = $2"
         )
@@ -481,7 +525,11 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn update_delegation_status(&self, team_instance_id: Uuid, entry: DelegationStatusEntry) -> anyhow::Result<bool> {
+    async fn update_delegation_status(
+        &self,
+        team_instance_id: Uuid,
+        entry: DelegationStatusEntry,
+    ) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "UPDATE v1_team_shared_state SET delegation_status = delegation_status || $1::jsonb, updated_at = NOW() WHERE team_instance_id = $2"
         )
@@ -503,9 +551,18 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn resolve_blocker(&self, team_instance_id: Uuid, blocker_id: Uuid) -> anyhow::Result<bool> {
-        let state = self.get(team_instance_id).await?.ok_or_else(|| anyhow::anyhow!("Shared state not found"))?;
-        let remaining: Vec<Blocker> = state.open_blockers.into_iter()
+    async fn resolve_blocker(
+        &self,
+        team_instance_id: Uuid,
+        blocker_id: Uuid,
+    ) -> anyhow::Result<bool> {
+        let state = self
+            .get(team_instance_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Shared state not found"))?;
+        let remaining: Vec<Blocker> = state
+            .open_blockers
+            .into_iter()
             .filter(|b| b.blocker_id != blocker_id)
             .collect();
         let result = sqlx::query(
@@ -518,7 +575,11 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn add_decision(&self, team_instance_id: Uuid, decision: Decision) -> anyhow::Result<bool> {
+    async fn add_decision(
+        &self,
+        team_instance_id: Uuid,
+        decision: Decision,
+    ) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "UPDATE v1_team_shared_state SET decisions = decisions || $1::jsonb, updated_at = NOW() WHERE team_instance_id = $2"
         )
@@ -553,8 +614,10 @@ impl From<TeamEventRow> for TeamEvent {
             timestamp: row.timestamp,
             actor_ref: row.actor_ref,
             team_task_ref: row.team_task_ref,
-            related_instance_refs: serde_json::from_value(row.related_instance_refs).unwrap_or_default(),
-            related_artifact_refs: serde_json::from_value(row.related_artifact_refs).unwrap_or_default(),
+            related_instance_refs: serde_json::from_value(row.related_instance_refs)
+                .unwrap_or_default(),
+            related_artifact_refs: serde_json::from_value(row.related_artifact_refs)
+                .unwrap_or_default(),
             payload: row.payload,
             causal_event_refs: serde_json::from_value(row.causal_event_refs).unwrap_or_default(),
         }
@@ -564,7 +627,11 @@ impl From<TeamEventRow> for TeamEvent {
 #[async_trait]
 pub trait TeamEventRepository: Send + Sync {
     async fn create(&self, event: &TeamEvent) -> anyhow::Result<TeamEvent>;
-    async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamEvent>>;
+    async fn list_by_team(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<TeamEvent>>;
     async fn list_by_task(&self, team_task_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamEvent>>;
 }
 
@@ -597,7 +664,11 @@ impl TeamEventRepository for PostgresTeamEventRepository {
         Ok(row.into())
     }
 
-    async fn list_by_team(&self, team_instance_id: Uuid, limit: i64) -> anyhow::Result<Vec<TeamEvent>> {
+    async fn list_by_team(
+        &self,
+        team_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<TeamEvent>> {
         let rows = sqlx::query_as::<_, TeamEventRow>(
             "SELECT * FROM v1_team_events WHERE team_instance_id = $1 ORDER BY timestamp DESC LIMIT $2"
         )

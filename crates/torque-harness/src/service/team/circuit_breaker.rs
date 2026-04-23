@@ -1,6 +1,6 @@
-use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, Duration};
 use crate::models::v1::delegation_event::RejectionReason;
+use chrono::{DateTime, Duration, Utc};
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
@@ -24,7 +24,11 @@ impl CircuitBreaker {
         Self::with_recovery_timeout(failure_threshold, success_threshold, Duration::seconds(30))
     }
 
-    pub fn with_recovery_timeout(failure_threshold: usize, success_threshold: usize, recovery_timeout: Duration) -> Self {
+    pub fn with_recovery_timeout(
+        failure_threshold: usize,
+        success_threshold: usize,
+        recovery_timeout: Duration,
+    ) -> Self {
         Self {
             failure_threshold,
             success_threshold,

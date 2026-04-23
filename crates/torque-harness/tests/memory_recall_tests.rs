@@ -1,5 +1,10 @@
 mod common;
 
+use common::fake_llm::FakeLlm;
+use common::setup_test_db_or_skip;
+use serial_test::serial;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use torque_harness::agent::StreamEvent;
 use torque_harness::models::{MemoryEntry, MemoryEntryStatus, MemoryLayer};
 use torque_harness::repository::{
@@ -7,11 +12,6 @@ use torque_harness::repository::{
     PostgresMemoryRepository, PostgresMessageRepository, PostgresSessionRepository,
 };
 use torque_harness::service::{MemoryService, SessionService, ToolService};
-use common::fake_llm::FakeLlm;
-use common::setup_test_db_or_skip;
-use serial_test::serial;
-use std::sync::Arc;
-use tokio::sync::mpsc;
 
 async fn build_session_service(
     db: torque_harness::db::Database,
@@ -24,12 +24,14 @@ async fn build_session_service(
     let memory_repo = Arc::new(PostgresMemoryRepository::new(db.clone()));
 
     let tool = Arc::new(ToolService::new());
-    let memory_v1_repo =
-        Arc::new(torque_harness::repository::PostgresMemoryRepositoryV1::new(db.clone()));
+    let memory_v1_repo = Arc::new(torque_harness::repository::PostgresMemoryRepositoryV1::new(
+        db.clone(),
+    ));
     let memory = Arc::new(MemoryService::new(memory_repo, memory_v1_repo, None));
 
-    let checkpointer =
-        Arc::new(torque_harness::kernel_bridge::PostgresCheckpointer::new(db.clone()));
+    let checkpointer = Arc::new(torque_harness::kernel_bridge::PostgresCheckpointer::new(
+        db.clone(),
+    ));
 
     SessionService::new(
         session_repo,

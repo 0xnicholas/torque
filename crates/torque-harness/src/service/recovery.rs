@@ -119,7 +119,9 @@ impl RecoveryService {
             .agent_instance_repo
             .get(instance_id)
             .await?
-            .ok_or_else(|| anyhow::anyhow!("Instance {} disappeared during reconciliation", instance_id))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("Instance {} disappeared during reconciliation", instance_id)
+            })?;
 
         let checkpoint_time = checkpoint.created_at;
         let events_after_checkpoint = self

@@ -60,10 +60,7 @@ impl<'r> Decode<'r, sqlx::Postgres> for Vector {
 }
 
 impl<'q> Encode<'q, sqlx::Postgres> for Vector {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> IsNull {
         let text = format!(
             "[{}]",
             self.0

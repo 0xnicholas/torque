@@ -1,6 +1,6 @@
 use crate::models::v1::team::{CandidateMember, TeamTask};
-use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use crate::repository::DelegationRepository;
+use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -41,34 +41,74 @@ impl RouteModeHandler {
 
         let selected = candidates[0].clone();
 
-        events.member_activated(team_instance_id, task.id, selected.agent_instance_id, &selected.role, vec![]).await?;
+        events
+            .member_activated(
+                team_instance_id,
+                task.id,
+                selected.agent_instance_id,
+                &selected.role,
+                vec![],
+            )
+            .await?;
 
-        let delegation = delegation_repo.create(
-            task.id,
-            team_instance_id,
-            serde_json::json!({
-                "member_id": selected.agent_instance_id,
-                "goal": task.goal,
-                "instructions": task.instructions,
-            }),
-        ).await?;
+        let delegation = delegation_repo
+            .create(
+                task.id,
+                team_instance_id,
+                serde_json::json!({
+                    "member_id": selected.agent_instance_id,
+                    "goal": task.goal,
+                    "instructions": task.instructions,
+                }),
+            )
+            .await?;
 
-        events.delegation_created(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
-        shared_state.update_delegation_status(team_instance_id, delegation.id, "PENDING").await?;
+        events
+            .delegation_created(
+                team_instance_id,
+                task.id,
+                delegation.id,
+                selected.agent_instance_id,
+                vec![],
+            )
+            .await?;
+        shared_state
+            .update_delegation_status(team_instance_id, delegation.id, "PENDING")
+            .await?;
 
-        delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
-        shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-        events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+        delegation_repo
+            .update_status(delegation.id, "ACCEPTED")
+            .await?;
+        shared_state
+            .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+            .await?;
+        events
+            .delegation_accepted(
+                team_instance_id,
+                task.id,
+                delegation.id,
+                selected.agent_instance_id,
+                vec![],
+            )
+            .await?;
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Route completed via member {} for task: {}", selected.role, task.goal),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Route completed via member {} for task: {}",
+                    selected.role, task.goal
+                ),
+                "supervisor",
+            )
+            .await?;
 
         Ok(ModeExecutionResult {
             success: true,
-            summary: format!("Route completed via member {} (delegation: {})", selected.role, delegation.id),
+            summary: format!(
+                "Route completed via member {} (delegation: {})",
+                selected.role, delegation.id
+            ),
             delegation_ids: vec![delegation.id],
             published_artifact_ids: vec![],
         })
@@ -105,40 +145,83 @@ impl BroadcastModeHandler {
         let mut delegation_ids = Vec::new();
 
         for candidate in &candidates {
-            events.member_activated(team_instance_id, task.id, candidate.agent_instance_id, &candidate.role, vec![]).await?;
+            events
+                .member_activated(
+                    team_instance_id,
+                    task.id,
+                    candidate.agent_instance_id,
+                    &candidate.role,
+                    vec![],
+                )
+                .await?;
 
-            let delegation = delegation_repo.create(
-                task.id,
-                team_instance_id,
-                serde_json::json!({
-                    "member_id": candidate.agent_instance_id,
-                    "goal": task.goal,
-                    "instructions": task.instructions,
-                }),
-            ).await?;
+            let delegation = delegation_repo
+                .create(
+                    task.id,
+                    team_instance_id,
+                    serde_json::json!({
+                        "member_id": candidate.agent_instance_id,
+                        "goal": task.goal,
+                        "instructions": task.instructions,
+                    }),
+                )
+                .await?;
 
             delegation_ids.push(delegation.id);
-            shared_state.update_delegation_status(team_instance_id, delegation.id, "PENDING").await?;
-            events.delegation_created(team_instance_id, task.id, delegation.id, candidate.agent_instance_id, vec![]).await?;
+            shared_state
+                .update_delegation_status(team_instance_id, delegation.id, "PENDING")
+                .await?;
+            events
+                .delegation_created(
+                    team_instance_id,
+                    task.id,
+                    delegation.id,
+                    candidate.agent_instance_id,
+                    vec![],
+                )
+                .await?;
         }
 
         let mut accepted_count = 0;
         for (i, delegation_id) in delegation_ids.iter().enumerate() {
-            delegation_repo.update_status(*delegation_id, "ACCEPTED").await?;
-            shared_state.update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED").await?;
-            events.delegation_accepted(team_instance_id, task.id, *delegation_id, candidates[i].agent_instance_id, vec![]).await?;
+            delegation_repo
+                .update_status(*delegation_id, "ACCEPTED")
+                .await?;
+            shared_state
+                .update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED")
+                .await?;
+            events
+                .delegation_accepted(
+                    team_instance_id,
+                    task.id,
+                    *delegation_id,
+                    candidates[i].agent_instance_id,
+                    vec![],
+                )
+                .await?;
             accepted_count += 1;
         }
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Broadcast completed: {}/{} members accepted results for task: {}", accepted_count, delegation_ids.len(), task.goal),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Broadcast completed: {}/{} members accepted results for task: {}",
+                    accepted_count,
+                    delegation_ids.len(),
+                    task.goal
+                ),
+                "supervisor",
+            )
+            .await?;
 
         Ok(ModeExecutionResult {
             success: true,
-            summary: format!("Broadcast completed with {}/{} accepted", accepted_count, delegation_ids.len()),
+            summary: format!(
+                "Broadcast completed with {}/{} accepted",
+                accepted_count,
+                delegation_ids.len()
+            ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
@@ -177,11 +260,16 @@ impl CoordinateModeHandler {
         let max_rounds = self.max_rounds;
         let coordination_rounds = candidates.len().min(max_rounds);
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Starting coordination for task: {} with {} rounds", task.goal, coordination_rounds),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Starting coordination for task: {} with {} rounds",
+                    task.goal, coordination_rounds
+                ),
+                "supervisor",
+            )
+            .await?;
 
         let mut delegation_ids = Vec::new();
         let mut previous_result_available = false;
@@ -190,13 +278,26 @@ impl CoordinateModeHandler {
             let member_index = (round - 1) % candidates.len();
             let selected = &candidates[member_index];
 
-            shared_state.add_decision(
-                team_instance_id,
-                &format!("Coordination round {}: delegating to {}", round, selected.role),
-                "supervisor",
-            ).await?;
+            shared_state
+                .add_decision(
+                    team_instance_id,
+                    &format!(
+                        "Coordination round {}: delegating to {}",
+                        round, selected.role
+                    ),
+                    "supervisor",
+                )
+                .await?;
 
-            events.member_activated(team_instance_id, task.id, selected.agent_instance_id, &selected.role, vec![]).await?;
+            events
+                .member_activated(
+                    team_instance_id,
+                    task.id,
+                    selected.agent_instance_id,
+                    &selected.role,
+                    vec![],
+                )
+                .await?;
 
             let delegation_payload = serde_json::json!({
                 "member_id": selected.agent_instance_id,
@@ -206,32 +307,60 @@ impl CoordinateModeHandler {
                 "previous_round_completed": previous_result_available,
             });
 
-            let delegation = delegation_repo.create(
-                task.id,
-                team_instance_id,
-                delegation_payload,
-            ).await?;
+            let delegation = delegation_repo
+                .create(task.id, team_instance_id, delegation_payload)
+                .await?;
 
             delegation_ids.push(delegation.id);
-            events.delegation_created(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
-            shared_state.update_delegation_status(team_instance_id, delegation.id, "PENDING").await?;
+            events
+                .delegation_created(
+                    team_instance_id,
+                    task.id,
+                    delegation.id,
+                    selected.agent_instance_id,
+                    vec![],
+                )
+                .await?;
+            shared_state
+                .update_delegation_status(team_instance_id, delegation.id, "PENDING")
+                .await?;
 
-            delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
-            shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-            events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+            delegation_repo
+                .update_status(delegation.id, "ACCEPTED")
+                .await?;
+            shared_state
+                .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+                .await?;
+            events
+                .delegation_accepted(
+                    team_instance_id,
+                    task.id,
+                    delegation.id,
+                    selected.agent_instance_id,
+                    vec![],
+                )
+                .await?;
 
             previous_result_available = true;
         }
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Coordinate mode completed: {} rounds for task: {}", coordination_rounds, task.goal),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Coordinate mode completed: {} rounds for task: {}",
+                    coordination_rounds, task.goal
+                ),
+                "supervisor",
+            )
+            .await?;
 
         Ok(ModeExecutionResult {
             success: true,
-            summary: format!("Coordinate mode completed with {} rounds", coordination_rounds),
+            summary: format!(
+                "Coordinate mode completed with {} rounds",
+                coordination_rounds
+            ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
@@ -245,7 +374,9 @@ pub struct TasksModeHandler {
 
 impl TasksModeHandler {
     pub fn new() -> Self {
-        Self { max_parallel_tasks: 5 }
+        Self {
+            max_parallel_tasks: 5,
+        }
     }
 
     pub async fn execute(
@@ -271,11 +402,17 @@ impl TasksModeHandler {
         let max_tasks = subtasks.len().min(self.max_parallel_tasks);
         let subtasks_to_execute = &subtasks[..max_tasks];
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Starting task decomposition: {} subtasks for goal: {}", subtasks_to_execute.len(), task.goal),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Starting task decomposition: {} subtasks for goal: {}",
+                    subtasks_to_execute.len(),
+                    task.goal
+                ),
+                "supervisor",
+            )
+            .await?;
 
         let mut delegation_ids = Vec::new();
 
@@ -283,46 +420,94 @@ impl TasksModeHandler {
             let member_index = idx % candidates.len();
             let selected = &candidates[member_index];
 
-            shared_state.add_decision(
-                team_instance_id,
-                &format!("Task {}: delegating '{}' to {}", idx + 1, subtask, selected.role),
-                "supervisor",
-            ).await?;
+            shared_state
+                .add_decision(
+                    team_instance_id,
+                    &format!(
+                        "Task {}: delegating '{}' to {}",
+                        idx + 1,
+                        subtask,
+                        selected.role
+                    ),
+                    "supervisor",
+                )
+                .await?;
 
-            events.member_activated(team_instance_id, task.id, selected.agent_instance_id, &selected.role, vec![]).await?;
+            events
+                .member_activated(
+                    team_instance_id,
+                    task.id,
+                    selected.agent_instance_id,
+                    &selected.role,
+                    vec![],
+                )
+                .await?;
 
-            let delegation = delegation_repo.create(
-                task.id,
-                team_instance_id,
-                serde_json::json!({
-                    "member_id": selected.agent_instance_id,
-                    "goal": subtask,
-                    "instructions": task.instructions,
-                    "parent_task_id": task.id,
-                    "subtask_index": idx,
-                    "total_subtasks": subtasks_to_execute.len(),
-                    "decomposed": true,
-                }),
-            ).await?;
+            let delegation = delegation_repo
+                .create(
+                    task.id,
+                    team_instance_id,
+                    serde_json::json!({
+                        "member_id": selected.agent_instance_id,
+                        "goal": subtask,
+                        "instructions": task.instructions,
+                        "parent_task_id": task.id,
+                        "subtask_index": idx,
+                        "total_subtasks": subtasks_to_execute.len(),
+                        "decomposed": true,
+                    }),
+                )
+                .await?;
 
             delegation_ids.push(delegation.id);
-            events.delegation_created(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
-            shared_state.update_delegation_status(team_instance_id, delegation.id, "PENDING").await?;
+            events
+                .delegation_created(
+                    team_instance_id,
+                    task.id,
+                    delegation.id,
+                    selected.agent_instance_id,
+                    vec![],
+                )
+                .await?;
+            shared_state
+                .update_delegation_status(team_instance_id, delegation.id, "PENDING")
+                .await?;
 
-            delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
-            shared_state.update_delegation_status(team_instance_id, delegation.id, "ACCEPTED").await?;
-            events.delegation_accepted(team_instance_id, task.id, delegation.id, selected.agent_instance_id, vec![]).await?;
+            delegation_repo
+                .update_status(delegation.id, "ACCEPTED")
+                .await?;
+            shared_state
+                .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+                .await?;
+            events
+                .delegation_accepted(
+                    team_instance_id,
+                    task.id,
+                    delegation.id,
+                    selected.agent_instance_id,
+                    vec![],
+                )
+                .await?;
         }
 
-        shared_state.add_decision(
-            team_instance_id,
-            &format!("Task decomposition completed: {} delegations for goal: {}", delegation_ids.len(), task.goal),
-            "supervisor",
-        ).await?;
+        shared_state
+            .add_decision(
+                team_instance_id,
+                &format!(
+                    "Task decomposition completed: {} delegations for goal: {}",
+                    delegation_ids.len(),
+                    task.goal
+                ),
+                "supervisor",
+            )
+            .await?;
 
         Ok(ModeExecutionResult {
             success: true,
-            summary: format!("Tasks mode completed: {} subtasks delegated", delegation_ids.len()),
+            summary: format!(
+                "Tasks mode completed: {} subtasks delegated",
+                delegation_ids.len()
+            ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
@@ -401,10 +586,54 @@ impl TeamModeHandler {
         events: Arc<TeamEventEmitter>,
     ) -> anyhow::Result<ModeExecutionResult> {
         match self {
-            TeamModeHandler::Route(h) => h.execute(task, team_instance_id, candidates, delegation_repo, selector_resolver, shared_state, events).await,
-            TeamModeHandler::Broadcast(h) => h.execute(task, team_instance_id, candidates, delegation_repo, selector_resolver, shared_state, events).await,
-            TeamModeHandler::Coordinate(h) => h.execute(task, team_instance_id, candidates, delegation_repo, selector_resolver, shared_state, events).await,
-            TeamModeHandler::Tasks(h) => h.execute(task, team_instance_id, candidates, delegation_repo, selector_resolver, shared_state, events).await,
+            TeamModeHandler::Route(h) => {
+                h.execute(
+                    task,
+                    team_instance_id,
+                    candidates,
+                    delegation_repo,
+                    selector_resolver,
+                    shared_state,
+                    events,
+                )
+                .await
+            }
+            TeamModeHandler::Broadcast(h) => {
+                h.execute(
+                    task,
+                    team_instance_id,
+                    candidates,
+                    delegation_repo,
+                    selector_resolver,
+                    shared_state,
+                    events,
+                )
+                .await
+            }
+            TeamModeHandler::Coordinate(h) => {
+                h.execute(
+                    task,
+                    team_instance_id,
+                    candidates,
+                    delegation_repo,
+                    selector_resolver,
+                    shared_state,
+                    events,
+                )
+                .await
+            }
+            TeamModeHandler::Tasks(h) => {
+                h.execute(
+                    task,
+                    team_instance_id,
+                    candidates,
+                    delegation_repo,
+                    selector_resolver,
+                    shared_state,
+                    events,
+                )
+                .await
+            }
         }
     }
 }

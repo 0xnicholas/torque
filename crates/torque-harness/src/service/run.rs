@@ -5,7 +5,6 @@ use crate::kernel_bridge::{
     run_request_to_execution_request, v1_agent_definition_to_kernel, KernelRuntimeHandle,
 };
 use crate::models::v1::agent_instance::AgentInstanceStatus;
-use checkpointer::CheckpointState;
 use crate::models::v1::gating::ExecutionSummary;
 use crate::models::v1::run::RunRequest;
 use crate::models::v1::task::{TaskStatus, TaskType};
@@ -19,6 +18,7 @@ use crate::service::gating::MemoryGatingService;
 use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
 use crate::service::ToolService;
+use checkpointer::CheckpointState;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::warn;

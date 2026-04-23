@@ -37,7 +37,7 @@ pub use memory_pipeline::MemoryPipelineService;
 pub use notification::NotificationService;
 pub use recovery::RecoveryService;
 pub use reflexion::{
-    ExperienceQuery, ReflexionService, RetrievedExperience, ReflectionResult, SubtaskResult,
+    ExperienceQuery, ReflectionResult, ReflexionService, RetrievedExperience, SubtaskResult,
 };
 pub use run::RunService;
 pub use session::SessionService;
@@ -125,9 +125,8 @@ impl ServiceContainer {
         let team_shared_state_manager = std::sync::Arc::new(team::SharedTaskStateManager::new(
             repos.team_shared_state.clone(),
         ));
-        let team_event_emitter = std::sync::Arc::new(team::TeamEventEmitter::new(
-            repos.team_event.clone(),
-        ));
+        let team_event_emitter =
+            std::sync::Arc::new(team::TeamEventEmitter::new(repos.team_event.clone()));
         let team_supervisor = std::sync::Arc::new(TeamSupervisor::new(
             repos.team_task.clone(),
             repos.delegation.clone(),
@@ -144,16 +143,20 @@ impl ServiceContainer {
             memory_v1.clone(),
             embedding.clone(),
         ));
-        let notification_service = std::sync::Arc::new(notification::NotificationService::new().with_sse_hook());
+        let notification_service =
+            std::sync::Arc::new(notification::NotificationService::new().with_sse_hook());
         let memory_pipeline = std::sync::Arc::new(memory_pipeline::MemoryPipelineService::new(
             gating.clone(),
             Some(notification_service.clone()),
         ));
         let candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator> =
             if let Ok(gen) = candidate_generator::OpenAICandidateGenerator::new() {
-                std::sync::Arc::new(gen) as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
+                std::sync::Arc::new(gen)
+                    as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
             } else {
-                tracing::warn!("Failed to initialize OpenAICandidateGenerator, using NoOpCandidateGenerator");
+                tracing::warn!(
+                    "Failed to initialize OpenAICandidateGenerator, using NoOpCandidateGenerator"
+                );
                 std::sync::Arc::new(candidate_generator::NoOpCandidateGenerator {})
                     as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
             };

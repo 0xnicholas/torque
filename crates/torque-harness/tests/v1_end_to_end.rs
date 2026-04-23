@@ -1,5 +1,7 @@
 mod common;
 
+use common::setup_test_db_or_skip;
+use serial_test::serial;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::AgentInstanceCreate;
 use torque_harness::models::v1::artifact::ArtifactScope;
@@ -7,8 +9,6 @@ use torque_harness::repository::{
     AgentDefinitionRepository, AgentInstanceRepository, ArtifactRepository,
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository, PostgresArtifactRepository,
 };
-use common::setup_test_db_or_skip;
-use serial_test::serial;
 
 #[tokio::test]
 #[serial]

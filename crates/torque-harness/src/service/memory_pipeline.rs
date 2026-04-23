@@ -1,6 +1,6 @@
+use crate::models::v1::memory::MemoryWriteCandidate;
 use crate::service::gating::MemoryGatingService;
 use crate::service::notification::NotificationService;
-use crate::models::v1::memory::MemoryWriteCandidate;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -14,7 +14,10 @@ impl MemoryPipelineService {
         gating: Arc<MemoryGatingService>,
         notification: Option<Arc<NotificationService>>,
     ) -> Self {
-        Self { gating, notification }
+        Self {
+            gating,
+            notification,
+        }
     }
 
     pub async fn gate_and_notify(

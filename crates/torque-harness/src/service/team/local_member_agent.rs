@@ -1,7 +1,7 @@
 use super::*;
+use crate::models::v1::PartialQuality;
 use async_trait::async_trait;
 use uuid::Uuid;
-use crate::models::v1::PartialQuality;
 
 pub struct LocalMemberAgent {
     member_id: Uuid,
@@ -39,11 +39,20 @@ impl MemberAgent for LocalMemberAgent {
         Ok(())
     }
 
-    async fn timeout_partial(&self, _delegation_id: Uuid, _partial_quality: PartialQuality) -> anyhow::Result<()> {
+    async fn timeout_partial(
+        &self,
+        _delegation_id: Uuid,
+        _partial_quality: PartialQuality,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn request_extension(&self, _delegation_id: Uuid, _seconds: u32, _reason: &str) -> anyhow::Result<bool> {
+    async fn request_extension(
+        &self,
+        _delegation_id: Uuid,
+        _seconds: u32,
+        _reason: &str,
+    ) -> anyhow::Result<bool> {
         Ok(false)
     }
 

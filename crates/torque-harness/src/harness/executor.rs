@@ -69,7 +69,10 @@ impl PlanExecutor {
                 if let Some(failed) = graph.nodes.iter().find(|n| n.status == NodeStatus::Failed) {
                     return Ok(ExecutorResult {
                         success: false,
-                        summary: format!("Task failed: {}", failed.error.as_deref().unwrap_or("Unknown error")),
+                        summary: format!(
+                            "Task failed: {}",
+                            failed.error.as_deref().unwrap_or("Unknown error")
+                        ),
                         failed_node_id: Some(failed.id),
                         completed_nodes: completed_count,
                         total_nodes,
@@ -181,7 +184,10 @@ impl PlanExecutor {
                 continue;
             }
 
-            let all_deps_complete = node.depends_on.iter().all(|dep_id| completed.contains(dep_id));
+            let all_deps_complete = node
+                .depends_on
+                .iter()
+                .all(|dep_id| completed.contains(dep_id));
             if all_deps_complete {
                 ready.push(node.id);
             }
@@ -216,7 +222,12 @@ impl PlanExecutor {
                 NodeStatus::Skipped => "○",
                 _ => "?",
             };
-            lines.push(format!("  {} {}: {}", status_str, node.description, node.result.as_deref().unwrap_or("")));
+            lines.push(format!(
+                "  {} {}: {}",
+                status_str,
+                node.description,
+                node.result.as_deref().unwrap_or("")
+            ));
         }
 
         lines.join("\n")

@@ -11,7 +11,10 @@ pub struct DelegationService {
 
 impl DelegationService {
     pub fn new(repo: Arc<dyn DelegationRepository>) -> Self {
-        Self { repo, stream_bus: None }
+        Self {
+            repo,
+            stream_bus: None,
+        }
     }
 
     pub fn with_stream_bus(mut self, stream_bus: Arc<dyn StreamBus>) -> Self {
@@ -64,9 +67,14 @@ impl DelegationService {
         let result = self.repo.reject(id, reason).await?;
 
         if result {
-            self.publish_event(&delegation, "rejected", serde_json::json!({
-                "reason": reason
-            })).await;
+            self.publish_event(
+                &delegation,
+                "rejected",
+                serde_json::json!({
+                    "reason": reason
+                }),
+            )
+            .await;
         }
 
         Ok(result)
@@ -82,9 +90,14 @@ impl DelegationService {
         let result = self.repo.complete(id, artifact_id).await?;
 
         if result {
-            self.publish_event(&delegation, "completed", serde_json::json!({
-                "artifact_id": artifact_id.to_string()
-            })).await;
+            self.publish_event(
+                &delegation,
+                "completed",
+                serde_json::json!({
+                    "artifact_id": artifact_id.to_string()
+                }),
+            )
+            .await;
         }
 
         Ok(result)
@@ -100,15 +113,25 @@ impl DelegationService {
         let result = self.repo.fail(id, error).await?;
 
         if result {
-            self.publish_event(&delegation, "failed", serde_json::json!({
-                "error": error
-            })).await;
+            self.publish_event(
+                &delegation,
+                "failed",
+                serde_json::json!({
+                    "error": error
+                }),
+            )
+            .await;
         }
 
         Ok(result)
     }
 
-    async fn publish_event(&self, delegation: &Delegation, event_type: &str, event_data: serde_json::Value) {
+    async fn publish_event(
+        &self,
+        delegation: &Delegation,
+        event_type: &str,
+        event_data: serde_json::Value,
+    ) {
         if let Some(bus) = &self.stream_bus {
             let stream_key = format!("delegation:{}:status", delegation.id);
             let message = StreamMessage {

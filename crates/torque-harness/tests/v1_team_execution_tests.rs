@@ -3,23 +3,26 @@ mod common;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
 
+use std::sync::Arc;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::task::{TaskStatus, TaskType};
-use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate, TeamTaskStatus};
+use torque_harness::models::v1::team::{
+    TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate, TeamTaskStatus,
+};
 use torque_harness::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository,
+    AgentDefinitionRepository, AgentInstanceRepository, DelegationRepository,
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
-    PostgresTeamDefinitionRepository, PostgresTeamInstanceRepository,
-    PostgresTeamMemberRepository, PostgresTeamTaskRepository,
-    PostgresSharedTaskStateRepository, PostgresTeamEventRepository,
-    SharedTaskStateRepository, TeamDefinitionRepository, TeamEventRepository,
-    TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
-    DelegationRepository, PostgresDelegationRepository,
     PostgresCapabilityProfileRepository, PostgresCapabilityRegistryBindingRepository,
+    PostgresDelegationRepository, PostgresSharedTaskStateRepository,
+    PostgresTeamDefinitionRepository, PostgresTeamEventRepository, PostgresTeamInstanceRepository,
+    PostgresTeamMemberRepository, PostgresTeamTaskRepository, SharedTaskStateRepository,
+    TeamDefinitionRepository, TeamEventRepository, TeamInstanceRepository, TeamMemberRepository,
+    TeamTaskRepository,
+};
+use torque_harness::service::team::{
+    SelectorResolver, SharedTaskStateManager, TeamEventEmitter, TeamSupervisor,
 };
 use torque_harness::service::TeamService;
-use torque_harness::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter, TeamSupervisor};
-use std::sync::Arc;
 
 #[tokio::test]
 #[serial]
@@ -98,7 +101,10 @@ async fn test_team_task_lifecycle() {
         .expect("create team task");
 
     assert_eq!(task.goal, "Complete team objective");
-    assert!(matches!(task.status, torque_harness::models::v1::team::TeamTaskStatus::Open));
+    assert!(matches!(
+        task.status,
+        torque_harness::models::v1::team::TeamTaskStatus::Open
+    ));
 
     // 5. List team tasks
     let tasks = team_service
@@ -109,7 +115,10 @@ async fn test_team_task_lifecycle() {
     assert_eq!(tasks[0].id, task.id);
 
     // Cleanup
-    team_task_repo.mark_completed(task.id).await.expect("mark completed");
+    team_task_repo
+        .mark_completed(task.id)
+        .await
+        .expect("mark completed");
     team_inst_repo
         .delete(team_instance.id)
         .await
@@ -316,7 +325,8 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
     let team_event_repo = Arc::new(PostgresTeamEventRepository::new(db.clone()));
     let delegation_repo = Arc::new(PostgresDelegationRepository::new(db.clone()));
     let capability_profile_repo = Arc::new(PostgresCapabilityProfileRepository::new(db.clone()));
-    let capability_binding_repo = Arc::new(PostgresCapabilityRegistryBindingRepository::new(db.clone()));
+    let capability_binding_repo =
+        Arc::new(PostgresCapabilityRegistryBindingRepository::new(db.clone()));
 
     let selector_resolver = SelectorResolver::new(
         team_member_repo.clone(),
@@ -382,10 +392,12 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
         .expect("create team instance");
 
     let member_instance = agent_inst_repo
-        .create(&torque_harness::models::v1::agent_instance::AgentInstanceCreate {
-            agent_definition_id: member_def.id,
-            external_context_refs: vec![],
-        })
+        .create(
+            &torque_harness::models::v1::agent_instance::AgentInstanceCreate {
+                agent_definition_id: member_def.id,
+                external_context_refs: vec![],
+            },
+        )
         .await
         .expect("create member instance");
 
@@ -395,14 +407,7 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
         .expect("add team member");
 
     let task = team_task_repo
-        .create(
-            team_instance.id,
-            "Simple task goal",
-            None,
-            &[],
-            None,
-            None,
-        )
+        .create(team_instance.id, "Simple task goal", None, &[], None, None)
         .await
         .expect("create team task");
 
@@ -414,22 +419,41 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
     let result = result.unwrap();
     assert!(result.is_some(), "Should have executed a task");
     let exec_result = result.unwrap();
-    assert!(exec_result.success, "Execution should succeed: {}", exec_result.summary);
+    assert!(
+        exec_result.success,
+        "Execution should succeed: {}",
+        exec_result.summary
+    );
     assert_eq!(exec_result.task_id, task.id);
 
     let updated_task = team_task_repo.get(task.id).await.unwrap().unwrap();
     assert!(
-        matches!(updated_task.status, TeamTaskStatus::Completed | TeamTaskStatus::InProgress),
+        matches!(
+            updated_task.status,
+            TeamTaskStatus::Completed | TeamTaskStatus::InProgress
+        ),
         "Task should be completed or in progress, got {:?}",
         updated_task.status
     );
 
     let delegations = delegation_repo.list_by_task(task.id, 10).await.unwrap();
-    assert!(!delegations.is_empty(), "Should have created at least one delegation");
+    assert!(
+        !delegations.is_empty(),
+        "Should have created at least one delegation"
+    );
 
-    team_task_repo.mark_completed(task.id).await.expect("cleanup");
-    team_member_repo.remove(team_instance.id, member_instance.id).await.expect("cleanup");
-    team_inst_repo.delete(team_instance.id).await.expect("cleanup");
+    team_task_repo
+        .mark_completed(task.id)
+        .await
+        .expect("cleanup");
+    team_member_repo
+        .remove(team_instance.id, member_instance.id)
+        .await
+        .expect("cleanup");
+    team_inst_repo
+        .delete(team_instance.id)
+        .await
+        .expect("cleanup");
     team_def_repo.delete(team_def.id).await.expect("cleanup");
     def_repo.delete(supervisor_def.id).await.expect("cleanup");
     def_repo.delete(member_def.id).await.expect("cleanup");

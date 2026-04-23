@@ -1,4 +1,6 @@
-use crate::models::v1::team::{ArtifactRef, Blocker, Decision, PublishedFact, SharedTaskState, PublishScope};
+use crate::models::v1::team::{
+    ArtifactRef, Blocker, Decision, PublishScope, PublishedFact, SharedTaskState,
+};
 use crate::repository::SharedTaskStateRepository;
 use chrono::Utc;
 use std::sync::Arc;
@@ -30,7 +32,9 @@ impl SharedTaskStateManager {
             published_by: published_by.to_string(),
             published_at: Utc::now(),
         };
-        self.repo.add_accepted_artifact(team_instance_id, artifact_ref).await
+        self.repo
+            .add_accepted_artifact(team_instance_id, artifact_ref)
+            .await
     }
 
     pub async fn publish_fact(
@@ -61,7 +65,9 @@ impl SharedTaskStateManager {
             status: status.to_string(),
             updated_at: Utc::now(),
         };
-        self.repo.update_delegation_status(team_instance_id, entry).await
+        self.repo
+            .update_delegation_status(team_instance_id, entry)
+            .await
     }
 
     pub async fn add_blocker(
@@ -84,7 +90,9 @@ impl SharedTaskStateManager {
         team_instance_id: Uuid,
         blocker_id: Uuid,
     ) -> anyhow::Result<bool> {
-        self.repo.resolve_blocker(team_instance_id, blocker_id).await
+        self.repo
+            .resolve_blocker(team_instance_id, blocker_id)
+            .await
     }
 
     pub async fn add_decision(

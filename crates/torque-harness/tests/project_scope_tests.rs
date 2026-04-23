@@ -1,6 +1,5 @@
 mod common;
 
-use torque_harness::db::Database;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use common::{setup_test_db_or_skip, test_api_key};
@@ -8,6 +7,7 @@ use llm::OpenAiClient;
 use serde_json::Value;
 use serial_test::serial;
 use std::sync::Arc;
+use torque_harness::db::Database;
 use tower::util::ServiceExt;
 use uuid::Uuid;
 

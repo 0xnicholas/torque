@@ -13,10 +13,9 @@ use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInsta
 use torque_harness::models::v1::run::RunRequest;
 use torque_harness::models::v1::task::TaskStatus;
 use torque_harness::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository,
-    PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
-    PostgresCheckpointRepository, PostgresEventRepository, PostgresMemoryRepositoryV1,
-    PostgresTaskRepository, TaskRepository,
+    AgentDefinitionRepository, AgentInstanceRepository, PostgresAgentDefinitionRepository,
+    PostgresAgentInstanceRepository, PostgresCheckpointRepository, PostgresEventRepository,
+    PostgresMemoryRepositoryV1, PostgresTaskRepository, TaskRepository,
 };
 use torque_harness::service::candidate_generator::NoOpCandidateGenerator;
 use torque_harness::service::gating::MemoryGatingService;
@@ -50,7 +49,10 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
     let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
     let notification_service = Arc::new(NotificationService::new());
-    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(
+        gating.clone(),
+        Some(notification_service),
+    ));
 
     // Setup RunService
     let run_service = RunService::new(
@@ -194,7 +196,10 @@ async fn test_run_with_nonexistent_instance_returns_error() {
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
     let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
     let notification_service = Arc::new(NotificationService::new());
-    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(
+        gating.clone(),
+        Some(notification_service),
+    ));
 
     let run_service = RunService::new(
         def_repo,
@@ -264,7 +269,10 @@ async fn test_run_task_status_transitions() {
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
     let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
     let notification_service = Arc::new(NotificationService::new());
-    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(
+        gating.clone(),
+        Some(notification_service),
+    ));
 
     let run_service = RunService::new(
         def_repo.clone(),

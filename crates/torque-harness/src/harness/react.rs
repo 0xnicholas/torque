@@ -16,8 +16,12 @@ pub enum ReActStep {
         thought: String,
         action: Option<ReActAction>,
     },
-    Complete { summary: String },
-    Fail { reason: String },
+    Complete {
+        summary: String,
+    },
+    Fail {
+        reason: String,
+    },
 }
 
 pub enum ReActAction {
@@ -72,11 +76,14 @@ impl ReActHarness {
                                         arguments: action.arguments.clone(),
                                     }),
                                 });
-                                consecutive_failures = if result.success { 0 } else { consecutive_failures + 1 };
+                                consecutive_failures = if result.success {
+                                    0
+                                } else {
+                                    consecutive_failures + 1
+                                };
                                 messages.push(LlmMessage::user(format!(
                                     "Tool '{}' result: {}",
-                                    action.name,
-                                    result.content
+                                    action.name, result.content
                                 )));
                                 if consecutive_failures >= MAX_CONSECUTIVE_TOOL_FAILURES {
                                     return Ok(StepDecision::FailTask(format!(
@@ -89,7 +96,8 @@ impl ReActHarness {
                         }
                     }
                     messages.push(LlmMessage::user(
-                        "No tool call detected. Continue reasoning or complete the task.".to_string(),
+                        "No tool call detected. Continue reasoning or complete the task."
+                            .to_string(),
                     ));
                 }
                 StepDecision::CompleteTask(summary) => {
@@ -189,8 +197,8 @@ If you need approval for something, output approve with description.
             }
         });
 
-        let request = ChatRequest::new(self.llm.model().to_string(), messages.clone())
-            .with_tools(tool_defs);
+        let request =
+            ChatRequest::new(self.llm.model().to_string(), messages.clone()).with_tools(tool_defs);
 
         let response = self
             .llm
@@ -224,24 +232,20 @@ If you need approval for something, output approve with description.
                             )));
                             Ok(StepDecision::AwaitTool)
                         }
-                        ReActAction::Delegated { .. } => {
-                            Ok(StepDecision::AwaitDelegation(
-                                torque_kernel::DelegationRequestId::new(),
-                            ))
-                        }
-                        ReActAction::ApprovalRequired { .. } => {
-                            Ok(StepDecision::AwaitApproval(
-                                torque_kernel::ApprovalRequestId::new(),
-                            ))
-                        }
+                        ReActAction::Delegated { .. } => Ok(StepDecision::AwaitDelegation(
+                            torque_kernel::DelegationRequestId::new(),
+                        )),
+                        ReActAction::ApprovalRequired { .. } => Ok(StepDecision::AwaitApproval(
+                            torque_kernel::ApprovalRequestId::new(),
+                        )),
                     }
                 } else {
                     Ok(StepDecision::CompleteTask(content.clone()))
                 }
             }
-            FinishReason::Length => {
-                Ok(StepDecision::FailTask("Maximum context length reached".to_string()))
-            }
+            FinishReason::Length => Ok(StepDecision::FailTask(
+                "Maximum context length reached".to_string(),
+            )),
             FinishReason::ContentFilter => {
                 Ok(StepDecision::FailTask("Content was filtered".to_string()))
             }
@@ -270,9 +274,7 @@ If you need approval for something, output approve with description.
                 });
             }
             if let Ok(parsed) = serde_json::from_str::<Value>(act_str) {
-                if let (Some(name), Some(args)) =
-                    (parsed.get("name"), parsed.get("arguments"))
-                {
+                if let (Some(name), Some(args)) = (parsed.get("name"), parsed.get("arguments")) {
                     return Ok(ReActAction::ToolCall {
                         name: name.as_str().unwrap_or("").to_string(),
                         arguments: args.clone(),

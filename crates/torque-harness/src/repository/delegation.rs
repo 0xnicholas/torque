@@ -23,7 +23,11 @@ pub trait DelegationRepository: Send + Sync {
     async fn complete(&self, id: Uuid, artifact_id: Uuid) -> anyhow::Result<bool>;
     async fn fail(&self, id: Uuid, error: &str) -> anyhow::Result<bool>;
     async fn reject(&self, id: Uuid, reason: &str) -> anyhow::Result<bool>;
-    async fn list_by_status(&self, task_id: Uuid, status: DelegationStatus) -> anyhow::Result<Vec<Delegation>>;
+    async fn list_by_status(
+        &self,
+        task_id: Uuid,
+        status: DelegationStatus,
+    ) -> anyhow::Result<Vec<Delegation>>;
 }
 
 pub struct PostgresDelegationRepository {
@@ -141,7 +145,11 @@ impl DelegationRepository for PostgresDelegationRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn list_by_status(&self, task_id: Uuid, status: DelegationStatus) -> anyhow::Result<Vec<Delegation>> {
+    async fn list_by_status(
+        &self,
+        task_id: Uuid,
+        status: DelegationStatus,
+    ) -> anyhow::Result<Vec<Delegation>> {
         let rows = sqlx::query_as::<_, Delegation>(
             "SELECT * FROM v1_delegations WHERE task_id = $1 AND status = $2 ORDER BY created_at DESC"
         )

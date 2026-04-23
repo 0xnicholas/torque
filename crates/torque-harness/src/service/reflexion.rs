@@ -89,10 +89,7 @@ impl ReflexionService {
         plan_id: Uuid,
         error_context: &str,
     ) -> anyhow::Result<ReflectionResult> {
-        let logs = self
-            .ephemeral_log_repo
-            .list_by_plan(plan_id, 50)
-            .await?;
+        let logs = self.ephemeral_log_repo.list_by_plan(plan_id, 50).await?;
 
         let relevant_logs: Vec<_> = logs
             .into_iter()
@@ -120,7 +117,10 @@ impl ReflexionService {
             .map(|l| {
                 format!(
                     "- Task {}: {} (status: {}, error: {:?})",
-                    l.task_id, l.input.as_deref().unwrap_or("N/A"), l.status, l.error_message
+                    l.task_id,
+                    l.input.as_deref().unwrap_or("N/A"),
+                    l.status,
+                    l.error_message
                 )
             })
             .collect::<Vec<_>>()
@@ -241,10 +241,7 @@ Rules:
                 for rule in similar_rules {
                     experiences.push(RetrievedExperience {
                         source: "rule".to_string(),
-                        content: format!(
-                            "{}: {}",
-                            rule.pattern, rule.action
-                        ),
+                        content: format!("{}: {}", rule.pattern, rule.action),
                         relevance_score: 1.0 - rule.confidence_score,
                         rule_id: Some(rule.id),
                         memory_id: None,

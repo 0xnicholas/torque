@@ -54,7 +54,9 @@ impl DelegationStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            DelegationStatus::Completed | DelegationStatus::Failed | DelegationStatus::TimeoutPartial
+            DelegationStatus::Completed
+                | DelegationStatus::Failed
+                | DelegationStatus::TimeoutPartial
         )
     }
 }

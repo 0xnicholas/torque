@@ -1,5 +1,5 @@
-use torque_harness::service::team::MemberAgent;
 use torque_harness::service::team::local_member_agent::LocalMemberAgent;
+use torque_harness::service::team::MemberAgent;
 
 #[tokio::test]
 async fn test_member_agent_trait_exists() {

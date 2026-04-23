@@ -84,10 +84,10 @@ pub struct TimeTravelRequest {
 
 mod sqlx_impls {
     use super::*;
+    use sqlx::decode::Decode;
+    use sqlx::encode::Encode;
     use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef};
     use sqlx::types::Type;
-    use sqlx::encode::Encode;
-    use sqlx::decode::Decode;
 
     impl Type<sqlx::Postgres> for AgentInstanceStatus {
         fn type_info() -> PgTypeInfo {
@@ -110,10 +110,13 @@ mod sqlx_impls {
     }
 
     impl Decode<'_, sqlx::Postgres> for AgentInstanceStatus {
-        fn decode(value: PgValueRef<'_>) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+        fn decode(
+            value: PgValueRef<'_>,
+        ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
             let s: String = Decode::<sqlx::Postgres>::decode(value)?;
-            s.as_str().try_into().map_err(|e: String| format!("{}", e).into())
+            s.as_str()
+                .try_into()
+                .map_err(|e: String| format!("{}", e).into())
         }
     }
 }
-

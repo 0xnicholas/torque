@@ -1,5 +1,5 @@
-use torque_harness::db::Database;
 use sqlx::postgres::PgPoolOptions;
+use torque_harness::db::Database;
 
 #[allow(dead_code)]
 pub mod fake_llm;

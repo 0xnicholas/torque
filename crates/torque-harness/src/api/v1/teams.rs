@@ -1,10 +1,10 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember,
-    TeamTask, TeamTaskCreate,
+    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTask,
+    TeamTaskCreate,
 };
-use crate::service::{ServiceContainer, team::SupervisorResult};
+use crate::service::{team::SupervisorResult, ServiceContainer};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

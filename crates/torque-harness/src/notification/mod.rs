@@ -1,3 +1,3 @@
 pub mod hooks;
 
-pub use hooks::{NotificationHook, ReviewEvent, WebhookHook, SseHook};
+pub use hooks::{NotificationHook, ReviewEvent, SseHook, WebhookHook};

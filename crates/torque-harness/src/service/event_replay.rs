@@ -122,7 +122,10 @@ impl EventReplayRegistry {
     }
 
     fn register_default_handlers(&mut self) {
-        self.register("instance_state_changed", Box::new(InstanceStateChangedHandler));
+        self.register(
+            "instance_state_changed",
+            Box::new(InstanceStateChangedHandler),
+        );
         self.register("task_state_changed", Box::new(TaskStateChangedHandler));
         self.register("checkpoint.created", Box::new(NoOpHandler));
         self.register("task.created", Box::new(NoOpHandler));

@@ -91,11 +91,7 @@ impl EventRecorder {
         events
     }
 
-    pub fn checkpoint_created_event(
-        checkpoint_id: Uuid,
-        instance_id: Uuid,
-        reason: &str,
-    ) -> Event {
+    pub fn checkpoint_created_event(checkpoint_id: Uuid, instance_id: Uuid, reason: &str) -> Event {
         Event {
             event_id: Uuid::new_v4(),
             event_type: "checkpoint.created".to_string(),
