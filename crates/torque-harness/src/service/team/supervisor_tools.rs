@@ -230,12 +230,22 @@ impl Tool for PublishToTeamTool {
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let artifact_ref = args.get("artifact_ref").and_then(|v| v.as_str());
-        let scope = args.get("scope").and_then(|v| v.as_str()).unwrap_or("team_shared");
+        let artifact_ref = args
+            .get("artifact_ref")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("artifact_ref required"))?;
+        let summary = args
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("summary required"))?;
+        let scope = args
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("scope required"))?;
 
         Ok(ToolResult {
             success: true,
-            content: format!("Published artifact {} to {} scope", artifact_ref.unwrap_or(""), scope),
+            content: format!("Published artifact {} to {} scope: {}", artifact_ref, scope, summary),
             error: None,
         })
     }
@@ -272,7 +282,7 @@ impl Tool for GetSharedStateTool {
         })
     }
 
-    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+    async fn execute(&self, _args: Value) -> anyhow::Result<ToolResult> {
         Ok(ToolResult {
             success: true,
             content: r#"{"accepted_artifact_refs":[],"published_facts":[],"delegation_status":[],"open_blockers":[],"decisions":[]}"#.to_string(),
