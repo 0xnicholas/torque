@@ -20,6 +20,8 @@ use torque_harness::repository::{
 };
 use torque_harness::service::candidate_generator::NoOpCandidateGenerator;
 use torque_harness::service::gating::MemoryGatingService;
+use torque_harness::service::memory_pipeline::MemoryPipelineService;
+use torque_harness::service::notification::NotificationService;
 use torque_harness::service::{RunService, ToolService};
 
 #[tokio::test]
@@ -46,7 +48,9 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
     // Setup memory repo and gating
     let memory_repo = Arc::new(PostgresMemoryRepositoryV1::new(db.clone()));
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
-    let gating = Arc::new(MemoryGatingService::new(memory_repo, None));
+    let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
+    let notification_service = Arc::new(NotificationService::new());
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
 
     // Setup RunService
     let run_service = RunService::new(
@@ -60,6 +64,7 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         tools,
         candidate_gen,
         gating,
+        memory_pipeline,
         None,
     );
 
@@ -187,7 +192,9 @@ async fn test_run_with_nonexistent_instance_returns_error() {
 
     let memory_repo = Arc::new(PostgresMemoryRepositoryV1::new(db.clone()));
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
-    let gating = Arc::new(MemoryGatingService::new(memory_repo, None));
+    let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
+    let notification_service = Arc::new(NotificationService::new());
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
 
     let run_service = RunService::new(
         def_repo,
@@ -200,6 +207,7 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         tools,
         candidate_gen,
         gating,
+        memory_pipeline,
         None,
     );
 
@@ -254,7 +262,9 @@ async fn test_run_task_status_transitions() {
 
     let memory_repo = Arc::new(PostgresMemoryRepositoryV1::new(db.clone()));
     let candidate_gen = Arc::new(NoOpCandidateGenerator);
-    let gating = Arc::new(MemoryGatingService::new(memory_repo, None));
+    let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None));
+    let notification_service = Arc::new(NotificationService::new());
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(gating.clone(), Some(notification_service)));
 
     let run_service = RunService::new(
         def_repo.clone(),
@@ -267,6 +277,7 @@ async fn test_run_task_status_transitions() {
         tools,
         candidate_gen,
         gating,
+        memory_pipeline,
         None,
     );
 

@@ -16,6 +16,7 @@ use crate::repository::{
 };
 use crate::service::candidate_generator::CandidateGenerator;
 use crate::service::gating::MemoryGatingService;
+use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
 use crate::service::ToolService;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ pub struct RunService {
     policy_evaluator: PolicyEvaluator,
     candidate_generator: Arc<dyn CandidateGenerator>,
     gating: Arc<MemoryGatingService>,
+    memory_pipeline: Arc<MemoryPipelineService>,
     reflexion: Option<Arc<ReflexionService>>,
 }
 
@@ -50,6 +52,7 @@ impl RunService {
         tools: Arc<ToolService>,
         candidate_generator: Arc<dyn CandidateGenerator>,
         gating: Arc<MemoryGatingService>,
+        memory_pipeline: Arc<MemoryPipelineService>,
         reflexion: Option<Arc<ReflexionService>>,
     ) -> Self {
         Self {
@@ -64,6 +67,7 @@ impl RunService {
             policy_evaluator: PolicyEvaluator::new(),
             candidate_generator,
             gating,
+            memory_pipeline,
             reflexion,
         }
     }
@@ -160,7 +164,7 @@ impl RunService {
             {
                 Ok(candidates) => {
                     for candidate in candidates {
-                        match self.gating.gate_candidate(&candidate).await {
+                        match self.memory_pipeline.gate_and_notify(&candidate).await {
                             Ok(decision) => {
                                 tracing::debug!(
                                     "Memory candidate {} gated: {:?}",

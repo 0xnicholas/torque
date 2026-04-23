@@ -10,6 +10,8 @@ pub mod event;
 pub mod event_replay;
 pub mod gating;
 pub mod memory;
+pub mod memory_pipeline;
+pub mod notification;
 pub mod recovery;
 pub mod reflexion;
 pub mod run;
@@ -31,6 +33,8 @@ pub use delegation::DelegationService;
 pub use event::EventService;
 pub use gating::MemoryGatingService;
 pub use memory::MemoryService;
+pub use memory_pipeline::MemoryPipelineService;
+pub use notification::NotificationService;
 pub use recovery::RecoveryService;
 pub use reflexion::{
     ExperienceQuery, ReflexionService, RetrievedExperience, ReflectionResult, SubtaskResult,
@@ -62,6 +66,7 @@ pub struct ServiceContainer {
     pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
     pub candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator>,
     pub gating: std::sync::Arc<gating::MemoryGatingService>,
+    pub memory_pipeline: std::sync::Arc<memory_pipeline::MemoryPipelineService>,
 }
 
 impl ServiceContainer {
@@ -138,6 +143,11 @@ impl ServiceContainer {
             memory_v1.clone(),
             embedding.clone(),
         ));
+        let notification_service = std::sync::Arc::new(notification::NotificationService::new().with_sse_hook());
+        let memory_pipeline = std::sync::Arc::new(memory_pipeline::MemoryPipelineService::new(
+            gating.clone(),
+            Some(notification_service.clone()),
+        ));
         let candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator> =
             if let Ok(gen) = candidate_generator::OpenAICandidateGenerator::new() {
                 std::sync::Arc::new(gen) as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
@@ -157,6 +167,7 @@ impl ServiceContainer {
             tool.clone(),
             candidate_generator.clone(),
             gating.clone(),
+            memory_pipeline.clone(),
             None,
         ));
         let recovery = std::sync::Arc::new(RecoveryService::new(
@@ -186,6 +197,7 @@ impl ServiceContainer {
             run_gate,
             candidate_generator,
             gating,
+            memory_pipeline,
         }
     }
 }
