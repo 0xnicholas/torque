@@ -8,8 +8,8 @@ use torque_harness::models::v1::capability::{
     QualityTier, RiskLevel,
 };
 use torque_harness::repository::{
-    PostgresAgentDefinitionRepository, PostgresCapabilityProfileRepository,
-    PostgresCapabilityRegistryBindingRepository,
+    AgentDefinitionRepository, PostgresAgentDefinitionRepository,
+    PostgresCapabilityProfileRepository, PostgresCapabilityRegistryBindingRepository,
 };
 use torque_harness::service::CapabilityService;
 
