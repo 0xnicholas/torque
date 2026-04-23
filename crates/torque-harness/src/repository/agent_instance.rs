@@ -66,7 +66,7 @@ impl AgentInstanceRepository for PostgresAgentInstanceRepository {
         let result = sqlx::query(
             "UPDATE v1_agent_instances SET status = $1, updated_at = NOW() WHERE id = $2",
         )
-        .bind(format!("{:?}", status).to_uppercase())
+        .bind(status.to_string())
         .bind(id)
         .execute(self.db.pool())
         .await?;

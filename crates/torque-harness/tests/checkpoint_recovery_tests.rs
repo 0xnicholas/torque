@@ -1,4 +1,5 @@
 use checkpointer::Checkpointer;
+use checkpointer::r#trait::Message;
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -428,4 +429,84 @@ async fn test_recovery_assess_recovery() {
     assert_eq!(a.disposition, RecoveryDisposition::AwaitingDelegation, "disposition was {:?}, expected AwaitingDelegation", a.disposition);
     assert!(!a.terminal, "AwaitingDelegation should not be terminal");
     assert!(matches!(a.recommended_action, RecoveryAction::AwaitDelegationCompletion));
+}
+
+#[tokio::test]
+#[serial]
+async fn test_full_recovery_flow_restore_and_resume() {
+    use torque_harness::service::RecoveryService;
+    use torque_harness::repository::PostgresEventRepositoryExt;
+
+    let Some(db) = setup_test_db().await else {
+        return;
+    };
+
+    let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
+    let instance_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(PostgresCheckpointRepositoryExt::new(db.clone()));
+    let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
+
+    let def = def_repo.create(&AgentDefinitionCreate {
+        name: "test-agent".to_string(),
+        description: None,
+        system_prompt: None,
+        tool_policy: serde_json::json!({}),
+        memory_policy: serde_json::json!({}),
+        delegation_policy: serde_json::json!({}),
+        limits: serde_json::json!({}),
+        default_model_policy: serde_json::json!({}),
+    }).await.unwrap();
+
+    let instance = instance_repo.create(&AgentInstanceCreate {
+        agent_definition_id: def.id,
+        external_context_refs: vec![],
+    }).await.unwrap();
+
+    let state = checkpointer::CheckpointState {
+        messages: vec![
+            Message {
+                role: "user".to_string(),
+                content: "Hello".to_string(),
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: "I'll help you with that.".to_string(),
+            },
+        ],
+        tool_call_count: 1,
+        intermediate_results: vec![],
+        custom_state: Some(serde_json::json!({
+            "instance_state": "WAITING_TOOL",
+            "checkpoint_reason": "awaiting_tool_completion",
+            "active_task_state": "InProgress",
+            "pending_approval_ids": Vec::<uuid::Uuid>::new(),
+            "child_delegation_ids": Vec::<uuid::Uuid>::new(),
+            "event_sequence": 10,
+        })),
+    };
+    let checkpoint_id = checkpointer.save(instance.id, instance.id, state).await.unwrap();
+
+    instance_repo.update_status(instance.id, AgentInstanceStatus::Failed).await.unwrap();
+
+    let recovery = RecoveryService::new(
+        instance_repo.clone(),
+        checkpoint_repo.clone(),
+        event_repo.clone(),
+    );
+
+    let restored = recovery.restore_from_checkpoint(checkpoint_id.0).await.unwrap();
+
+    assert!(
+        matches!(restored.status, AgentInstanceStatus::Ready | AgentInstanceStatus::WaitingTool),
+        "Instance should be restored, got {:?}",
+        restored.status
+    );
+
+    let loaded = checkpointer.load(checkpoint_id).await.unwrap();
+    assert_eq!(loaded.messages.len(), 2, "Should preserve message history");
+    assert_eq!(loaded.tool_call_count, 1);
+
+    let assessment = recovery.assess_recovery(checkpoint_id.0).await.unwrap();
+    assert!(!assessment.is_terminal(), "Assessment should not be terminal for WaitingTool");
 }

@@ -203,13 +203,14 @@ impl RecoveryService {
         // custom_state field contains the instance state info
         if let Some(custom) = checkpoint.snapshot.get("custom_state") {
             if let Some(status) = custom.get("instance_state").and_then(|s| s.as_str()) {
-                let restored_status = match status {
-                    "Ready" => AgentInstanceStatus::Ready,
-                    "Running" => AgentInstanceStatus::Running,
-                    "Suspended" => AgentInstanceStatus::Suspended,
-                    "WaitingSubagent" => AgentInstanceStatus::WaitingSubagent,
-                    "WaitingApproval" => AgentInstanceStatus::WaitingApproval,
-                    "WaitingTool" => AgentInstanceStatus::WaitingTool,
+                let normalized = normalize_status(status);
+                let restored_status = match normalized.as_str() {
+                    "READY" => AgentInstanceStatus::Ready,
+                    "RUNNING" => AgentInstanceStatus::Running,
+                    "SUSPENDED" => AgentInstanceStatus::Suspended,
+                    "WAITING_SUBAGENT" => AgentInstanceStatus::WaitingSubagent,
+                    "WAITING_APPROVAL" => AgentInstanceStatus::WaitingApproval,
+                    "WAITING_TOOL" => AgentInstanceStatus::WaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo
