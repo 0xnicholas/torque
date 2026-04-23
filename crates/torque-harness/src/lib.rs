@@ -10,6 +10,7 @@ pub mod kernel_bridge;
 pub mod message_bus;
 pub mod metrics;
 pub mod models;
+pub mod notification;
 pub mod policy;
 pub mod repository;
 pub mod service;
