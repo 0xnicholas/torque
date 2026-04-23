@@ -67,6 +67,7 @@ pub struct ServiceContainer {
     pub candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator>,
     pub gating: std::sync::Arc<gating::MemoryGatingService>,
     pub memory_pipeline: std::sync::Arc<memory_pipeline::MemoryPipelineService>,
+    pub notification_service: std::sync::Arc<notification::NotificationService>,
 }
 
 impl ServiceContainer {
@@ -198,6 +199,7 @@ impl ServiceContainer {
             candidate_generator,
             gating,
             memory_pipeline,
+            notification_service,
         }
     }
 }
