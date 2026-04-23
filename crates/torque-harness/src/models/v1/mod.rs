@@ -11,6 +11,7 @@ pub mod event;
 pub mod gating;
 pub mod memory;
 pub mod partial_quality;
+pub mod recovery;
 pub mod run;
 pub mod task;
 pub mod team;

@@ -21,6 +21,8 @@ pub struct EventReplayRegistry {
 
 struct InstanceStateChangedHandler;
 struct TaskStateChangedHandler;
+struct ApprovalRequestedHandler;
+struct DelegationRequestedHandler;
 struct NoOpHandler;
 
 #[async_trait]
@@ -81,6 +83,58 @@ impl EventReplayHandler for TaskStateChangedHandler {
 }
 
 #[async_trait]
+impl EventReplayHandler for ApprovalRequestedHandler {
+    async fn replay(
+        &self,
+        event: &Event,
+        repo: &Arc<dyn AgentInstanceRepository>,
+    ) -> Result<(), String> {
+        let instance_id = event.resource_id;
+        let payload = &event.payload;
+
+        repo.update_status(instance_id, AgentInstanceStatus::WaitingApproval)
+            .await
+            .map_err(|e| format!("Failed to update instance status: {}", e))?;
+
+        if let Some(approval_id) = payload.get("approval_id") {
+            tracing::info!(
+                "Replaying approval_requested: instance {} waiting for approval {:?}",
+                instance_id,
+                approval_id
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl EventReplayHandler for DelegationRequestedHandler {
+    async fn replay(
+        &self,
+        event: &Event,
+        repo: &Arc<dyn AgentInstanceRepository>,
+    ) -> Result<(), String> {
+        let instance_id = event.resource_id;
+        let payload = &event.payload;
+
+        repo.update_status(instance_id, AgentInstanceStatus::WaitingSubagent)
+            .await
+            .map_err(|e| format!("Failed to update instance status: {}", e))?;
+
+        if let Some(delegation_id) = payload.get("delegation_id") {
+            tracing::info!(
+                "Replaying delegation_requested: instance {} waiting for delegation {:?}",
+                instance_id,
+                delegation_id
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
 impl EventReplayHandler for NoOpHandler {
     async fn replay(
         &self,
@@ -130,8 +184,8 @@ impl EventReplayRegistry {
         self.register("checkpoint.created", Box::new(NoOpHandler));
         self.register("task.created", Box::new(NoOpHandler));
         self.register("artifact_produced", Box::new(NoOpHandler));
-        self.register("approval_requested", Box::new(NoOpHandler));
-        self.register("delegation_requested", Box::new(NoOpHandler));
+        self.register("approval_requested", Box::new(ApprovalRequestedHandler));
+        self.register("delegation_requested", Box::new(DelegationRequestedHandler));
         self.register("resume_applied", Box::new(NoOpHandler));
     }
 }
