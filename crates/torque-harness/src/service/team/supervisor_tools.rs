@@ -31,7 +31,7 @@ impl Tool for DelegateTaskTool {
             "type": "object",
             "properties": {
                 "member_selector": {
-                    "type": "string",
+                    "type": "object",
                     "description": "Selector to identify the team member"
                 },
                 "goal": {
@@ -41,26 +41,29 @@ impl Tool for DelegateTaskTool {
                 "instructions": {
                     "type": "string",
                     "description": "Detailed instructions for the task"
+                },
+                "return_contract": {
+                    "type": "object",
+                    "description": "Contract for expected return value"
                 }
             },
-            "required": ["member_selector", "goal", "instructions"]
+            "required": ["member_selector", "goal"]
         })
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let member_selector = args.get("member_selector")
+        let _member_selector = args
+            .get("member_selector")
+            .ok_or_else(|| anyhow::anyhow!("member_selector required"))?;
+        let goal = args
+            .get("goal")
             .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let goal = args.get("goal")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let _instructions = args.get("instructions")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+            .ok_or_else(|| anyhow::anyhow!("goal required"))?;
+        let _instructions = args.get("instructions").and_then(|v| v.as_str());
 
         Ok(ToolResult {
             success: true,
-            content: format!("Delegated task to {} with goal: {}", member_selector, goal),
+            content: format!("Delegated task to member with goal: {}", goal),
             error: None,
         })
     }
