@@ -47,6 +47,10 @@ impl ToolRegistry {
             })
             .collect()
     }
+
+    pub async fn list_tool_names(&self) -> Vec<String> {
+        self.tools.read().await.keys().cloned().collect()
+    }
 }
 
 impl Default for ToolRegistry {
