@@ -67,3 +67,20 @@ async fn test_list_team_members_tool() {
 
     assert_eq!(tool.name(), "list_team_members");
 }
+
+#[tokio::test]
+async fn test_supervisor_tools_registry() {
+    use torque_harness::service::team::supervisor_tools::create_supervisor_tools;
+    use torque_harness::tools::Tool;
+
+    let tools = create_supervisor_tools();
+
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name()).collect();
+    assert!(tool_names.contains(&"delegate_task"));
+    assert!(tool_names.contains(&"accept_result"));
+    assert!(tool_names.contains(&"reject_result"));
+    assert!(tool_names.contains(&"publish_to_team"));
+    assert!(tool_names.contains(&"get_shared_state"));
+    assert!(tool_names.contains(&"complete_team_task"));
+    assert!(tool_names.contains(&"list_team_members"));
+}

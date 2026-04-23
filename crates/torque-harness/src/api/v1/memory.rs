@@ -242,6 +242,11 @@ pub async fn approve_candidate(
             )
         })?;
 
+    let _ = services
+        .notification_service
+        .notify_candidate_approved(id)
+        .await;
+
     Ok(Json(entry))
 }
 
@@ -260,7 +265,13 @@ pub async fn reject_candidate(
         )
         .await
     {
-        Ok(Some(_)) => Ok(StatusCode::NO_CONTENT),
+        Ok(Some(_)) => {
+            let _ = services
+                .notification_service
+                .notify_candidate_rejected(id)
+                .await;
+            Ok(StatusCode::NO_CONTENT)
+        }
         Ok(None) => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorBody {
@@ -451,6 +462,11 @@ pub async fn merge_candidate(
             )
         })?;
 
+    let _ = services
+        .notification_service
+        .notify_candidate_merged(entry.id)
+        .await;
+
     Ok(Json(entry))
 }
 
@@ -635,7 +651,8 @@ pub async fn review_notifications_sse(
     };
 
     let stream = async_stream::stream! {
-        while let result = receiver.recv().await {
+        loop {
+            let result = receiver.recv().await;
             match result {
                 Ok(event) => {
                     let data = match &event {
@@ -657,8 +674,8 @@ pub async fn review_notifications_sse(
                     };
                     yield Ok::<_, std::convert::Infallible>(Event::default().event("memory-review").data(data.to_string()));
                 }
-                Err(e) => {
-                    yield Ok::<_, std::convert::Infallible>(Event::default().event("error").data(e.to_string()));
+                Err(_) => {
+                    break;
                 }
             }
         }

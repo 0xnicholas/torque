@@ -1,6 +1,7 @@
-use crate::tools::{Tool, ToolResult};
+use crate::tools::{Tool, ToolArc, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::sync::Arc;
 
 pub struct DelegateTaskTool;
 
@@ -385,4 +386,16 @@ impl Tool for ListTeamMembersTool {
             error: None,
         })
     }
+}
+
+pub fn create_supervisor_tools() -> Vec<ToolArc> {
+    vec![
+        Arc::new(DelegateTaskTool::new()) as ToolArc,
+        Arc::new(AcceptResultTool::new()) as ToolArc,
+        Arc::new(RejectResultTool::new()) as ToolArc,
+        Arc::new(PublishToTeamTool::new()) as ToolArc,
+        Arc::new(GetSharedStateTool::new()) as ToolArc,
+        Arc::new(CompleteTeamTaskTool::new()) as ToolArc,
+        Arc::new(ListTeamMembersTool::new()) as ToolArc,
+    ]
 }
