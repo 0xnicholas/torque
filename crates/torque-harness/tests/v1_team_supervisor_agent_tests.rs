@@ -74,3 +74,71 @@ async fn test_supervisor_agent_lists_available_tools() {
     assert!(tool_names.contains(&"complete_team_task".to_string()));
     assert!(tool_names.contains(&"list_team_members".to_string()));
 }
+
+#[tokio::test]
+async fn test_supervisor_agent_triage_returns_structured_result() {
+    let triage_json = serde_json::json!({
+        "complexity": "Medium",
+        "processing_path": "GuidedDelegate",
+        "selected_mode": "Route",
+        "lead_member_ref": null,
+        "rationale": "Task involves coordinating multiple specialists"
+    }).to_string();
+
+    let llm = Arc::new(FakeLlm::json_response(triage_json));
+    let tools = torque_harness::service::team::supervisor_tools::create_supervisor_tools();
+    let agent = SupervisorAgent::new(llm, tools).await;
+
+    let result = agent.triage("Coordinate a marketing campaign across design, content, and media teams").await;
+
+    assert!(result.is_ok(), "Triage should succeed");
+    let triage_result = result.unwrap();
+    assert_eq!(triage_result.complexity, torque_harness::models::v1::team::TaskComplexity::Medium);
+    assert_eq!(triage_result.processing_path, torque_harness::models::v1::team::ProcessingPath::GuidedDelegate);
+    assert_eq!(triage_result.selected_mode, torque_harness::models::v1::team::TeamMode::Route);
+}
+
+#[tokio::test]
+async fn test_supervisor_agent_triage_simple_task() {
+    let triage_json = serde_json::json!({
+        "complexity": "Simple",
+        "processing_path": "SingleRoute",
+        "selected_mode": "Route",
+        "lead_member_ref": null,
+        "rationale": "Simple straightforward task"
+    }).to_string();
+
+    let llm = Arc::new(FakeLlm::json_response(triage_json));
+    let tools = torque_harness::service::team::supervisor_tools::create_supervisor_tools();
+    let agent = SupervisorAgent::new(llm, tools).await;
+
+    let result = agent.triage("Send an email to John").await;
+
+    assert!(result.is_ok(), "Triage should succeed");
+    let triage_result = result.unwrap();
+    assert_eq!(triage_result.complexity, torque_harness::models::v1::team::TaskComplexity::Simple);
+}
+
+#[tokio::test]
+async fn test_supervisor_agent_triage_complex_task() {
+    let triage_json = serde_json::json!({
+        "complexity": "Complex",
+        "processing_path": "StructuredOrchestration",
+        "selected_mode": "Tasks",
+        "lead_member_ref": "senior-engineer",
+        "rationale": "Complex multi-team coordination required"
+    }).to_string();
+
+    let llm = Arc::new(FakeLlm::json_response(triage_json));
+    let tools = torque_harness::service::team::supervisor_tools::create_supervisor_tools();
+    let agent = SupervisorAgent::new(llm, tools).await;
+
+    let result = agent.triage("Build a distributed system with multiple microservices").await;
+
+    assert!(result.is_ok(), "Triage should succeed");
+    let triage_result = result.unwrap();
+    assert_eq!(triage_result.complexity, torque_harness::models::v1::team::TaskComplexity::Complex);
+    assert_eq!(triage_result.processing_path, torque_harness::models::v1::team::ProcessingPath::StructuredOrchestration);
+    assert_eq!(triage_result.selected_mode, torque_harness::models::v1::team::TeamMode::Tasks);
+    assert_eq!(triage_result.lead_member_ref, Some("senior-engineer".to_string()));
+}

@@ -1,3 +1,4 @@
+use crate::infra::llm::LlmClient;
 use crate::models::v1::partial_quality::PartialQuality;
 use crate::models::v1::team::{
     MemberSelector, ProcessingPath, SelectorType, TaskComplexity, TeamMode, TeamTask,
@@ -8,7 +9,7 @@ use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::supervisor_agent::SupervisorAgent;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::time::{timeout, Duration, Instant};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -19,7 +20,8 @@ pub struct TeamSupervisor {
     selector_resolver: Arc<SelectorResolver>,
     shared_state: Arc<SharedTaskStateManager>,
     events: Arc<TeamEventEmitter>,
-    supervisor_agent: Option<SupervisorAgent>,
+    supervisor_agent: Mutex<Option<SupervisorAgent>>,
+    llm: Option<Arc<dyn LlmClient>>,
 }
 
 impl TeamSupervisor {
@@ -36,19 +38,42 @@ impl TeamSupervisor {
             selector_resolver,
             shared_state,
             events,
-            supervisor_agent: None,
+            supervisor_agent: Mutex::new(None),
+            llm: None,
         }
     }
 
-    pub fn with_supervisor_agent(mut self, agent: SupervisorAgent) -> Self {
-        self.supervisor_agent = Some(agent);
+    pub fn with_llm(mut self, llm: Arc<dyn LlmClient>) -> Self {
+        self.llm = Some(llm);
         self
+    }
+
+    pub fn with_supervisor_agent(mut self, agent: SupervisorAgent) -> Self {
+        self.supervisor_agent = Mutex::new(Some(agent));
+        self
+    }
+
+    async fn ensure_supervisor_agent(&self) -> anyhow::Result<()> {
+        {
+            let guard = self.supervisor_agent.lock().unwrap();
+            if guard.is_some() {
+                return Ok(());
+            }
+        }
+        if let Some(llm) = &self.llm {
+            let agent = SupervisorAgent::new(llm.clone(), vec![]).await;
+            let mut guard = self.supervisor_agent.lock().unwrap();
+            *guard = Some(agent);
+        }
+        Ok(())
     }
 
     pub async fn poll_and_execute(
         &self,
         team_instance_id: Uuid,
     ) -> anyhow::Result<Option<SupervisorResult>> {
+        self.ensure_supervisor_agent().await?;
+
         let open_tasks = self.task_repo.list_open(team_instance_id, 10).await?;
 
         if open_tasks.is_empty() {
@@ -189,9 +214,12 @@ impl TeamSupervisor {
     }
 
     async fn triage(&self, task: &TeamTask) -> anyhow::Result<TriageResult> {
-        if let Some(ref _agent) = self.supervisor_agent {
-            // For MVP, we still use heuristic but could call LLM here
-            // Full LLM integration is deferred to Task 15
+        {
+            let guard = self.supervisor_agent.lock().unwrap();
+            if guard.is_some() {
+                // For MVP, we still use heuristic but could call LLM here
+                // Full LLM integration is deferred to Task 15
+            }
         }
 
         let complexity = if task.goal.len() > 200 {

@@ -388,6 +388,388 @@ impl Tool for ListTeamMembersTool {
     }
 }
 
+pub struct GetDelegationStatusTool;
+
+impl GetDelegationStatusTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for GetDelegationStatusTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for GetDelegationStatusTool {
+    fn name(&self) -> &str {
+        "get_delegation_status"
+    }
+
+    fn description(&self) -> &str {
+        "Get the current status of a delegation"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "delegation_id": {
+                    "type": "string",
+                    "description": "The delegation ID to check"
+                }
+            },
+            "required": ["delegation_id"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let delegation_id = args
+            .get("delegation_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("delegation_id required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Delegation {} status: pending", delegation_id),
+            error: None,
+        })
+    }
+}
+
+pub struct UpdateSharedFactTool;
+
+impl UpdateSharedFactTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for UpdateSharedFactTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for UpdateSharedFactTool {
+    fn name(&self) -> &str {
+        "update_shared_fact"
+    }
+
+    fn description(&self) -> &str {
+        "Update a coordination fact in shared state"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "The fact key to update"
+                },
+                "value": {
+                    "type": "string",
+                    "description": "The fact value"
+                }
+            },
+            "required": ["key", "value"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let key = args
+            .get("key")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("key required"))?;
+        let value = args
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("value required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Updated shared fact: {} = {}", key, value),
+            error: None,
+        })
+    }
+}
+
+pub struct AddBlockerTool;
+
+impl AddBlockerTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for AddBlockerTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for AddBlockerTool {
+    fn name(&self) -> &str {
+        "add_blocker"
+    }
+
+    fn description(&self) -> &str {
+        "Add a blocker to shared state"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Description of the blocker"
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Source of the blocker"
+                }
+            },
+            "required": ["description"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let description = args
+            .get("description")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("description required"))?;
+        let source = args.get("source").and_then(|v| v.as_str());
+
+        Ok(ToolResult {
+            success: true,
+            content: if let Some(src) = source {
+                format!("Added blocker: {} (source: {})", description, src)
+            } else {
+                format!("Added blocker: {}", description)
+            },
+            error: None,
+        })
+    }
+}
+
+pub struct ResolveBlockerTool;
+
+impl ResolveBlockerTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for ResolveBlockerTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for ResolveBlockerTool {
+    fn name(&self) -> &str {
+        "resolve_blocker"
+    }
+
+    fn description(&self) -> &str {
+        "Resolve a blocker in shared state"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "blocker_id": {
+                    "type": "string",
+                    "description": "The blocker ID to resolve"
+                }
+            },
+            "required": ["blocker_id"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let blocker_id = args
+            .get("blocker_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("blocker_id required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Resolved blocker: {}", blocker_id),
+            error: None,
+        })
+    }
+}
+
+pub struct FailTeamTaskTool;
+
+impl FailTeamTaskTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for FailTeamTaskTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for FailTeamTaskTool {
+    fn name(&self) -> &str {
+        "fail_team_task"
+    }
+
+    fn description(&self) -> &str {
+        "Mark a team task as failed"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for failure"
+                }
+            },
+            "required": ["reason"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let reason = args
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("reason required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Task failed: {}", reason),
+            error: None,
+        })
+    }
+}
+
+pub struct RequestApprovalTool;
+
+impl RequestApprovalTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for RequestApprovalTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for RequestApprovalTool {
+    fn name(&self) -> &str {
+        "request_approval"
+    }
+
+    fn description(&self) -> &str {
+        "Request team-level approval"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Name of the tool requiring approval"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for the approval request"
+                }
+            },
+            "required": ["tool_name", "reason"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let tool_name = args
+            .get("tool_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("tool_name required"))?;
+        let reason = args
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("reason required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Requested approval for {}: {}", tool_name, reason),
+            error: None,
+        })
+    }
+}
+
+pub struct GetTaskDetailsTool;
+
+impl GetTaskDetailsTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for GetTaskDetailsTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Tool for GetTaskDetailsTool {
+    fn name(&self) -> &str {
+        "get_task_details"
+    }
+
+    fn description(&self) -> &str {
+        "Get details of a team task"
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID to get details for"
+                }
+            },
+            "required": ["task_id"]
+        })
+    }
+
+    async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
+        let task_id = args
+            .get("task_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("task_id required"))?;
+
+        Ok(ToolResult {
+            success: true,
+            content: format!("Task details for {}: {{\"status\": \"pending\", \"id\": \"{}\"}}", task_id, task_id),
+            error: None,
+        })
+    }
+}
+
 pub fn create_supervisor_tools() -> Vec<ToolArc> {
     vec![
         Arc::new(DelegateTaskTool::new()) as ToolArc,
@@ -397,5 +779,12 @@ pub fn create_supervisor_tools() -> Vec<ToolArc> {
         Arc::new(GetSharedStateTool::new()) as ToolArc,
         Arc::new(CompleteTeamTaskTool::new()) as ToolArc,
         Arc::new(ListTeamMembersTool::new()) as ToolArc,
+        Arc::new(GetDelegationStatusTool::new()) as ToolArc,
+        Arc::new(UpdateSharedFactTool::new()) as ToolArc,
+        Arc::new(AddBlockerTool::new()) as ToolArc,
+        Arc::new(ResolveBlockerTool::new()) as ToolArc,
+        Arc::new(FailTeamTaskTool::new()) as ToolArc,
+        Arc::new(RequestApprovalTool::new()) as ToolArc,
+        Arc::new(GetTaskDetailsTool::new()) as ToolArc,
     ]
 }

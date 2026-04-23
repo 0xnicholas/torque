@@ -33,6 +33,19 @@ impl FakeLlm {
         }
     }
 
+    pub fn json_response(content: impl Into<String>) -> Self {
+        let content = content.into();
+        Self {
+            model: "fake-model".to_string(),
+            scripted: Mutex::new(VecDeque::from([ScriptedResponse {
+                chunks: vec![Chunk::content(content.clone())],
+                finish_reason: FinishReason::Stop,
+                message_content: content,
+            }])),
+            requests: Mutex::new(Vec::new()),
+        }
+    }
+
     pub fn tool_call_then_text(
         tool_name: impl Into<String>,
         arguments: Value,

@@ -69,6 +69,72 @@ async fn test_list_team_members_tool() {
 }
 
 #[tokio::test]
+async fn test_get_delegation_status_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::GetDelegationStatusTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "get_delegation_status");
+    assert!(schema.pointer("/properties/delegation_id").is_some());
+}
+
+#[tokio::test]
+async fn test_update_shared_fact_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::UpdateSharedFactTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "update_shared_fact");
+    assert!(schema.pointer("/properties/key").is_some());
+    assert!(schema.pointer("/properties/value").is_some());
+}
+
+#[tokio::test]
+async fn test_add_blocker_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::AddBlockerTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "add_blocker");
+    assert!(schema.pointer("/properties/description").is_some());
+    assert!(schema.pointer("/properties/source").is_some());
+}
+
+#[tokio::test]
+async fn test_resolve_blocker_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::ResolveBlockerTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "resolve_blocker");
+    assert!(schema.pointer("/properties/blocker_id").is_some());
+}
+
+#[tokio::test]
+async fn test_fail_team_task_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::FailTeamTaskTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "fail_team_task");
+    assert!(schema.pointer("/properties/reason").is_some());
+}
+
+#[tokio::test]
+async fn test_request_approval_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::RequestApprovalTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "request_approval");
+    assert!(schema.pointer("/properties/tool_name").is_some());
+    assert!(schema.pointer("/properties/reason").is_some());
+}
+
+#[tokio::test]
+async fn test_get_task_details_tool() {
+    let tool = torque_harness::service::team::supervisor_tools::GetTaskDetailsTool::new();
+    let schema = tool.parameters_schema();
+
+    assert_eq!(tool.name(), "get_task_details");
+    assert!(schema.pointer("/properties/task_id").is_some());
+}
+
+#[tokio::test]
 async fn test_supervisor_tools_registry() {
     use torque_harness::service::team::supervisor_tools::create_supervisor_tools;
     use torque_harness::tools::Tool;
@@ -83,6 +149,14 @@ async fn test_supervisor_tools_registry() {
     assert!(tool_names.contains(&"get_shared_state"));
     assert!(tool_names.contains(&"complete_team_task"));
     assert!(tool_names.contains(&"list_team_members"));
+    assert!(tool_names.contains(&"get_delegation_status"));
+    assert!(tool_names.contains(&"update_shared_fact"));
+    assert!(tool_names.contains(&"add_blocker"));
+    assert!(tool_names.contains(&"resolve_blocker"));
+    assert!(tool_names.contains(&"fail_team_task"));
+    assert!(tool_names.contains(&"request_approval"));
+    assert!(tool_names.contains(&"get_task_details"));
+    assert_eq!(tool_names.len(), 14);
 }
 
 #[tokio::test]

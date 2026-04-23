@@ -1,5 +1,6 @@
 use crate::harness::{ReActHarness, ReActHarnessError};
 use crate::infra::llm::LlmClient;
+use crate::models::v1::team::TriageResult;
 use crate::tools::ToolRegistry;
 use crate::service::team::supervisor_tools::create_supervisor_tools;
 use std::sync::Arc;
@@ -58,5 +59,9 @@ Available tools let you delegate, accept/reject results, publish artifacts, and 
 
     pub fn step_history(&self) -> &[crate::harness::ReActStep] {
         self.react.step_history()
+    }
+
+    pub async fn triage(&self, task: &str) -> Result<TriageResult, ReActHarnessError> {
+        self.react.triage(task).await
     }
 }

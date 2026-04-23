@@ -79,6 +79,13 @@ impl RouteModeHandler {
         delegation_repo
             .update_status(delegation.id, "ACCEPTED")
             .await?;
+
+        // TODO(Task 16): Integrate wait_for_delegation_completion here.
+        // The delegation should wait for completion result before being marked ACCEPTED.
+        // Requires EventListener to be passed to mode handlers and proper event subscription.
+        // After integration: call wait_for_delegation_completion(delegation.id) and
+        // accept/reject based on the returned DelegationResult.
+
         shared_state
             .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
             .await?;
@@ -187,6 +194,11 @@ impl BroadcastModeHandler {
             delegation_repo
                 .update_status(*delegation_id, "ACCEPTED")
                 .await?;
+
+            // TODO(Task 16): Integrate wait_for_delegation_completion here.
+            // The delegation should wait for completion result before being marked ACCEPTED.
+            // Requires EventListener to be passed to mode handlers and proper event subscription.
+
             shared_state
                 .update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED")
                 .await?;
@@ -328,6 +340,11 @@ impl CoordinateModeHandler {
             delegation_repo
                 .update_status(delegation.id, "ACCEPTED")
                 .await?;
+
+            // TODO(Task 16): Integrate wait_for_delegation_completion here.
+            // The delegation should wait for completion result before being marked ACCEPTED.
+            // Requires EventListener to be passed to mode handlers and proper event subscription.
+
             shared_state
                 .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
                 .await?;
@@ -476,6 +493,11 @@ impl TasksModeHandler {
             delegation_repo
                 .update_status(delegation.id, "ACCEPTED")
                 .await?;
+
+            // TODO(Task 16): Integrate wait_for_delegation_completion here.
+            // The delegation should wait for completion result before being marked ACCEPTED.
+            // Requires EventListener to be passed to mode handlers and proper event subscription.
+
             shared_state
                 .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
                 .await?;

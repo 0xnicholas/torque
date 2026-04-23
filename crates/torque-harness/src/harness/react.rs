@@ -1,8 +1,9 @@
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::{Chunk, LlmClient, LlmMessage, ToolCall};
 use crate::infra::tool_registry::ToolRegistry;
+use crate::models::v1::team::{ProcessingPath, TaskComplexity, TeamMode, TriageResult};
 use crate::tools::ToolResult;
-use llm::{ChatRequest, FinishReason};
+use llm::{ChatRequest, FinishReason, Message};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -357,6 +358,103 @@ If you need approval for something, output approve with description.
 
     pub fn clear_history(&mut self) {
         self.step_history.clear();
+    }
+
+    pub async fn triage(&self, task: &str) -> Result<TriageResult, ReActHarnessError> {
+        let triage_prompt = format!(
+            r#"Analyze this task and determine how to handle it.
+
+Task: {}
+
+Respond with ONLY a JSON object containing:
+{{
+  "complexity": "Simple" or "Medium" or "Complex",
+  "processing_path": "SingleRoute" or "GuidedDelegate" or "StructuredOrchestration",
+  "selected_mode": "Route" or "Tasks",
+  "lead_member_ref": null or "member-reference-string",
+  "rationale": "Brief explanation of the decision"
+}}
+
+Complexity guidelines:
+- Simple: Single step, one team member, straightforward
+- Medium: Multi-step, 2-3 team members, some coordination needed
+- Complex: Multi-team, many dependencies, significant coordination
+
+Processing path guidelines:
+- SingleRoute: One team member handles everything
+- GuidedDelegate: Supervisor delegates but coordinates closely
+- StructuredOrchestration: Multiple teams with structured handoffs
+
+Mode guidelines:
+- Route: Tasks routed to appropriate members
+- Tasks: Full task decomposition and management"#,
+            task
+        );
+
+        let request = ChatRequest::new(
+            "fake-model",
+            vec![Message::user(triage_prompt)],
+        );
+
+        let response = self.llm.chat(request).await.map_err(|e| {
+            ReActHarnessError::LlmError(format!("triage failed: {}", e))
+        })?;
+
+        let content = response.message.content.trim();
+
+        let json_start = content.find('{');
+        let json_end = content.rfind('}');
+
+        if let (Some(start), Some(end)) = (json_start, json_end) {
+            let json_str = &content[start..=end];
+            let parsed: Value = serde_json::from_str(json_str).map_err(|e| {
+                ReActHarnessError::LlmError(format!("failed to parse triage JSON: {} - input: {}", e, json_str))
+            })?;
+
+            let complexity = match parsed.get("complexity").and_then(|v| v.as_str()) {
+                Some("Simple") => TaskComplexity::Simple,
+                Some("Medium") => TaskComplexity::Medium,
+                Some("Complex") => TaskComplexity::Complex,
+                _ => TaskComplexity::Medium,
+            };
+
+            let processing_path = match parsed.get("processing_path").and_then(|v| v.as_str()) {
+                Some("SingleRoute") => ProcessingPath::SingleRoute,
+                Some("GuidedDelegate") => ProcessingPath::GuidedDelegate,
+                Some("StructuredOrchestration") => ProcessingPath::StructuredOrchestration,
+                _ => ProcessingPath::GuidedDelegate,
+            };
+
+            let selected_mode = match parsed.get("selected_mode").and_then(|v| v.as_str()) {
+                Some("Route") => TeamMode::Route,
+                Some("Tasks") => TeamMode::Tasks,
+                _ => TeamMode::Route,
+            };
+
+            let lead_member_ref = parsed
+                .get("lead_member_ref")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty() && *s != "null")
+                .map(String::from);
+
+            let rationale = parsed
+                .get("rationale")
+                .and_then(|v| v.as_str())
+                .unwrap_or("No rationale provided")
+                .to_string();
+
+            return Ok(TriageResult {
+                complexity,
+                processing_path,
+                selected_mode,
+                lead_member_ref,
+                rationale,
+            });
+        }
+
+        Err(ReActHarnessError::LlmError(
+            format!("no JSON found in triage response: {}", content)
+        ))
     }
 }
 

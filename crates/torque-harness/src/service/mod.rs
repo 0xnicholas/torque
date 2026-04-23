@@ -127,13 +127,16 @@ impl ServiceContainer {
         ));
         let team_event_emitter =
             std::sync::Arc::new(team::TeamEventEmitter::new(repos.team_event.clone()));
-        let team_supervisor = std::sync::Arc::new(TeamSupervisor::new(
-            repos.team_task.clone(),
-            repos.delegation.clone(),
-            team_selector_resolver,
-            team_shared_state_manager,
-            team_event_emitter,
-        ));
+        let team_supervisor = std::sync::Arc::new(
+            TeamSupervisor::new(
+                repos.team_task.clone(),
+                repos.delegation.clone(),
+                team_selector_resolver,
+                team_shared_state_manager,
+                team_event_emitter,
+            )
+            .with_llm(llm.clone()),
+        );
 
         let delegation = std::sync::Arc::new(DelegationService::new(repos.delegation.clone()));
         let approval = std::sync::Arc::new(ApprovalService::new(repos.approval.clone()));
