@@ -6,6 +6,7 @@ pub mod db;
 pub mod embedding;
 pub mod harness;
 pub mod infra;
+pub mod jobs;
 pub mod kernel_bridge;
 pub mod message_bus;
 pub mod metrics;
