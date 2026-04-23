@@ -6,6 +6,7 @@ use crate::models::v1::team::{
 use crate::repository::{DelegationRepository, TeamTaskRepository};
 use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
+use crate::service::team::supervisor_agent::SupervisorAgent;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use std::sync::Arc;
 use tokio::time::{timeout, Duration, Instant};
@@ -18,6 +19,7 @@ pub struct TeamSupervisor {
     selector_resolver: Arc<SelectorResolver>,
     shared_state: Arc<SharedTaskStateManager>,
     events: Arc<TeamEventEmitter>,
+    supervisor_agent: Option<SupervisorAgent>,
 }
 
 impl TeamSupervisor {
@@ -34,7 +36,13 @@ impl TeamSupervisor {
             selector_resolver,
             shared_state,
             events,
+            supervisor_agent: None,
         }
+    }
+
+    pub fn with_supervisor_agent(mut self, agent: SupervisorAgent) -> Self {
+        self.supervisor_agent = Some(agent);
+        self
     }
 
     pub async fn poll_and_execute(
@@ -181,6 +189,11 @@ impl TeamSupervisor {
     }
 
     async fn triage(&self, task: &TeamTask) -> anyhow::Result<TriageResult> {
+        if let Some(ref _agent) = self.supervisor_agent {
+            // For MVP, we still use heuristic but could call LLM here
+            // Full LLM integration is deferred to Task 15
+        }
+
         let complexity = if task.goal.len() > 200 {
             TaskComplexity::Complex
         } else if task.goal.len() > 100 {
@@ -201,7 +214,7 @@ impl TeamSupervisor {
             selected_mode: selected_mode.clone(),
             lead_member_ref: None,
             rationale: format!(
-                "Triage determined {:?} complexity (goal len: {}), using {:?} mode",
+                "Triage determined {:?} complexity (goal len: {}), using {:?} mode. LLM integration deferred to Task 15.",
                 complexity,
                 task.goal.len(),
                 selected_mode

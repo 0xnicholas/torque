@@ -9,6 +9,7 @@ pub mod selector;
 pub mod service;
 pub mod shared_state;
 pub mod supervisor;
+pub mod supervisor_agent;
 pub mod supervisor_tools;
 
 pub use circuit_breaker::{CircuitBreaker, CircuitState};
@@ -21,3 +22,4 @@ pub use selector::SelectorResolver;
 pub use service::TeamService;
 pub use shared_state::SharedTaskStateManager;
 pub use supervisor::{SupervisorResult, TeamSupervisor};
+pub use supervisor_agent::SupervisorAgent;
