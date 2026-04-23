@@ -8,8 +8,10 @@ use crate::service::ServiceContainer;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    response::sse::{Event, Sse},
     Json,
 };
+use futures::StreamExt;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -613,4 +615,47 @@ pub async fn backfill(
     }
 
     Ok(Json(BackfillResponse { processed, failed }))
+}
+
+pub async fn review_notifications_sse(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>>, StatusCode> {
+    let notification_service = services.notification_service.as_ref();
+
+    let mut receiver = match notification_service.subscribe() {
+        Some(rx) => rx,
+        None => return Err(StatusCode::NOT_FOUND),
+    };
+
+    let stream = async_stream::stream! {
+        while let result = receiver.recv().await {
+            match result {
+                Ok(event) => {
+                    let data = match &event {
+                        crate::notification::ReviewEvent::CandidateCreated(c) => {
+                            serde_json::json!({"type": "created", "id": c.id.to_string()})
+                        }
+                        crate::notification::ReviewEvent::CandidateNeedsReview(c) => {
+                            serde_json::json!({"type": "review", "id": c.id.to_string()})
+                        }
+                        crate::notification::ReviewEvent::CandidateApproved(id) => {
+                            serde_json::json!({"type": "approved", "id": id.to_string()})
+                        }
+                        crate::notification::ReviewEvent::CandidateRejected(id) => {
+                            serde_json::json!({"type": "rejected", "id": id.to_string()})
+                        }
+                        crate::notification::ReviewEvent::CandidateMerged(id) => {
+                            serde_json::json!({"type": "merged", "id": id.to_string()})
+                        }
+                    };
+                    yield Ok::<_, std::convert::Infallible>(Event::default().event("memory-review").data(data.to_string()));
+                }
+                Err(e) => {
+                    yield Ok::<_, std::convert::Infallible>(Event::default().event("error").data(e.to_string()));
+                }
+            }
+        }
+    };
+
+    Ok(Sse::new(stream))
 }

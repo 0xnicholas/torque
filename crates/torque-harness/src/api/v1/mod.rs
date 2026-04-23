@@ -167,4 +167,8 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/memory-entries/search", post(memory::search))
         .route("/v1/memory-entries/force", post(memory::force_write))
         .route("/v1/memory-entries/backfill", post(memory::backfill))
+        .route(
+            "/v1/memory-notifications/sse",
+            get(memory::review_notifications_sse),
+        )
 }
