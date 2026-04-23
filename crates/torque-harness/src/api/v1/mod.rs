@@ -93,7 +93,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
             get(capabilities::get_profile).delete(capabilities::delete_profile),
         )
         .route(
-            "/v1/capability-profiles/:id/resolve",
+            "/v1/capabilities/resolve",
             post(capabilities::resolve),
         )
         .route(

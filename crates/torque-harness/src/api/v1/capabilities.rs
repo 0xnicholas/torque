@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::capability::{
     CapabilityProfile, CapabilityProfileCreate, CapabilityRegistryBinding,
-    CapabilityRegistryBindingCreate, CapabilityResolveRequest,
+    CapabilityRegistryBindingCreate, CapabilityResolveByRefRequest, CapabilityResolution,
 };
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::service::ServiceContainer;
@@ -91,21 +91,24 @@ pub async fn delete_profile(
 
 pub async fn resolve(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-    Path(_id): Path<Uuid>,
-    Json(req): Json<CapabilityResolveRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorBody>)> {
-    let result = services.capability.resolve(req).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                code: "RESOLVE_ERROR".into(),
-                message: e.to_string(),
-                details: None,
-                request_id: None,
-            }),
-        )
-    })?;
-    Ok(Json(result))
+    Json(req): Json<CapabilityResolveByRefRequest>,
+) -> Result<Json<CapabilityResolution>, (StatusCode, Json<ErrorBody>)> {
+    let resolution = services
+        .capability
+        .resolve_by_ref(&req.capability_ref, req.constraints)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "RESOLVE_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+    Ok(Json(resolution))
 }
 
 pub async fn create_binding(

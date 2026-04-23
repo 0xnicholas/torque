@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Default, sqlx::Type, Serialize, Deserialize)]
-#[sqlx(rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum RiskLevel {
     #[default]
     Low,
@@ -13,13 +12,124 @@ pub enum RiskLevel {
     Critical,
 }
 
-#[derive(Debug, Clone, Default, sqlx::Type, Serialize, Deserialize)]
-#[sqlx(rename_all = "snake_case")]
+impl std::fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RiskLevel::Low => write!(f, "low"),
+            RiskLevel::Medium => write!(f, "medium"),
+            RiskLevel::High => write!(f, "high"),
+            RiskLevel::Critical => write!(f, "critical"),
+        }
+    }
+}
+
+impl std::str::FromStr for RiskLevel {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "low" => Ok(RiskLevel::Low),
+            "medium" => Ok(RiskLevel::Medium),
+            "high" => Ok(RiskLevel::High),
+            "critical" => Ok(RiskLevel::Critical),
+            _ => Err(format!("Unknown RiskLevel: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum QualityTier {
     #[default]
     Experimental,
     Beta,
     Production,
+}
+
+impl std::fmt::Display for QualityTier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QualityTier::Experimental => write!(f, "experimental"),
+            QualityTier::Beta => write!(f, "beta"),
+            QualityTier::Production => write!(f, "production"),
+        }
+    }
+}
+
+impl std::str::FromStr for QualityTier {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "experimental" => Ok(QualityTier::Experimental),
+            "beta" => Ok(QualityTier::Beta),
+            "production" => Ok(QualityTier::Production),
+            _ => Err(format!("Unknown QualityTier: {}", s)),
+        }
+    }
+}
+
+mod sqlx_impls {
+    use super::*;
+    use sqlx::decode::Decode;
+    use sqlx::encode::Encode;
+    use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef};
+    use sqlx::types::Type;
+
+    impl Type<sqlx::Postgres> for RiskLevel {
+        fn type_info() -> PgTypeInfo {
+            PgTypeInfo::with_name("TEXT")
+        }
+
+        fn compatible(ty: &PgTypeInfo) -> bool {
+            *ty == PgTypeInfo::with_name("TEXT")
+                || *ty == PgTypeInfo::with_name("VARCHAR")
+                || *ty == PgTypeInfo::with_name("UNKNOWN")
+        }
+    }
+
+    impl Encode<'_, sqlx::Postgres> for RiskLevel {
+        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
+            let s = self.to_string();
+            buf.extend_from_slice(s.as_bytes());
+            sqlx::encode::IsNull::No
+        }
+    }
+
+    impl Decode<'_, sqlx::Postgres> for RiskLevel {
+        fn decode(
+            value: PgValueRef<'_>,
+        ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+            let s: String = Decode::<sqlx::Postgres>::decode(value)?;
+            s.as_str().parse().map_err(|e: String| e.into())
+        }
+    }
+
+    impl Type<sqlx::Postgres> for QualityTier {
+        fn type_info() -> PgTypeInfo {
+            PgTypeInfo::with_name("TEXT")
+        }
+
+        fn compatible(ty: &PgTypeInfo) -> bool {
+            *ty == PgTypeInfo::with_name("TEXT")
+                || *ty == PgTypeInfo::with_name("VARCHAR")
+                || *ty == PgTypeInfo::with_name("UNKNOWN")
+        }
+    }
+
+    impl Encode<'_, sqlx::Postgres> for QualityTier {
+        fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> sqlx::encode::IsNull {
+            let s = self.to_string();
+            buf.extend_from_slice(s.as_bytes());
+            sqlx::encode::IsNull::No
+        }
+    }
+
+    impl Decode<'_, sqlx::Postgres> for QualityTier {
+        fn decode(
+            value: PgValueRef<'_>,
+        ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
+            let s: String = Decode::<sqlx::Postgres>::decode(value)?;
+            s.as_str().parse().map_err(|e: String| e.into())
+        }
+    }
 }
 
 #[derive(Debug, Serialize, FromRow)]

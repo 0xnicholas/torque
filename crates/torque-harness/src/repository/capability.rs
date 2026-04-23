@@ -11,6 +11,7 @@ pub trait CapabilityProfileRepository: Send + Sync {
     async fn create(&self, req: &CapabilityProfileCreate) -> anyhow::Result<CapabilityProfile>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<CapabilityProfile>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<CapabilityProfile>>;
+    async fn get_by_name(&self, name: &str) -> anyhow::Result<Option<CapabilityProfile>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
 }
 
@@ -61,6 +62,16 @@ impl CapabilityProfileRepository for PostgresCapabilityProfileRepository {
         Ok(row)
     }
 
+    async fn get_by_name(&self, name: &str) -> anyhow::Result<Option<CapabilityProfile>> {
+        let row = sqlx::query_as::<_, CapabilityProfile>(
+            "SELECT * FROM v1_capability_profiles WHERE name = $1"
+        )
+        .bind(name)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row)
+    }
+
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query("DELETE FROM v1_capability_profiles WHERE id = $1")
             .bind(id)
@@ -77,6 +88,7 @@ pub trait CapabilityRegistryBindingRepository: Send + Sync {
         req: &CapabilityRegistryBindingCreate,
     ) -> anyhow::Result<CapabilityRegistryBinding>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>>;
+    async fn list_by_profile(&self, profile_id: Uuid, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<CapabilityRegistryBinding>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
 }
@@ -114,6 +126,17 @@ impl CapabilityRegistryBindingRepository for PostgresCapabilityRegistryBindingRe
         let rows = sqlx::query_as::<_, CapabilityRegistryBinding>(
             "SELECT * FROM v1_capability_registry_bindings ORDER BY created_at DESC LIMIT $1",
         )
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
+    }
+
+    async fn list_by_profile(&self, profile_id: Uuid, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>> {
+        let rows = sqlx::query_as::<_, CapabilityRegistryBinding>(
+            "SELECT * FROM v1_capability_registry_bindings WHERE capability_profile_id = $1 ORDER BY compatibility_score DESC LIMIT $2"
+        )
+        .bind(profile_id)
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;
