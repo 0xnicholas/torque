@@ -79,6 +79,7 @@ pub trait CapabilityRegistryBindingRepository: Send + Sync {
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<CapabilityRegistryBinding>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
+    async fn list_by_profile(&self, profile_id: Uuid, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>>;
 }
 
 pub struct PostgresCapabilityRegistryBindingRepository {
@@ -136,5 +137,16 @@ impl CapabilityRegistryBindingRepository for PostgresCapabilityRegistryBindingRe
             .execute(self.db.pool())
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn list_by_profile(&self, profile_id: Uuid, limit: i64) -> anyhow::Result<Vec<CapabilityRegistryBinding>> {
+        let rows = sqlx::query_as::<_, CapabilityRegistryBinding>(
+            "SELECT * FROM v1_capability_registry_bindings WHERE capability_profile_id = $1 ORDER BY compatibility_score DESC LIMIT $2"
+        )
+        .bind(profile_id)
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
     }
 }
