@@ -11,7 +11,6 @@ use crate::repository::{
 };
 use crate::service::event_replay::EventReplayRegistry;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -93,7 +92,6 @@ pub struct RecoveryService {
     repo_v1: Option<Arc<dyn MemoryRepositoryV1>>,
     team_member_repo: Option<Arc<dyn TeamMemberRepository>>,
     team_task_repo: Option<Arc<dyn TeamTaskRepository>>,
-    task_retry_counts: HashMap<Uuid, u32>,
 }
 
 impl RecoveryService {
@@ -110,7 +108,6 @@ impl RecoveryService {
             repo_v1: None,
             team_member_repo: None,
             team_task_repo: None,
-            task_retry_counts: HashMap::new(),
         }
     }
 
@@ -758,7 +755,7 @@ impl RecoveryService {
     }
 
     pub async fn recover_team_task(
-        &mut self,
+        &self,
         task_id: Uuid,
     ) -> anyhow::Result<TeamTaskRecoveryResult> {
         let task_repo = self.team_task_repo.as_ref().ok_or_else(|| {
@@ -770,18 +767,19 @@ impl RecoveryService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Task not found: {}", task_id))?;
 
-        let current_retry_count = self.task_retry_counts.get(&task_id).copied().unwrap_or(0);
+        let current_retry_count = task.retry_count;
 
         let (action_taken, new_status) = if task.status == TeamTaskStatus::Failed {
             if current_retry_count < 3 {
-                self.task_retry_counts.insert(task_id, current_retry_count + 1);
+                let new_retry_count = current_retry_count + 1;
+                task_repo.update_retry_count(task_id, new_retry_count).await?;
                 task_repo.update_status(task_id, TeamTaskStatus::Open).await?;
-                (String::from("Retry"), TeamTaskStatus::Open)
+                (TeamRecoveryAction::Retry, TeamTaskStatus::Open)
             } else {
-                (String::from("EscalateToSupervisor"), task.status)
+                (TeamRecoveryAction::EscalateToSupervisor, task.status)
             }
         } else {
-            (String::from("NoOp"), task.status)
+            (TeamRecoveryAction::NoOp, task.status)
         };
 
         Ok(TeamTaskRecoveryResult {

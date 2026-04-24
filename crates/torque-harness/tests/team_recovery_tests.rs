@@ -2,7 +2,7 @@ use torque_harness::models::v1::agent_instance::{AgentInstance, AgentInstanceCre
 use torque_harness::models::v1::checkpoint::Checkpoint;
 use torque_harness::models::v1::event::Event;
 use torque_harness::models::v1::team::{
-    TeamMember, TeamRecoveryDisposition, TeamTask, TeamTaskStatus,
+    TeamMember, TeamRecoveryAction, TeamRecoveryDisposition, TeamTask, TeamTaskStatus,
 };
 use torque_harness::repository::{
     AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt, TeamMemberRepository,
@@ -248,6 +248,15 @@ impl TeamTaskRepository for MockTeamTaskRepository {
     async fn mark_completed(&self, _id: Uuid) -> anyhow::Result<bool> {
         unimplemented!()
     }
+
+    async fn update_retry_count(&self, id: Uuid, retry_count: u32) -> anyhow::Result<bool> {
+        if let Some(task) = self.tasks.lock().unwrap().get_mut(&id) {
+            task.retry_count = retry_count;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 fn create_test_member(id: Uuid, team_instance_id: Uuid, status: &str) -> TeamMember {
@@ -351,6 +360,6 @@ async fn test_team_recovery_retry_on_failure() {
 
     let result = service.recover_team_task(task_id).await.unwrap();
 
-    assert_eq!(result.action_taken, "Retry");
+    assert!(matches!(result.action_taken, TeamRecoveryAction::Retry));
     assert!(matches!(result.new_status, TeamTaskStatus::Open));
 }

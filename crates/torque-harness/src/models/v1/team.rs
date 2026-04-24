@@ -372,6 +372,6 @@ pub enum TeamRecoveryAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeamTaskRecoveryResult {
     pub task_id: Uuid,
-    pub action_taken: String,
+    pub action_taken: TeamRecoveryAction,
     pub new_status: TeamTaskStatus,
 }

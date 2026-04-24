@@ -275,6 +275,7 @@ pub trait TeamTaskRepository: Send + Sync {
     async fn update_triage_result(&self, id: Uuid, triage: &TriageResult) -> anyhow::Result<bool>;
     async fn update_mode(&self, id: Uuid, mode: &str) -> anyhow::Result<bool>;
     async fn mark_completed(&self, id: Uuid) -> anyhow::Result<bool>;
+    async fn update_retry_count(&self, id: Uuid, retry_count: u32) -> anyhow::Result<bool>;
 }
 
 pub struct PostgresTeamTaskRepository {
@@ -398,6 +399,15 @@ impl TeamTaskRepository for PostgresTeamTaskRepository {
 
     async fn mark_completed(&self, id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query("UPDATE v1_team_tasks SET completed_at = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(self.db.pool())
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn update_retry_count(&self, id: Uuid, retry_count: u32) -> anyhow::Result<bool> {
+        let result = sqlx::query("UPDATE v1_team_tasks SET retry_count = $1 WHERE id = $2")
+            .bind(retry_count as i32)
             .bind(id)
             .execute(self.db.pool())
             .await?;
