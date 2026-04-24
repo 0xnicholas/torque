@@ -1,8 +1,55 @@
 # Torque Project Status
 
-**Branch:** `feat/kernel-execution`
-**Date:** 2026-04-18
-**Plan:** [Kernel Execution Engine Implementation](docs/superpowers/plans/2026-04-17-torque-kernel-execution-implementation.md)
+**Branch:** `main`
+**Date:** 2026-04-24
+**Plan:** Active development across multiple features
+
+---
+
+## Phase 4: Checkpoint Restore + Recovery (COMPLETED)
+
+### Task 1: Fix Snapshot Format
+- [x] Align checkpoint snapshot format between creation and reading
+- [x] Update RecoveryService to read custom_state directly
+
+### Task 2: Event replay handlers
+- [x] Implement ApprovalRequestedHandler
+- [x] Implement DelegationRequestedHandler
+
+### Task 3: Kernel Assessment Integration
+- [x] RecoveryService uses kernel assess_recovery when available
+- [x] Fallback manual assessment when kernel not available
+
+### Task 4: Proper Reconciliation
+- [x] Detect child instance failures
+- [x] Take resolution actions (ReissueDelegation, AcceptCompletedOutput)
+- [x] Return ReconciliationResult with inconsistencies and resolutions
+
+### Task 5: Restore + Resume
+- [x] Restore endpoint returns detailed RecoveryResult
+- [x] Resume endpoint checks terminal state and triggers new execution
+- [x] Full message history replay is future work (MVP restarts execution)
+
+**Implementation:** `crates/torque-harness/src/service/recovery.rs`
+**Tests:** 8 checkpoint_recovery_tests passing
+
+---
+
+## Phase 3: Team Supervisor Agent (COMPLETED)
+
+### Tasks 1-16: Complete
+- [x] 14 Supervisor Tools (mock implementations)
+- [x] SupervisorAgent with LLM integration
+- [x] Fully LLM-driven triage (no heuristic fallback)
+- [x] wait_for_delegation_completion in all mode handlers
+- [x] EventListener integration for delegation waiting
+
+**Implementation:** `crates/torque-harness/src/service/team/supervisor*.rs`, `modes.rs`
+**Tests:** 26 supervisor-related tests passing
+
+---
+
+## Phase 2: Team Execution (COMPLETED)
 
 ---
 
@@ -284,11 +331,12 @@ Working tree: contains P0 implementation ready for commit
 
 1. **Tool execution** uses simple ToolRegistry; advanced tool governance (policy evaluation) not yet implemented
 2. **Async execution mode** returns SSE same as sync; true async with webhooks is future work
-3. **Team execution** not covered; this focuses on single-agent instance execution
-4. **Memory integration** during execution uses existing SessionService memory search; v1 memory integration is future work
-5. **Checkpoint restore** (`POST /checkpoints/{id}/restore`) not yet implemented
-6. **Approval flow** during execution not yet implemented
-7. **Conversation context** across multiple runs not yet implemented (each run starts with empty message history)
+3. **Memory integration** during execution uses existing SessionService memory search; v1 memory integration is future work
+4. **Full message history replay** is future work (MVP restarts execution from checkpoint)
+5. **Context anchors and shared-state anchors** in checkpoint not yet captured/restored
+6. **Operator escalation endpoints** for high-severity reconciliation issues not yet implemented
+7. **Team-level recovery** not yet implemented
+8. **Conversation context** across multiple runs not yet implemented (each run starts with empty message history)
 
 ---
 

@@ -1440,56 +1440,26 @@ git commit -m "test(recovery): add full recovery flow integration test"
 
 ### Task 9: Final Verification
 
-- [ ] **Step 1: Run all recovery tests**
+- [x] **Step 1: Run all recovery tests**
 
 Run: `cd crates/torque-harness && cargo test recovery -- --nocapture`
-Expected: All tests pass
+Expected: All tests pass ✅
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 Run: `cd crates/torque-harness && cargo test`
-Expected: All tests pass (20+ tests)
+Expected: All tests pass (20+ tests) ✅
 
-- [ ] **Step 3: Run cargo check on entire workspace**
+- [x] **Step 3: Run cargo check on entire workspace**
 
 Run: `cargo check --workspace`
-Expected: Clean compilation
+Expected: Clean compilation ✅
 
-- [ ] **Step 4: Update STATUS.md with completed work**
+- [x] **Step 4: Update STATUS.md with completed work**
 
-Modify `STATUS.md`:
-```markdown
-## Phase N: Checkpoint Restore + Recovery (COMPLETED)
+STATUS.md updated with Phase 4: Checkpoint Restore + Recovery (COMPLETED)
 
-### Task 1: Fix Snapshot Format
-- [x] Align checkpoint snapshot format between creation and reading
-- [x] Update RecoveryService to read custom_state directly
-
-### Task 2: Event replay handlers
-- [x] Implement ApprovalRequestedHandler
-- [x] Implement DelegationRequestedHandler
-
-### Task 3: Kernel Assessment Integration
-- [x] RecoveryService uses kernel assess_recovery when available
-- [x] Fallback manual assessment when kernel not available
-
-### Task 4: Proper Reconciliation
-- [x] Detect child instance failures
-- [x] Take resolution actions (ReissueDelegation, AcceptCompletedOutput)
-- [x] Return ReconciliationResult with inconsistencies and resolutions
-
-### Task 5: Restore + Resume
-- [x] Restore endpoint returns detailed RecoveryResult
-- [x] Resume endpoint checks terminal state and triggers new execution
-- [x] Full message history replay is future work (MVP restarts execution)
-```
-
-- [ ] **Step 5: Final commit**
-
-```bash
-git add STATUS.md
-git commit -m "feat(recovery): complete checkpoint restore + recovery implementation"
-```
+- [x] **Step 5: Final commit**
 
 ---
 
