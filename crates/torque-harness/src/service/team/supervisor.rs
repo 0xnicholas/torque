@@ -8,6 +8,7 @@ use crate::repository::{DelegationRepository, TeamTaskRepository};
 use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::supervisor_agent::SupervisorAgent;
+use crate::service::team::supervisor_tools::create_supervisor_tools;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
@@ -76,7 +77,8 @@ impl TeamSupervisor {
             }
         }
         if let Some(llm) = &self.llm {
-            let agent = SupervisorAgent::new(llm.clone(), vec![]).await;
+            let tools = create_supervisor_tools();
+            let agent = SupervisorAgent::new(llm.clone(), tools).await;
             let mut guard = self.supervisor_agent.lock().await;
             *guard = Some(agent);
         }
