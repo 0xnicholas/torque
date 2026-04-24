@@ -178,8 +178,8 @@ impl RecoveryService {
 
         let instance_id = checkpoint.agent_instance_id;
 
-        // 2. Get instance
-        let instance = self
+        // 2. Validate instance exists
+        let _instance = self
             .agent_instance_repo
             .get(instance_id)
             .await?

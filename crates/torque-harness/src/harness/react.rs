@@ -392,7 +392,7 @@ Mode guidelines:
         );
 
         let request = ChatRequest::new(
-            "fake-model",
+            self.llm.model().to_string(),
             vec![Message::user(triage_prompt)],
         );
 
