@@ -188,6 +188,7 @@ impl MemoryGatingService {
         &self,
         embedding: &[f32],
         category: &MemoryCategory,
+        candidate_content: &MemoryContent,
     ) -> anyhow::Result<DedupResult> {
         let vector = crate::vector_type::Vector::from(embedding.to_vec());
         let similar = self
@@ -195,7 +196,7 @@ impl MemoryGatingService {
             .find_similar_entries(&vector, Some(category), 5)
             .await?;
 
-        let thresholds = DedupThresholds::for_category(category);
+        let thresholds = DedupThresholds::from_config(&self.gating_config, category);
 
         if similar.is_empty() {
             return Ok(DedupResult {
@@ -222,6 +223,53 @@ impl MemoryGatingService {
             action,
             similar_entry_id: Some(best.entry_id),
         })
+    }
+
+    pub async fn check_equivalence_for_candidate(
+        &self,
+        dedup_result: &DedupResult,
+        category: &MemoryCategory,
+        candidate_content: &MemoryContent,
+    ) -> anyhow::Result<Option<EquivalenceResult>> {
+        let thresholds = DedupThresholds::from_config(&self.gating_config, category);
+        let similarity = dedup_result.similarity;
+
+        let should_check = match dedup_result.action {
+            DedupAction::New => similarity >= thresholds.merge - 0.05,
+            DedupAction::Mergeable => true,
+            DedupAction::Duplicate => similarity < 0.98,
+        };
+
+        if !should_check {
+            return Ok(None);
+        }
+
+        if let Some(entry_id) = dedup_result.similar_entry_id {
+            if let Some(existing_entry) = self.repo.get_entry_by_id(entry_id).await? {
+                let input = EquivalenceCheckInput {
+                    candidate_content: serde_json::json!({
+                        "category": candidate_content.category,
+                        "key": candidate_content.key,
+                        "value": candidate_content.value,
+                    }),
+                    existing_entry_id: entry_id,
+                    existing_content: serde_json::json!({
+                        "category": existing_entry.category,
+                        "key": existing_entry.key,
+                        "value": existing_entry.value,
+                    }),
+                    time_delta_seconds: None,
+                    same_session: false,
+                    same_task: false,
+                    same_agent: true,
+                    content_similarity: similarity,
+                };
+
+                return Ok(Some(self.check_equivalence(&input).await?));
+            }
+        }
+
+        Ok(None)
     }
 
     pub async fn check_equivalence(
@@ -472,7 +520,7 @@ impl MemoryGatingService {
         };
 
         let dedup = if let Some(ref emb) = embedding {
-            self.check_dedup(emb, &content.category).await?
+            self.check_dedup(emb, &content.category, &content).await?
         } else {
             DedupResult {
                 similarity: 0.0,
