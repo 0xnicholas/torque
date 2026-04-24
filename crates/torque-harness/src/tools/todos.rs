@@ -249,9 +249,13 @@ async fn persist_document(
 }
 
 fn parse_scope(scope: Option<&str>) -> anyhow::Result<ArtifactScope> {
-    let scope_name = scope.unwrap_or("private");
-    serde_json::from_value(json!(scope_name))
-        .with_context(|| format!("invalid scope '{}'", scope_name))
+    let normalized = scope.unwrap_or("private").to_ascii_lowercase();
+    match normalized.as_str() {
+        "private" => Ok(ArtifactScope::Private),
+        "team_shared" | "teamshared" => Ok(ArtifactScope::TeamShared),
+        "external_published" | "externalpublished" => Ok(ArtifactScope::ExternalPublished),
+        _ => Err(anyhow::anyhow!("invalid scope '{}'", normalized)),
+    }
 }
 
 fn upsert_item(items: &mut Vec<TodoItem>, item: TodoItem) {
