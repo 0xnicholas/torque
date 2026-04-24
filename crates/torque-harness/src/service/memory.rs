@@ -496,6 +496,15 @@ impl MemoryService {
             });
         }
 
+        let artifacts = self.repo_v1.get_artifacts_by_instance(agent_instance_id, 50).await?;
+        for artifact in artifacts {
+            anchors.push(ContextAnchor {
+                anchor_type: ContextAnchorType::Artifact,
+                reference_id: artifact.id,
+                captured_at: now,
+            });
+        }
+
         Ok(anchors)
     }
 }

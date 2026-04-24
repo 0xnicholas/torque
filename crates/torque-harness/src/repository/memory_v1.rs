@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::models::v1::artifact::Artifact;
 use crate::models::v1::external_context::ExternalContextRef;
 use crate::models::v1::gating::SimilarMemoryResult;
 use crate::models::v1::memory::{
@@ -43,6 +44,12 @@ pub trait MemoryRepositoryV1: Send + Sync {
     async fn get_team_for_agent(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>>;
 
     async fn get_last_event_id(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>>;
+
+    async fn get_artifacts_by_instance(
+        &self,
+        agent_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<Artifact>>;
 
     // Memory Entries
     async fn create_entry(&self, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry>;
@@ -235,6 +242,21 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         .fetch_optional(self.db.pool())
         .await?;
         Ok(row.map(|(id,)| id))
+    }
+
+    async fn get_artifacts_by_instance(
+        &self,
+        agent_instance_id: Uuid,
+        limit: i64,
+    ) -> anyhow::Result<Vec<Artifact>> {
+        let rows = sqlx::query_as::<_, Artifact>(
+            "SELECT * FROM v1_artifacts WHERE source_instance_id = $1 ORDER BY created_at DESC LIMIT $2",
+        )
+        .bind(agent_instance_id)
+        .bind(limit)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
     }
 
     async fn create_entry(&self, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry> {
