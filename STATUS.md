@@ -1,9 +1,9 @@
 # Torque Project Status
 
 **Branch:** `main`
-**Date:** 2026-04-24
-**Compilation:** Clean (20 warnings from existing code)
-**Tests:** 141/141 passing
+**Date:** 2026-04-25
+**Compilation:** Clean (warnings only)
+**Tests:** 155/155 passing
 
 ---
 
@@ -382,6 +382,31 @@
 
 ---
 
+## P6: Async Execution with Webhooks (COMPLETED)
+
+### Async Execution Mode
+- `RunStatus` enum: Queued, Running, Completed, Failed, Cancelled
+- `RunRepository` with `create`, `get`, `get_by_status`, `update_status`, `update_webhook_status`
+- `AsyncRunner` service for background processing of queued runs
+
+### Webhook Management
+- `WebhookManager` with exponential backoff retry (3 attempts, 1s base delay)
+- Webhook tracking fields: `webhook_sent_at`, `webhook_attempts`
+- `WebhookPayload` with run_id, status, result, error, timestamp
+
+### API Endpoints
+- `POST /v1/runs` - async mode creates Queued run, returns immediately
+- `GET /v1/runs/{id}` - get run status
+- `GET /v1/runs/{id}/webhook` - get webhook delivery status
+
+### Database Migration
+- `004_add_async_fields_to_runs` - adds webhook_url, async_execution, webhook_sent_at, webhook_attempts columns
+
+**Implementation:** `crates/torque-harness/src/models/v1/run.rs`, `service/async_runner.rs`, `service/webhook_manager.rs`, `repository/run.rs`, `api/v1/runs.rs`
+**Tests:** `v1_execution_tests` updated with async fields
+
+---
+
 ## P3: Advanced Features (COMPLETED)
 
 ### Proper Memory Compaction with Summarization
@@ -447,7 +472,7 @@
 ## Known Limitations (Post-MVP)
 
 1. ~~**Operator escalation endpoints**~~ - **RESOLVED** - P5 implementation complete
-2. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
+2. ~~**Async execution mode**~~ - **RESOLVED** - P6 implementation complete
 3. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
 
 ---
@@ -482,14 +507,14 @@
 ## Git Log (Recent)
 
 ```
+02b71ef fix(tests): add missing async_execution and webhook_url fields
+1be26f8 fixup: Add webhook tracking fields and fix retry off-by-one
+ca38783 feat(P6): add WebhookManager with retry and webhook status endpoint
+34e608e fixup: align PostgresRunRepository with db schema
+83a6597 feat(async): add async run handler with webhook support
 952e0e6 fix: change COMPACTION_ERROR to DB_ERROR for consistency
 c5a8c09 docs: mark P2 Governance & Audit complete
 f6b2deb feat(governance): add GET /v1/memory/decisions/stats endpoint
-8b96d20 Add POST /v1/memory/compact endpoint for manual compaction trigger
-0b8108e fixup: add auto_approved and merged to CandidateStats
-fac996c feat(governance): add stats to review queue endpoint
-077491c fix: refactor list_decisions to use separate compiled queries
-a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 ```
 
 ---
@@ -498,4 +523,3 @@ a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 
 ### Future
 - Advanced tool governance
-- True async execution with webhooks
