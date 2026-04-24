@@ -73,6 +73,21 @@ pub enum EquivalenceResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictResult {
+    pub has_conflict: bool,
+    pub conflict_type: ConflictType,
+    pub resolution: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConflictType {
+    Overwrite,
+    KeepBoth,
+    MergeRequired,
+    Discard,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EquivalenceCheckInput {
     pub candidate_content: serde_json::Value,
     pub existing_entry_id: Uuid,

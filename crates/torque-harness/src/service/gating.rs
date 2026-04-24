@@ -1,10 +1,10 @@
 use crate::config;
 use crate::embedding::EmbeddingGenerator;
 use crate::models::v1::gating::{
-    CandidateGenerationConfig, DecisionFactors, DedupAction, DedupResult, DedupThresholds,
-    EquivalenceCheckInput, EquivalenceResult, ExecutionSummary, GateDecision, GateDecisionType,
-    GatingConfig, MergeStrategy, QualityScore, RiskAssessment, RiskLevel, SimilarMemoryResult,
-    WriteMode,
+    CandidateGenerationConfig, ConflictResult, ConflictType, DecisionFactors, DedupAction,
+    DedupResult, DedupThresholds, EquivalenceCheckInput, EquivalenceResult, ExecutionSummary,
+    GateDecision, GateDecisionType, GatingConfig, MergeStrategy, QualityScore, RiskAssessment,
+    RiskLevel, SimilarMemoryResult, WriteMode,
 };
 use crate::models::v1::memory::{
     MemoryCategory, MemoryContent, MemoryWriteCandidate, MemoryWriteCandidateStatus,
@@ -270,6 +270,33 @@ impl MemoryGatingService {
         }
 
         Ok(None)
+    }
+
+    pub async fn detect_conflict(
+        &self,
+        candidate: &MemoryContent,
+        dedup_result: &DedupResult,
+    ) -> anyhow::Result<ConflictResult> {
+        if let Some(entry_id) = dedup_result.similar_entry_id {
+            if let Some(existing) = self.repo.get_entry_by_id(entry_id).await? {
+                if candidate.key != existing.key {
+                    return Ok(ConflictResult {
+                        has_conflict: true,
+                        conflict_type: ConflictType::MergeRequired,
+                        resolution: format!(
+                            "Similar content with different keys: '{}' vs '{}'",
+                            candidate.key, existing.key
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(ConflictResult {
+            has_conflict: false,
+            conflict_type: ConflictType::MergeRequired,
+            resolution: String::new(),
+        })
     }
 
     pub async fn check_equivalence(
