@@ -75,7 +75,7 @@ pub async fn restore(
             )
         })?;
 
-    let (instance, _messages) = services
+    let (instance, _messages, _rebuilt_state) = services
         .recovery
         .restore_from_checkpoint(id)
         .await

@@ -10,7 +10,7 @@ use crate::repository::{
     TeamMemberRepository, TeamTaskRepository,
 };
 use crate::service::event_replay::EventReplayRegistry;
-use checkpointer::r#trait;
+use checkpointer::r#trait::{self, ArtifactPointer};
 use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -83,6 +83,12 @@ pub struct Inconsistency {
     pub anchor_type: ContextAnchorType,
     pub reference_id: Uuid,
     pub description: String,
+}
+
+#[derive(Default)]
+pub struct RebuiltState {
+    pub tool_call_count: u32,
+    pub intermediate_results: Vec<ArtifactPointer>,
 }
 
 pub struct RecoveryService {
@@ -223,7 +229,7 @@ impl RecoveryService {
     pub async fn restore_from_checkpoint(
         &self,
         checkpoint_id: Uuid,
-    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>)> {
+    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>, RebuiltState)> {
         // 1. Load checkpoint
         let checkpoint = self
             .checkpoint_repo
@@ -301,7 +307,16 @@ impl RecoveryService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Agent instance disappeared during recovery"))?;
 
-        Ok((instance, messages))
+        // 6. Rebuild state from events if checkpoint has event_anchor
+        let rebuilt_state = if let Some(event_anchor) = checkpoint.context_anchors.iter().find(|a| {
+            matches!(a.anchor_type, ContextAnchorType::EventAnchor)
+        }) {
+            self.rebuild_state_from_events(instance_id, event_anchor.reference_id).await?
+        } else {
+            RebuiltState::default()
+        };
+
+        Ok((instance, messages, rebuilt_state))
     }
 
     async fn reconcile_state(
@@ -416,26 +431,72 @@ impl RecoveryService {
         Ok(())
     }
 
+    pub async fn apply_event_to_state(
+        &self,
+        event: &Event,
+        state: &mut RebuiltState,
+    ) -> anyhow::Result<()> {
+        match event.event_type.as_str() {
+            "tool_call_started" => {
+                state.tool_call_count += 1;
+            }
+            "artifact_produced" => {
+                if let Some(artifact) = event.payload.get("artifact") {
+                    if let (Some(task_id), Some(storage), Some(location)) = (
+                        artifact.get("task_id").and_then(|v| v.as_str()),
+                        artifact.get("storage").and_then(|v| v.as_str()),
+                        artifact.get("location").and_then(|v| v.as_str()),
+                    ) {
+                        state.intermediate_results.push(ArtifactPointer {
+                            task_id: task_id.to_string(),
+                            storage: storage.to_string(),
+                            location: location.to_string(),
+                            size_bytes: artifact.get("size_bytes").and_then(|v| v.as_i64()).unwrap_or(0),
+                            content_type: artifact.get("content_type").and_then(|v| v.as_str()).unwrap_or("application/octet-stream").to_string(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub async fn rebuild_state_from_events(
+        &self,
+        instance_id: Uuid,
+        from_event_id: Uuid,
+    ) -> anyhow::Result<RebuiltState> {
+        let events = self.event_repo.list_after(from_event_id).await?;
+
+        let mut state = RebuiltState::default();
+        for event in events {
+            self.apply_event_to_state(&event, &mut state).await?;
+        }
+
+        Ok(state)
+    }
+
     /// Resume agent instance from latest checkpoint.
     pub async fn resume_instance(
         &self,
         instance_id: Uuid,
-    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>)> {
+    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>, RebuiltState)> {
         let checkpoints = self
             .checkpoint_repo
             .list_by_instance(instance_id, 1)
             .await?;
 
         if let Some(checkpoint) = checkpoints.into_iter().next() {
-            let (instance, messages) = self.restore_from_checkpoint(checkpoint.id).await?;
-            Ok((instance, messages))
+            let (instance, messages, rebuilt_state) = self.restore_from_checkpoint(checkpoint.id).await?;
+            Ok((instance, messages, rebuilt_state))
         } else {
             let instance = self
                 .agent_instance_repo
                 .get(instance_id)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Agent instance not found: {}", instance_id))?;
-            Ok((instance, vec![]))
+            Ok((instance, vec![], RebuiltState::default()))
         }
     }
 
