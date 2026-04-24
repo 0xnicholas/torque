@@ -561,22 +561,31 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         team_instance_id: Uuid,
         blocker_id: Uuid,
     ) -> anyhow::Result<bool> {
-        let state = self
-            .get(team_instance_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Shared state not found"))?;
+        let mut tx = self.db.pool().begin().await?;
+
+        let row = sqlx::query_as::<_, SharedTaskStateRow>(
+            "SELECT * FROM v1_team_shared_state WHERE team_instance_id = $1 FOR UPDATE",
+        )
+        .bind(team_instance_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let state: SharedTaskState = row.into();
         let remaining: Vec<Blocker> = state
             .open_blockers
             .into_iter()
             .filter(|b| b.blocker_id != blocker_id)
             .collect();
+
         let result = sqlx::query(
             "UPDATE v1_team_shared_state SET open_blockers = $1::jsonb, updated_at = NOW() WHERE team_instance_id = $2"
         )
         .bind(serde_json::to_value(remaining)?)
         .bind(team_instance_id)
-        .execute(self.db.pool())
+        .execute(&mut *tx)
         .await?;
+
+        tx.commit().await?;
         Ok(result.rows_affected() > 0)
     }
 

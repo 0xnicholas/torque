@@ -8,6 +8,7 @@ pub trait AgentInstanceRepository: Send + Sync {
     async fn create(&self, req: &AgentInstanceCreate) -> anyhow::Result<AgentInstance>;
     async fn list(&self, limit: i64) -> anyhow::Result<Vec<AgentInstance>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<AgentInstance>>;
+    async fn get_many(&self, ids: &[Uuid]) -> anyhow::Result<Vec<AgentInstance>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
     async fn update_status(&self, id: Uuid, status: AgentInstanceStatus) -> anyhow::Result<bool>;
     async fn update_current_task(&self, id: Uuid, task_id: Option<Uuid>) -> anyhow::Result<bool>;
@@ -52,6 +53,19 @@ impl AgentInstanceRepository for PostgresAgentInstanceRepository {
                 .fetch_optional(self.db.pool())
                 .await?;
         Ok(row)
+    }
+
+    async fn get_many(&self, ids: &[Uuid]) -> anyhow::Result<Vec<AgentInstance>> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let rows = sqlx::query_as::<_, AgentInstance>(
+            "SELECT * FROM v1_agent_instances WHERE id = ANY($1)",
+        )
+        .bind(ids)
+        .fetch_all(self.db.pool())
+        .await?;
+        Ok(rows)
     }
 
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool> {

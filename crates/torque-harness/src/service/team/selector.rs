@@ -3,6 +3,7 @@ use crate::repository::{
     AgentInstanceRepository, CapabilityProfileRepository, CapabilityRegistryBindingRepository,
     TeamMemberRepository,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -28,6 +29,10 @@ impl SelectorResolver {
         }
     }
 
+    pub fn team_member_repo(&self) -> Arc<dyn TeamMemberRepository> {
+        self.team_member_repo.clone()
+    }
+
     pub async fn resolve(
         &self,
         selector: &MemberSelector,
@@ -42,16 +47,30 @@ impl SelectorResolver {
             .resolve_capable_agents(&selector.capability_profiles)
             .await?;
 
+        let agent_instance_ids: Vec<Uuid> = members
+            .iter()
+            .map(|m| m.agent_instance_id)
+            .collect();
+
+        let agent_instances = self
+            .agent_instance_repo
+            .get_many(&agent_instance_ids)
+            .await?;
+
+        let agent_instance_map: HashMap<Uuid, _> = agent_instances
+            .into_iter()
+            .map(|inst| (inst.id, inst))
+            .collect();
+
         let mut candidates = Vec::new();
         for member in members.into_iter() {
             if !self.member_matches_selector(&member, selector) {
                 continue;
             }
 
-            let agent_instance = match self.agent_instance_repo.get(member.agent_instance_id).await
-            {
-                Ok(Some(inst)) => inst,
-                _ => continue,
+            let agent_instance = match agent_instance_map.get(&member.agent_instance_id) {
+                Some(inst) => inst,
+                None => continue,
             };
 
             if selector.selector_type == SelectorType::Capability

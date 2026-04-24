@@ -2,7 +2,7 @@ use crate::harness::{ReActHarness, ReActHarnessError};
 use crate::infra::llm::LlmClient;
 use crate::models::v1::team::TriageResult;
 use crate::tools::ToolRegistry;
-use crate::service::team::supervisor_tools::create_supervisor_tools;
+use crate::service::team::supervisor_tools::{create_supervisor_tools, SupervisorToolsConfig};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use torque_kernel::StepDecision;
@@ -13,12 +13,18 @@ pub struct SupervisorAgent {
 }
 
 impl SupervisorAgent {
-    pub async fn new(llm: Arc<dyn LlmClient>, extra_tools: Vec<crate::tools::ToolArc>) -> Self {
+    pub async fn new(
+        llm: Arc<dyn LlmClient>,
+        extra_tools: Vec<crate::tools::ToolArc>,
+        supervisor_tools_config: Option<SupervisorToolsConfig>,
+    ) -> Self {
         let registry = Arc::new(ToolRegistry::new());
 
-        let supervisor_tools = create_supervisor_tools();
-        for tool in supervisor_tools {
-            registry.register(tool).await;
+        if let Some(config) = supervisor_tools_config {
+            let supervisor_tools = create_supervisor_tools(config);
+            for tool in supervisor_tools {
+                registry.register(tool).await;
+            }
         }
 
         for tool in extra_tools {
