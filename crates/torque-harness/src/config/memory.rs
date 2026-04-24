@@ -1,4 +1,7 @@
-use crate::models::v1::gating::{CandidateGenerationConfig, GatingConfig};
+use std::collections::HashMap;
+
+use crate::models::v1::gating::{CandidateGenerationConfig, DedupThresholds, GatingConfig};
+use crate::models::v1::memory::MemoryCategory;
 
 pub fn candidate_generation_config() -> CandidateGenerationConfig {
     CandidateGenerationConfig {
@@ -22,6 +25,53 @@ pub fn candidate_generation_config() -> CandidateGenerationConfig {
 }
 
 pub fn gating_config() -> GatingConfig {
+    let mut thresholds: HashMap<MemoryCategory, DedupThresholds> = HashMap::new();
+
+    thresholds.insert(
+        MemoryCategory::AgentProfileMemory,
+        DedupThresholds {
+            duplicate: 0.96,
+            merge: 0.88,
+            minimum_content_length: 10,
+        },
+    );
+    thresholds.insert(
+        MemoryCategory::UserPreferenceMemory,
+        DedupThresholds {
+            duplicate: 0.96,
+            merge: 0.88,
+            minimum_content_length: 10,
+        },
+    );
+    thresholds.insert(
+        MemoryCategory::TaskOrDomainMemory,
+        DedupThresholds {
+            duplicate: 0.95,
+            merge: 0.85,
+            minimum_content_length: 20,
+        },
+    );
+    thresholds.insert(
+        MemoryCategory::EpisodicMemory,
+        DedupThresholds {
+            duplicate: 0.94,
+            merge: 0.85,
+            minimum_content_length: 30,
+        },
+    );
+    thresholds.insert(
+        MemoryCategory::ExternalContextMemory,
+        DedupThresholds {
+            duplicate: 0.93,
+            merge: 0.80,
+            minimum_content_length: 5,
+        },
+    );
+
+    for (category, thresholds) in thresholds.iter_mut() {
+        *thresholds = thresholds.clone().with_env_override(category);
+    }
+
     GatingConfig {
         auto_approve_quality_threshold: std::env::var("MEMORY_QUALITY_THRESHOLD")
             .ok()
@@ -31,6 +81,7 @@ pub fn gating_config() -> GatingConfig {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0.85),
+        dedup_thresholds: thresholds,
     }
 }
 

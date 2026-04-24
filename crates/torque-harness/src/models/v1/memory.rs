@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, sqlx::Type, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[sqlx(rename_all = "snake_case")]
 pub enum MemoryCategory {
     AgentProfileMemory,
@@ -11,6 +11,18 @@ pub enum MemoryCategory {
     TaskOrDomainMemory,
     EpisodicMemory,
     ExternalContextMemory,
+}
+
+impl MemoryCategory {
+    pub fn to_env_suffix(&self) -> String {
+        match self {
+            MemoryCategory::AgentProfileMemory => "AGENT_PROFILE".to_string(),
+            MemoryCategory::UserPreferenceMemory => "USER_PREFERENCE".to_string(),
+            MemoryCategory::TaskOrDomainMemory => "TASK_DOMAIN".to_string(),
+            MemoryCategory::EpisodicMemory => "EPISODIC".to_string(),
+            MemoryCategory::ExternalContextMemory => "EXTERNAL_CONTEXT".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

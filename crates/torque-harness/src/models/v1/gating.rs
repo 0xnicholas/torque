@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::models::v1::memory::MemoryCategory;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -191,6 +193,7 @@ pub struct ToolCallSummary {
 pub struct DedupThresholds {
     pub duplicate: f64,
     pub merge: f64,
+    pub minimum_content_length: usize,
 }
 
 impl DedupThresholds {
@@ -200,21 +203,48 @@ impl DedupThresholds {
                 DedupThresholds {
                     duplicate: 0.96,
                     merge: 0.88,
+                    minimum_content_length: 10,
                 }
             }
             MemoryCategory::TaskOrDomainMemory => DedupThresholds {
                 duplicate: 0.95,
                 merge: 0.85,
+                minimum_content_length: 20,
             },
             MemoryCategory::EpisodicMemory => DedupThresholds {
                 duplicate: 0.94,
                 merge: 0.85,
+                minimum_content_length: 30,
             },
             MemoryCategory::ExternalContextMemory => DedupThresholds {
                 duplicate: 0.93,
                 merge: 0.80,
+                minimum_content_length: 5,
             },
         }
+    }
+
+    pub fn from_config(config: &GatingConfig, category: &MemoryCategory) -> Self {
+        config
+            .dedup_thresholds
+            .get(category)
+            .cloned()
+            .unwrap_or_else(|| Self::for_category(category))
+    }
+
+    pub fn with_env_override(mut self, category: &MemoryCategory) -> Self {
+        let prefix = format!("MEMORY_DEDUP_{}", category.to_env_suffix());
+        if let Ok(v) = std::env::var(&format!("{}_DUPLICATE", prefix)) {
+            if let Ok(val) = v.parse::<f64>() {
+                self.duplicate = val;
+            }
+        }
+        if let Ok(v) = std::env::var(&format!("{}_MERGE", prefix)) {
+            if let Ok(val) = v.parse::<f64>() {
+                self.merge = val;
+            }
+        }
+        self
     }
 }
 
@@ -222,13 +252,36 @@ impl DedupThresholds {
 pub struct GatingConfig {
     pub auto_approve_quality_threshold: f64,
     pub auto_approve_confidence_threshold: f64,
+    pub dedup_thresholds: HashMap<MemoryCategory, DedupThresholds>,
 }
 
 impl Default for GatingConfig {
     fn default() -> Self {
+        let mut dedup_thresholds: HashMap<MemoryCategory, DedupThresholds> = HashMap::new();
+        dedup_thresholds.insert(
+            MemoryCategory::AgentProfileMemory,
+            DedupThresholds::for_category(&MemoryCategory::AgentProfileMemory),
+        );
+        dedup_thresholds.insert(
+            MemoryCategory::UserPreferenceMemory,
+            DedupThresholds::for_category(&MemoryCategory::UserPreferenceMemory),
+        );
+        dedup_thresholds.insert(
+            MemoryCategory::TaskOrDomainMemory,
+            DedupThresholds::for_category(&MemoryCategory::TaskOrDomainMemory),
+        );
+        dedup_thresholds.insert(
+            MemoryCategory::EpisodicMemory,
+            DedupThresholds::for_category(&MemoryCategory::EpisodicMemory),
+        );
+        dedup_thresholds.insert(
+            MemoryCategory::ExternalContextMemory,
+            DedupThresholds::for_category(&MemoryCategory::ExternalContextMemory),
+        );
         Self {
             auto_approve_quality_threshold: 0.88,
             auto_approve_confidence_threshold: 0.85,
+            dedup_thresholds,
         }
     }
 }
