@@ -23,7 +23,7 @@ impl PostgresRunRepository {
 impl RunRepository for PostgresRunRepository {
     async fn update_status(&self, id: Uuid, status: RunStatus) -> anyhow::Result<()> {
         sqlx::query("UPDATE runs SET status = $1 WHERE id = $2")
-            .bind(format!("{:?}", status).to_lowercase())
+            .bind(status)
             .bind(id)
             .execute(self.db.pool())
             .await?;
@@ -34,7 +34,7 @@ impl RunRepository for PostgresRunRepository {
         let rows = sqlx::query_as::<_, Run>(
             "SELECT id, webhook_url, async_execution, status FROM runs WHERE status = $1 LIMIT $2",
         )
-        .bind(format!("{:?}", status).to_lowercase())
+        .bind(status)
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;
