@@ -890,9 +890,10 @@ impl RecoveryService {
         let assessment = self.assess_recovery(checkpoint.id).await?;
 
         if matches!(assessment.disposition, RecoveryDisposition::Failed) {
-            let escalation_service = self.escalation_service.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("Escalation service not configured")
-            })?;
+            let Some(escalation_service) = self.escalation_service.as_ref() else {
+                tracing::debug!("Escalation service not configured, skipping escalation");
+                return Ok(None);
+            };
 
             let escalation = escalation_service
                 .create_escalation(
