@@ -2,6 +2,7 @@ pub mod agent_definition;
 pub mod agent_instance;
 pub mod approval;
 pub mod artifact;
+pub mod async_runner;
 pub mod candidate_generator;
 pub mod capability;
 pub mod checkpoint;
@@ -26,6 +27,7 @@ pub use agent_definition::AgentDefinitionService;
 pub use agent_instance::AgentInstanceService;
 pub use approval::ApprovalService;
 pub use artifact::ArtifactService;
+pub use async_runner::AsyncRunner;
 pub use candidate_generator::{
     CandidateGenerator, NoOpCandidateGenerator, OpenAICandidateGenerator,
 };
@@ -64,6 +66,8 @@ pub struct ServiceContainer {
     pub checkpoint: std::sync::Arc<CheckpointService>,
     pub event: std::sync::Arc<EventService>,
     pub run: std::sync::Arc<RunService>,
+    pub run_repo: std::sync::Arc<dyn crate::repository::RunRepository>,
+    pub async_runner: std::sync::Arc<AsyncRunner>,
     pub recovery: std::sync::Arc<RecoveryService>,
     pub escalation_service: std::sync::Arc<EscalationService>,
     pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
@@ -174,14 +178,16 @@ impl ServiceContainer {
             repos.task.clone(),
             repos.event.clone(),
             repos.checkpoint.clone(),
-            checkpointer,
-            llm,
+            checkpointer.clone(),
+            llm.clone(),
             tool.clone(),
             candidate_generator.clone(),
             gating.clone(),
             memory_pipeline.clone(),
             None,
         ));
+        let run_repo = repos.run.clone();
+        let async_runner = std::sync::Arc::new(AsyncRunner::new(repos.run.clone()));
         let escalation_service = std::sync::Arc::new(EscalationService::new(repos.escalation.clone()));
         let recovery = std::sync::Arc::new(
             RecoveryService::new(
@@ -208,6 +214,8 @@ impl ServiceContainer {
             checkpoint,
             event,
             run,
+            run_repo,
+            async_runner,
             recovery,
             escalation_service,
             idempotency,

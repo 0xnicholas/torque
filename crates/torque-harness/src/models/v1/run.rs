@@ -17,6 +17,10 @@ pub struct RunRequest {
     #[serde(default)]
     pub expected_outputs: Vec<String>,
     pub idempotency_key: Option<String>,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    #[serde(default)]
+    pub async_execution: bool,
 }
 
 #[derive(Debug, Serialize)]

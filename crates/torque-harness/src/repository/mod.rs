@@ -75,4 +75,5 @@ pub struct RepositoryContainer {
     pub ephemeral_log: Arc<dyn EphemeralLogRepository>,
     pub rule: Arc<dyn RuleRepository>,
     pub escalation: Arc<dyn EscalationRepository>,
+    pub run: Arc<dyn RunRepository>,
 }

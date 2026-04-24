@@ -1,9 +1,11 @@
 use crate::agent::stream::StreamEvent;
 use crate::db::Database;
-use crate::models::v1::run::RunRequest;
+use crate::models::v1::common::ErrorBody;
+use crate::models::v1::run::{Run, RunRequest, RunStatus};
 use crate::service::ServiceContainer;
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     response::sse::{Event, Sse},
     Json,
 };
@@ -11,6 +13,50 @@ use llm::OpenAiClient;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+
+#[derive(serde::Serialize)]
+pub struct RunResponse {
+    pub run: Run,
+}
+
+pub async fn create(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Json(req): Json<RunRequest>,
+) -> Result<(StatusCode, Json<RunResponse>), (StatusCode, Json<ErrorBody>)> {
+    let run = Run {
+        id: Uuid::new_v4(),
+        webhook_url: req.webhook_url.clone(),
+        async_execution: req.async_execution,
+        status: RunStatus::Queued,
+    };
+
+    services
+        .run_repo
+        .create(&run)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
+    if req.async_execution {
+        let async_runner = services.async_runner.clone();
+        tokio::spawn(async move {
+            if let Err(e) = async_runner.process_run(run.id).await {
+                tracing::error!("Async run {} failed: {}", run.id, e);
+            }
+        });
+    }
+
+    Ok((StatusCode::CREATED, Json(RunResponse { run })))
+}
 
 pub async fn run(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,

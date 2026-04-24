@@ -74,6 +74,7 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         escalation: Arc::new(crate::repository::PostgresEscalationRepository::new(
             db.clone(),
         )),
+        run: Arc::new(crate::repository::PostgresRunRepository::new(db.clone())),
     };
 
     let memory_v1 = Arc::new(crate::repository::PostgresMemoryRepositoryV1::new(
