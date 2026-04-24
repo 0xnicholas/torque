@@ -145,6 +145,7 @@ impl ServiceContainer {
         let gating = std::sync::Arc::new(gating::MemoryGatingService::new(
             memory_v1.clone(),
             embedding.clone(),
+            None,
         ));
         let notification_service =
             std::sync::Arc::new(notification::NotificationService::new().with_sse_hook());
