@@ -3,7 +3,7 @@
 **Branch:** `main`
 **Date:** 2026-04-24
 **Compilation:** Clean (20 warnings from existing code)
-**Tests:** 101/101 passing
+**Tests:** 141/141 passing
 
 ---
 
@@ -306,31 +306,33 @@
 
 ## Phase 12: Governance & Audit (COMPLETED)
 
-### Decision Log Service
-- `MemoryDecisionRepository` for audit trail persistence
-- `DecisionLogService` with query/filter/list operations
-- `GET /v1/memory/decisions` - Query with filtering (status, category, agent_id, since/until)
+### Decision Log Query API
+- `GET /v1/memory/decisions` - Query decision history with filtering
+- Filter by: agent_instance_id, decision_type, start_date, end_date
+- Pagination with cursor-based offset
+- `list_decisions()` in MemoryRepositoryV1 and MemoryService
 
 ### Enhanced Review Queue
-- `GET /v1/memory/review` - Review queue with stats (pending, approved, rejected counts by category)
-- `POST /v1/memory/review/{id}/approve` - Approve/reject entries
-- `POST /v1/memory/review/{id}/reject`
-- Review state machine: PendingReview → Approved/Rejected
+- `GET /v1/memory/candidates` now returns `CandidateListResponse` with stats
+- `CandidateStats`: total, pending, review_required, auto_approved, approved, rejected, merged
+- `count_candidates_by_status()` for aggregate counts by status
 
 ### Manual Compaction Trigger
 - `POST /v1/memory/compact` - Triggers background compaction job
-- Returns job status for tracking
+- `CompactionJob` and `CompactionJobStatus` models
+- Returns job with Pending status (stub implementation)
 
 ### Decision Analytics
-- `GET /v1/memory/decisions/stats` - Decision analytics (counts by status/category, time series)
-- `DecisionStats` response type
+- `GET /v1/memory/decisions/stats` - Decision statistics endpoint
+- `DecisionStats`: total_decisions, approved, rejected, merged, review, approval_rate, rejection_rate, avg_quality_score, top_rejection_reasons
+- `RejectionReasonCount`: reason and count
 
-**Implementation:** `crates/torque-harness/src/service/decision_log.rs`, `service/review_queue.rs`, `api/v1/memory/decisions.rs`, `api/v1/memory/review.rs`
-**Tests:** `decision_log_tests` (5), `review_queue_tests` (4)
+**Implementation:** `crates/torque-harness/src/repository/memory_v1.rs`, `service/memory.rs`, `api/v1/memory.rs`, `models/v1/memory.rs`
+**Tests:** `decision_log_tests` (8)
 
 ---
 
-## Current Test Suite (182 tests passing)
+## Current Test Suite (141 tests passing)
 
 | Test File | Count | Status |
 |-----------|-------|--------|
@@ -341,6 +343,7 @@
 | chat_streaming_api | 3 | ✅ |
 | checkpoint_recovery_tests | 8 | ✅ |
 | context_window_tests | 2 | ✅ |
+| decision_log_tests | 8 | ✅ |
 | delegation_repo_tests | 2 | ✅ |
 | delegation_status_tests | 3 | ✅ |
 | event_listener_tests | 6 | ✅ |
@@ -362,7 +365,7 @@
 | v1_team_supervisor_tools_tests | 16 | ✅ |
 | dedup_thresholds_tests | 5 | ✅ |
 | merge_strategy_tests | 4 | ✅ |
-| **TOTAL** | **~182** | ✅ |
+| **TOTAL** | **141** | ✅ |
 
 ---
 
@@ -408,31 +411,27 @@
 ## Git Log (Recent)
 
 ```
-730d34c docs: mark Phase 5 Capability Registry complete
-d9b8375 fix(tests): use unique names in capability resolution tests
-4ca2ef2 Merge branch 'feat/capability-registry'
-7be0da6 fix: address code review issues
-da20245 docs: mark Checkpoint Recovery and Team Supervisor Agent complete
+952e0e6 fix: change COMPACTION_ERROR to DB_ERROR for consistency
+c5a8c09 docs: mark P2 Governance & Audit complete
+f6b2deb feat(governance): add GET /v1/memory/decisions/stats endpoint
+8b96d20 Add POST /v1/memory/compact endpoint for manual compaction trigger
+0b8108e fixup: add auto_approved and merged to CandidateStats
+fac996c feat(governance): add stats to review queue endpoint
+077491c fix: refactor list_decisions to use separate compiled queries
+a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 ```
 
 ---
 
 ## Next Steps
 
-### P1: Pipeline Core
-- Candidate Generation (LLM fact extraction, integrated with RunService) - ✅ Complete
-- Memory Gating framework (quality assessment, risk/conflict/consent rules) - ✅ Complete
-- Dedup with dynamic thresholds by type
-- Equivalence check (rules engine + LLM fallback)
-
-### P2: Governance & Audit
-- Decision log query API (GET /v1/memory/decisions) - ✅ Complete
-- Enhanced review queue with stats - ✅ Complete
-- Manual compaction trigger (POST /v1/memory/compact) - ✅ Complete
-- Decision analytics (GET /v1/memory/decisions/stats) - ✅ Complete
-
 ### P3: Advanced Features
 - Analytics, Provenance UI, Compaction/Summarization
 - Context anchors and shared-state anchors in checkpoint
 - Team-level recovery
 - Full message history replay
+
+### Future
+- Operator escalation endpoints
+- Advanced tool governance
+- True async execution with webhooks
