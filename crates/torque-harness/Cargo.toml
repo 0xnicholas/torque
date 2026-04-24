@@ -35,3 +35,4 @@ checkpointer = { path = "../checkpointer" }
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
 serial_test = "3"
+mockall = "0.13"
