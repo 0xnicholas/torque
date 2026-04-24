@@ -1,4 +1,5 @@
 use crate::embedding::{memory_to_embedding_text, EmbeddingGenerator};
+use crate::models::v1::checkpoint::{ContextAnchor, ContextAnchorType};
 use crate::models::v1::memory::{
     CompactionJob, CompactionJobStatus, DecisionStats, MemoryCategory, MemoryDecisionLog,
     MemoryEntry as V1MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus,
@@ -451,5 +452,50 @@ impl MemoryService {
         job_id: Uuid,
     ) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    pub async fn capture_context_anchors(
+        &self,
+        agent_instance_id: Uuid,
+    ) -> anyhow::Result<Vec<ContextAnchor>> {
+        let mut anchors = Vec::new();
+        let now = chrono::Utc::now();
+
+        let entries = self.repo_v1.list_entries(50, 0).await?;
+        for entry in entries {
+            anchors.push(ContextAnchor {
+                anchor_type: ContextAnchorType::MemoryEntry,
+                reference_id: entry.id,
+                captured_at: now,
+            });
+        }
+
+        let ext_refs = self.repo_v1.get_external_context_refs(agent_instance_id).await?;
+        for ext_ref in ext_refs {
+            anchors.push(ContextAnchor {
+                anchor_type: ContextAnchorType::ExternalContextRef,
+                reference_id: ext_ref.id,
+                captured_at: now,
+            });
+        }
+
+        if let Some(team_id) = self.repo_v1.get_team_for_agent(agent_instance_id).await? {
+            anchors.push(ContextAnchor {
+                anchor_type: ContextAnchorType::SharedState,
+                reference_id: team_id,
+                captured_at: now,
+            });
+        }
+
+        let last_event = self.repo_v1.get_last_event_id(agent_instance_id).await?;
+        if let Some(event_id) = last_event {
+            anchors.push(ContextAnchor {
+                anchor_type: ContextAnchorType::EventAnchor,
+                reference_id: event_id,
+                captured_at: now,
+            });
+        }
+
+        Ok(anchors)
     }
 }

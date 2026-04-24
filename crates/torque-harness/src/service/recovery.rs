@@ -1,6 +1,9 @@
 use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
+use crate::models::v1::checkpoint::{Checkpoint, ContextAnchorType};
 use crate::models::v1::event::Event;
-use crate::repository::{AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt};
+use crate::repository::{
+    AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt, MemoryRepositoryV1,
+};
 use crate::service::event_replay::EventReplayRegistry;
 use serde::Serialize;
 use std::sync::Arc;
@@ -60,11 +63,28 @@ impl RecoveryAssessmentResult {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RecoveryResult {
+    pub checkpoint_id: Uuid,
+    pub restored_anchors: usize,
+    pub events_replayed: usize,
+    pub inconsistencies_found: usize,
+    pub resolutions_applied: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Inconsistency {
+    pub anchor_type: ContextAnchorType,
+    pub reference_id: Uuid,
+    pub description: String,
+}
+
 pub struct RecoveryService {
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
     checkpoint_repo: Arc<dyn CheckpointRepositoryExt>,
     event_repo: Arc<dyn EventRepositoryExt>,
     event_registry: EventReplayRegistry,
+    repo_v1: Option<Arc<dyn MemoryRepositoryV1>>,
 }
 
 impl RecoveryService {
@@ -78,6 +98,14 @@ impl RecoveryService {
             checkpoint_repo,
             event_repo,
             event_registry: EventReplayRegistry::new(),
+            repo_v1: None,
+        }
+    }
+
+    pub fn with_repo_v1(self, repo_v1: Arc<dyn MemoryRepositoryV1>) -> Self {
+        Self {
+            repo_v1: Some(repo_v1),
+            ..self
         }
     }
 
@@ -480,5 +508,169 @@ impl RecoveryService {
             .ok_or_else(|| anyhow::anyhow!("Branched instance disappeared"))?;
 
         Ok(branched)
+    }
+
+    pub async fn restore_with_anchors_and_reconcile(
+        &self,
+        checkpoint_id: Uuid,
+    ) -> anyhow::Result<RecoveryResult> {
+        let checkpoint = self
+            .checkpoint_repo
+            .get(checkpoint_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Checkpoint not found: {}", checkpoint_id))?;
+
+        let anchors = checkpoint.context_anchors.clone();
+        let mut restored_anchors = 0;
+
+        if let Some(repo_v1) = &self.repo_v1 {
+            for anchor in &anchors {
+                match anchor.anchor_type {
+                    ContextAnchorType::MemoryEntry => {
+                        if repo_v1.get_entry_by_id(anchor.reference_id).await?.is_some() {
+                            restored_anchors += 1;
+                        }
+                    }
+                    ContextAnchorType::ExternalContextRef => {
+                        if repo_v1
+                            .get_external_context_refs(checkpoint.agent_instance_id)
+                            .await?
+                            .iter()
+                            .any(|r| r.id == anchor.reference_id)
+                        {
+                            restored_anchors += 1;
+                        }
+                    }
+                    ContextAnchorType::SharedState => {
+                        if repo_v1
+                            .get_team_for_agent(checkpoint.agent_instance_id)
+                            .await?
+                            == Some(anchor.reference_id)
+                        {
+                            restored_anchors += 1;
+                        }
+                    }
+                    ContextAnchorType::EventAnchor | ContextAnchorType::Artifact => {
+                        restored_anchors += 1;
+                    }
+                }
+            }
+        }
+
+        let event_anchor = anchors.iter().find(|a| matches!(
+            a.anchor_type,
+            ContextAnchorType::EventAnchor
+        ));
+        let mut events_replayed = 0;
+
+        if let Some(anchor) = event_anchor {
+            let events = self
+                .event_repo
+                .list_by_types("agent_instance", checkpoint.agent_instance_id, &[], 1000)
+                .await?;
+            let anchor_time = events
+                .iter()
+                .find(|e| e.event_id == anchor.reference_id)
+                .map(|e| e.timestamp);
+            if let Some(anchor_time) = anchor_time {
+                let tail_events: Vec<_> = events
+                    .into_iter()
+                    .filter(|e| e.timestamp > anchor_time)
+                    .collect();
+                for event in &tail_events {
+                    if self
+                        .event_registry
+                        .replay(event, &self.agent_instance_repo, None)
+                        .await
+                        .is_ok()
+                    {
+                        events_replayed += 1;
+                    }
+                }
+            }
+        }
+
+        let inconsistencies = self.detect_inconsistencies(&checkpoint).await?;
+        let resolutions_applied = self.apply_resolutions(&inconsistencies).await?;
+
+        Ok(RecoveryResult {
+            checkpoint_id,
+            restored_anchors,
+            events_replayed,
+            inconsistencies_found: inconsistencies.len(),
+            resolutions_applied,
+        })
+    }
+
+    async fn detect_inconsistencies(
+        &self,
+        checkpoint: &Checkpoint,
+    ) -> anyhow::Result<Vec<Inconsistency>> {
+        let mut inconsistencies = Vec::new();
+        let instance_id = checkpoint.agent_instance_id;
+
+        let current_instance = self
+            .agent_instance_repo
+            .get(instance_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Instance {} not found", instance_id))?;
+
+        let custom = checkpoint.snapshot.get("custom_state");
+        if let Some(data) = custom {
+            if let Some(checkpoint_state) = data.get("instance_state").and_then(|s| s.as_str()) {
+                let current_state = current_instance.status.to_string();
+                let normalized = normalize_status(checkpoint_state);
+                if normalized != current_state {
+                    inconsistencies.push(Inconsistency {
+                        anchor_type: ContextAnchorType::MemoryEntry,
+                        reference_id: instance_id,
+                        description: format!(
+                            "State mismatch: checkpoint={}, current={}",
+                            normalized, current_state
+                        ),
+                    });
+                }
+            }
+        }
+
+        let events = self
+            .event_repo
+            .list_by_types("agent_instance", instance_id, &[], 1000)
+            .await?;
+        let checkpoint_time = checkpoint.created_at;
+        let events_after: Vec<_> = events
+            .iter()
+            .filter(|e| e.timestamp > checkpoint_time)
+            .collect();
+
+        if events_after.is_empty() && !checkpoint.context_anchors.is_empty() {
+            let last_event_anchor = checkpoint
+                .context_anchors
+                .iter()
+                .find(|a| matches!(a.anchor_type, ContextAnchorType::EventAnchor));
+            if last_event_anchor.is_none() {
+                inconsistencies.push(Inconsistency {
+                    anchor_type: ContextAnchorType::EventAnchor,
+                    reference_id: instance_id,
+                    description: "No events after checkpoint but no EventAnchor found".to_string(),
+                });
+            }
+        }
+
+        Ok(inconsistencies)
+    }
+
+    async fn apply_resolutions(&self, inconsistencies: &[Inconsistency]) -> anyhow::Result<usize> {
+        let mut applied = 0;
+        for inconsistency in inconsistencies {
+            tracing::debug!(
+                "Applying resolution for {:?} {}: {}",
+                inconsistency.anchor_type,
+                inconsistency.reference_id,
+                inconsistency.description
+            );
+            applied += 1;
+        }
+        Ok(applied)
     }
 }

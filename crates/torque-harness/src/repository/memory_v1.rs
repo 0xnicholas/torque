@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::models::v1::external_context::ExternalContextRef;
 use crate::models::v1::gating::SimilarMemoryResult;
 use crate::models::v1::memory::{
     DecisionStats, HybridSearchRow, MemoryCategory, MemoryDecisionLog, MemoryEntry, MemoryEntryRow,
@@ -33,6 +34,16 @@ impl From<SimilarMemoryRow> for SimilarMemoryResult {
 
 #[async_trait]
 pub trait MemoryRepositoryV1: Send + Sync {
+    // Context Anchors
+    async fn get_external_context_refs(
+        &self,
+        agent_instance_id: Uuid,
+    ) -> anyhow::Result<Vec<ExternalContextRef>>;
+
+    async fn get_team_for_agent(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>>;
+
+    async fn get_last_event_id(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>>;
+
     // Memory Entries
     async fn create_entry(&self, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry>;
 
@@ -190,6 +201,42 @@ impl PostgresMemoryRepositoryV1 {
 
 #[async_trait]
 impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
+    async fn get_external_context_refs(
+        &self,
+        _agent_instance_id: Uuid,
+    ) -> anyhow::Result<Vec<ExternalContextRef>> {
+        Ok(vec![])
+    }
+
+    async fn get_team_for_agent(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>> {
+        let row: Option<(Option<Uuid>,)> = sqlx::query_as(
+            r#"
+            SELECT team_instance_id FROM v1_team_members
+            WHERE agent_instance_id = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(agent_instance_id)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row.and_then(|r| r.0))
+    }
+
+    async fn get_last_event_id(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT id FROM events
+            WHERE subject_id = $1 AND subject_type = 'agent_instance'
+            ORDER BY timestamp DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(agent_instance_id)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row.map(|(id,)| id))
+    }
+
     async fn create_entry(&self, entry: &MemoryEntry) -> anyhow::Result<MemoryEntry> {
         let row = sqlx::query_as::<_, MemoryEntryRow>(
             r#"
