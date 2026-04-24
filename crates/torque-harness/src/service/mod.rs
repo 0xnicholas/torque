@@ -78,6 +78,7 @@ pub struct ServiceContainer {
     pub gating: std::sync::Arc<gating::MemoryGatingService>,
     pub memory_pipeline: std::sync::Arc<memory_pipeline::MemoryPipelineService>,
     pub notification_service: std::sync::Arc<notification::NotificationService>,
+    pub tool_governance: std::sync::Arc<crate::policy::ToolGovernanceService>,
 }
 
 impl ServiceContainer {
@@ -200,6 +201,16 @@ impl ServiceContainer {
             .with_escalation_service(escalation_service.clone()),
         );
 
+        let tool_governance = std::sync::Arc::new(crate::policy::ToolGovernanceService::new(
+            crate::models::v1::tool_policy::ToolGovernanceConfig {
+                default_risk_level: crate::models::v1::tool_policy::ToolRiskLevel::Medium,
+                approval_required_above: crate::models::v1::tool_policy::ToolRiskLevel::High,
+                blocked_tools: vec![],
+                privileged_tools: vec![],
+                side_effect_tracking: false,
+            },
+        ));
+
         Self {
             session,
             memory,
@@ -226,6 +237,7 @@ impl ServiceContainer {
             gating,
             memory_pipeline,
             notification_service,
+            tool_governance,
         }
     }
 }
