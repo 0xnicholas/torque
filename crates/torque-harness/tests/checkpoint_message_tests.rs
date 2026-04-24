@@ -280,7 +280,7 @@ async fn test_restore_from_checkpoint_returns_messages() {
         event_repo,
     );
 
-    let (restored_instance, messages) = recovery
+    let (restored_instance, messages, _rebuilt_state) = recovery
         .restore_from_checkpoint(checkpoint_id.0)
         .await
         .expect("should restore from checkpoint");
@@ -427,7 +427,7 @@ async fn test_resume_instance_returns_messages() {
         event_repo,
     );
 
-    let (restored_instance, messages) = recovery
+    let (restored_instance, messages, _rebuilt_state) = recovery
         .resume_instance(instance.id)
         .await
         .expect("should resume instance");
