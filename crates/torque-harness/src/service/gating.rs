@@ -1,10 +1,11 @@
 use crate::config;
 use crate::embedding::EmbeddingGenerator;
+use anyhow::Context;
 use crate::models::v1::gating::{
     CandidateGenerationConfig, ConflictResult, ConflictType, DecisionFactors, DedupAction,
     DedupResult, DedupThresholds, EquivalenceCheckInput, EquivalenceResult, ExecutionSummary,
     GateDecision, GateDecisionType, GatingConfig, MergeStrategy, QualityScore, RiskAssessment,
-    RiskLevel, SimilarMemoryResult, WriteMode,
+    RiskLevel, ReviewPriority, SimilarMemoryResult, WriteMode,
 };
 use crate::models::v1::memory::{
     MemoryCategory, MemoryContent, MemoryWriteCandidate, MemoryWriteCandidateStatus,
@@ -299,6 +300,159 @@ impl MemoryGatingService {
         })
     }
 
+    fn content_to_text(content: &MemoryContent) -> String {
+        format!("{}: {} - {}", content.category.to_env_suffix(), content.key, content.value)
+    }
+
+    fn make_conflict_decision(conflict: ConflictResult) -> GateDecision {
+        GateDecision {
+            decision: GateDecisionType::Review,
+            priority: Some(ReviewPriority::High),
+            reason: conflict.resolution,
+            write_mode: None,
+            target_entry_id: None,
+        }
+    }
+
+    pub async fn resolve_with_rules(
+        &self,
+        dedup_result: &DedupResult,
+        equivalence_result: Option<&EquivalenceResult>,
+    ) -> anyhow::Result<GateDecision> {
+        let equiv = equivalence_result.cloned().unwrap_or(EquivalenceResult::Distinct);
+
+        match (&dedup_result.action, &equiv) {
+            (DedupAction::Duplicate, EquivalenceResult::Distinct) if dedup_result.similarity < 0.98 => {
+                let llm_result = self.check_equivalence_via_llm_with_fallback(dedup_result).await?;
+                Ok(self.llm_result_to_decision(llm_result, dedup_result)?)
+            }
+            (DedupAction::Duplicate, EquivalenceResult::Mergeable) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Merge,
+                    write_mode: Some(WriteMode::Merge {
+                        target_id: dedup_result.similar_entry_id.unwrap(),
+                        strategy: MergeStrategy::Summarize,
+                    }),
+                    reason: "Duplicate content but semantically mergeable".to_string(),
+                    target_entry_id: None,
+                    priority: None,
+                })
+            }
+            (DedupAction::Mergeable, EquivalenceResult::Equivalent) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Merge,
+                    write_mode: Some(WriteMode::Merge {
+                        target_id: dedup_result.similar_entry_id.unwrap(),
+                        strategy: MergeStrategy::WithProvenance,
+                    }),
+                    reason: "Semantically equivalent entries".to_string(),
+                    target_entry_id: None,
+                    priority: None,
+                })
+            }
+            (DedupAction::Mergeable, EquivalenceResult::Conflict) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Review,
+                    priority: Some(ReviewPriority::High),
+                    reason: "Mergeable but semantic conflict detected".to_string(),
+                    target_entry_id: None,
+                    write_mode: None,
+                })
+            }
+            (DedupAction::New, EquivalenceResult::Mergeable) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Merge,
+                    write_mode: Some(WriteMode::Merge {
+                        target_id: dedup_result.similar_entry_id.unwrap(),
+                        strategy: MergeStrategy::Append,
+                    }),
+                    reason: "New entry but similar to existing - appending".to_string(),
+                    target_entry_id: None,
+                    priority: None,
+                })
+            }
+            (DedupAction::New, EquivalenceResult::Distinct) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Approve,
+                    write_mode: Some(WriteMode::Insert),
+                    reason: "New distinct entry".to_string(),
+                    target_entry_id: None,
+                    priority: None,
+                })
+            }
+            _ => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Review,
+                    priority: Some(ReviewPriority::Low),
+                    reason: format!("Default review: dedup={:?}, equiv={:?}", dedup_result.action, equiv),
+                    target_entry_id: None,
+                    write_mode: None,
+                })
+            }
+        }
+    }
+
+    async fn check_equivalence_via_llm_with_fallback(
+        &self,
+        dedup_result: &DedupResult,
+    ) -> anyhow::Result<Option<EquivalenceResult>> {
+        if let Some(entry_id) = dedup_result.similar_entry_id {
+            if let Some(existing) = self.repo.get_entry_by_id(entry_id).await? {
+                let input = EquivalenceCheckInput {
+                    candidate_content: serde_json::json!({}),
+                    existing_entry_id: entry_id,
+                    existing_content: existing.value,
+                    time_delta_seconds: None,
+                    same_session: false,
+                    same_task: false,
+                    same_agent: true,
+                    content_similarity: dedup_result.similarity,
+                };
+                return Ok(Some(self.check_equivalence_via_llm(&input).await?));
+            }
+        }
+        Ok(None)
+    }
+
+    fn llm_result_to_decision(
+        &self,
+        result: Option<EquivalenceResult>,
+        dedup_result: &DedupResult,
+    ) -> anyhow::Result<GateDecision> {
+        match result {
+            Some(EquivalenceResult::Equivalent) | Some(EquivalenceResult::Mergeable) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Merge,
+                    write_mode: Some(WriteMode::Merge {
+                        target_id: dedup_result.similar_entry_id.unwrap(),
+                        strategy: MergeStrategy::Append,
+                    }),
+                    reason: "LLM confirmed mergeable".to_string(),
+                    target_entry_id: None,
+                    priority: None,
+                })
+            }
+            Some(EquivalenceResult::Conflict) => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Review,
+                    priority: Some(ReviewPriority::High),
+                    reason: "LLM detected conflict".to_string(),
+                    target_entry_id: None,
+                    write_mode: None,
+                })
+            }
+            _ => {
+                Ok(GateDecision {
+                    decision: GateDecisionType::Review,
+                    priority: Some(ReviewPriority::Medium),
+                    reason: "Ambiguous dedup result - LLM fallback inconclusive".to_string(),
+                    target_entry_id: None,
+                    write_mode: None,
+                })
+            }
+        }
+    }
+
     pub async fn check_equivalence(
         &self,
         input: &EquivalenceCheckInput,
@@ -548,28 +702,17 @@ impl MemoryGatingService {
         candidate: &MemoryWriteCandidate,
     ) -> anyhow::Result<GateDecision> {
         let content: MemoryContent = serde_json::from_value(candidate.content.clone())
-            .unwrap_or_else(|_| MemoryContent {
-                category: MemoryCategory::TaskOrDomainMemory,
-                key: "unknown".to_string(),
-                value: candidate.content.clone(),
-            });
+            .context("Failed to parse memory content")?;
 
         let quality = self.assess_quality(&content).await;
         let risk = self.evaluate_risk(&content).await;
 
-        let embedding = if let Some(emb_gen) = &self.embedding {
-            let text = format!(
-                "{}: {} - {}",
-                format!("{:?}", content.category),
-                content.key,
-                content.value
-            );
-            emb_gen.generate(&text).await.ok()
-        } else {
-            None
+        let embedding = match &self.embedding {
+            Some(emb) => Some(emb.generate(&Self::content_to_text(&content)).await?),
+            None => None,
         };
 
-        let dedup = if let Some(ref emb) = embedding {
+        let dedup_result = if let Some(ref emb) = embedding {
             self.check_dedup(emb, &content.category, &content).await?
         } else {
             DedupResult {
@@ -580,10 +723,39 @@ impl MemoryGatingService {
             }
         };
 
-        let decision = self
-            .make_decision(candidate, &quality, &risk, &dedup, embedding.as_deref())
-            .await?;
+        let equivalence_result = if embedding.is_some() {
+            self.check_equivalence_for_candidate(&dedup_result, &content.category, &content).await?
+        } else {
+            None
+        };
 
+        let conflict_result = if let Some(EquivalenceResult::Conflict) = &equivalence_result {
+            Some(self.detect_conflict(&content, &dedup_result).await?)
+        } else {
+            None
+        };
+
+        let decision = if conflict_result.as_ref().map(|c| c.has_conflict).unwrap_or(false) {
+            Self::make_conflict_decision(conflict_result.unwrap())
+        } else if embedding.is_some() {
+            self.resolve_with_rules(&dedup_result, equivalence_result.as_ref()).await?
+        } else {
+            self.make_decision(candidate, &quality, &risk, &dedup_result, embedding.as_deref()).await?
+        };
+
+        self.log_decision(candidate, &quality, &risk, &dedup_result, &decision).await?;
+
+        Ok(decision)
+    }
+
+    async fn log_decision(
+        &self,
+        candidate: &MemoryWriteCandidate,
+        quality: &QualityScore,
+        risk: &RiskAssessment,
+        dedup: &DedupResult,
+        decision: &GateDecision,
+    ) -> anyhow::Result<()> {
         let factors = DecisionFactors {
             quality_score: quality.overall,
             confidence: 0.85,
@@ -611,7 +783,7 @@ impl MemoryGatingService {
             )
             .await?;
 
-        Ok(decision)
+        Ok(())
     }
 
     pub fn gating_config(&self) -> &GatingConfig {
