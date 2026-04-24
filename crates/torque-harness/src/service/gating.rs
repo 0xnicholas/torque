@@ -301,7 +301,7 @@ impl MemoryGatingService {
         &self,
         input: &EquivalenceCheckInput,
     ) -> anyhow::Result<EquivalenceResult> {
-        let Some(_embedding) = &self.embedding else {
+        let Some(llm) = &self.llm else {
             return Ok(EquivalenceResult::Distinct);
         };
 
@@ -318,15 +318,12 @@ impl MemoryGatingService {
         let base_url = config::extraction_api_base();
         let model = config::extraction_model();
 
-        let candidate_text = input.candidate_content.to_string();
-        let existing_text = input.existing_content.to_string();
-
         let prompt = format!(
             "Compare these two memory entries and determine if they are semantically equivalent, mergeable, conflicting, or distinct.\n\n\
             Entry 1: {}\n\n\
             Entry 2: {}\n\n\
             Respond with ONLY one word: Equivalent, Mergeable, Conflict, or Distinct",
-            candidate_text, existing_text
+            input.candidate_content, input.existing_content
         );
 
         let body = serde_json::json!({
@@ -340,47 +337,73 @@ impl MemoryGatingService {
         });
 
         let url = format!("{}/chat/completions", base_url);
-        let response = http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await?;
 
-        let status = response.status();
-        if !status.is_success() {
-            return Ok(EquivalenceResult::Distinct);
+        // Retry logic
+        let max_retries = 3;
+        let mut last_error = None;
+
+        for attempt in 0..max_retries {
+            match http_client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    let status = response.status();
+                    if !status.is_success() {
+                        last_error = Some(format!("HTTP {}", status));
+                        continue;
+                    }
+
+                    #[derive(serde::Deserialize)]
+                    struct ChatResponse {
+                        choices: Vec<Choice>,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct Choice {
+                        message: MessageContent,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct MessageContent {
+                        content: String,
+                    }
+
+                    match response.json::<ChatResponse>().await {
+                        Ok(chat_response) => {
+                            let content = chat_response
+                                .choices
+                                .first()
+                                .map(|c| c.message.content.trim().to_lowercase())
+                                .unwrap_or_default();
+
+                            let result = match content.as_str() {
+                                c if c.contains("equivalent") => EquivalenceResult::Equivalent,
+                                c if c.contains("conflict") => EquivalenceResult::Conflict,
+                                c if c.contains("mergeable") => EquivalenceResult::Mergeable,
+                                _ => EquivalenceResult::Distinct,
+                            };
+
+                            return Ok(result);
+                        }
+                        Err(e) => {
+                            last_error = Some(e.to_string());
+                            continue;
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(e.to_string());
+                    continue;
+                }
+            }
         }
 
-        #[derive(serde::Deserialize)]
-        struct ChatResponse {
-            choices: Vec<Choice>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Choice {
-            message: MessageContent,
-        }
-        #[derive(serde::Deserialize)]
-        struct MessageContent {
-            content: String,
-        }
-
-        let chat_response: ChatResponse = response.json().await?;
-        let content = chat_response
-            .choices
-            .first()
-            .map(|c| c.message.content.trim().to_lowercase())
-            .unwrap_or_default();
-
-        let result = match content.as_str() {
-            c if c.contains("equivalent") => EquivalenceResult::Equivalent,
-            c if c.contains("conflict") => EquivalenceResult::Conflict,
-            c if c.contains("mergeable") => EquivalenceResult::Mergeable,
-            _ => EquivalenceResult::Distinct,
-        };
-
-        Ok(result)
+        // All retries failed - fallback to Distinct with warning
+        tracing::warn!("LLM equivalence check failed after {} retries: {:?}", max_retries, last_error);
+        Ok(EquivalenceResult::Distinct)
     }
 
     pub async fn make_decision(
