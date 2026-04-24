@@ -332,6 +332,31 @@
 
 ---
 
+## P3: Advanced Features (COMPLETED)
+
+### Proper Memory Compaction with Summarization
+- `CompactionStrategy` enum: NoOp, Truncate, Summarize, Consolidate
+- `CompactionRecommendation` with strategy selection rationale
+- `superseded_by` field on `MemoryEntry` for tracking replacements
+- Memory compaction job uses recommendations for strategy selection
+
+### Context Anchors in Checkpoint
+- `ContextAnchor` struct: anchor_type, reference_id, captured_at
+- `ContextAnchorType` enum (5 variants): ExternalContextRef, Artifact, MemoryEntry, SharedState, EventAnchor
+- Captured during checkpoint creation via `MemoryService::capture_context_anchors()`
+- Stored in `v1_checkpoints.context_anchors` JSONB column
+
+### Team-Level Recovery Foundation
+- `TeamRecoveryDisposition` enum: Recoverable, RequirableSupervisor, NonRecoverable
+- `assess_team_recovery()` - evaluates team-level recovery options
+- `recover_team_task()` - coordinates team task recovery with child instances
+- `recover_with_children()` - cascading recovery across team hierarchy
+
+**Implementation:** `crates/torque-harness/src/models/v1/checkpoint.rs`, `service/memory.rs`, `service/recovery.rs`
+**Tests:** `checkpoint_recovery_tests` (8 tests), `jobs_memory_compaction_tests` (1)
+
+---
+
 ## Current Test Suite (141 tests passing)
 
 | Test File | Count | Status |
@@ -371,13 +396,10 @@
 
 ## Known Limitations (Post-MVP)
 
-1. **Conversation context** - Each run starts with empty message history; context across runs is future work
-2. **Full message history replay** - MVP restarts execution from checkpoint; replay is future work
-3. **Context anchors and shared-state anchors** - Not yet captured/restored in checkpoint
-4. **Team-level recovery** - Not yet implemented
-5. **Operator escalation endpoints** - For high-severity reconciliation issues
-6. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
-7. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
+1. **Full message history replay** - MVP restarts execution from checkpoint; replay is future work
+2. **Operator escalation endpoints** - For high-severity reconciliation issues
+3. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
+4. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
 
 ---
 
@@ -425,13 +447,8 @@ a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 
 ## Next Steps
 
-### P3: Advanced Features
-- Analytics, Provenance UI, Compaction/Summarization
-- Context anchors and shared-state anchors in checkpoint
-- Team-level recovery
-- Full message history replay
-
 ### Future
+- Full message history replay
 - Operator escalation endpoints
 - Advanced tool governance
 - True async execution with webhooks
