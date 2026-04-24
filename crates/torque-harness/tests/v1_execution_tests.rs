@@ -108,6 +108,8 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         execution_mode: "sync".into(),
         expected_outputs: vec![],
         idempotency_key: None,
+        webhook_url: None,
+        async_execution: false,
     };
 
     let result = run_service
@@ -227,6 +229,8 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         execution_mode: "sync".into(),
         expected_outputs: vec![],
         idempotency_key: None,
+        webhook_url: None,
+        async_execution: false,
     };
 
     // Use a random UUID that doesn't exist
@@ -323,6 +327,8 @@ async fn test_run_task_status_transitions() {
         execution_mode: "sync".into(),
         expected_outputs: vec![],
         idempotency_key: None,
+        webhook_url: None,
+        async_execution: false,
     };
 
     run_service
