@@ -1,7 +1,7 @@
 use crate::infra::llm::LlmClient;
 use crate::models::v1::partial_quality::PartialQuality;
 use crate::models::v1::team::{
-    MemberSelector, ProcessingPath, SelectorType, TaskComplexity, TeamMode, TeamTask,
+    MemberSelector, SelectorType, TeamMode, TeamTask,
     TeamTaskStatus, TriageResult,
 };
 use crate::repository::{DelegationRepository, TeamTaskRepository};

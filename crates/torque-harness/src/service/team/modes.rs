@@ -4,11 +4,51 @@ use crate::models::v1::team::{CandidateMember, TeamTask};
 use crate::repository::DelegationRepository;
 use crate::service::team::event_listener::EventListener;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration, Instant};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
+
+pub async fn wait_for_delegation_completion(
+    delegation_id: Uuid,
+    event_listener: Arc<dyn EventListener>,
+    timeout_duration: Duration,
+) -> DelegationWaitOutcome {
+    let deadline = Instant::now() + timeout_duration;
+    let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
+        return DelegationWaitOutcome::Timeout;
+    };
+
+    let mut stream = stream;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return DelegationWaitOutcome::Timeout;
+        }
+
+        match timeout(remaining, stream.next()).await {
+            Ok(Some(event)) => match event {
+                DelegationEvent::Completed { .. } => {
+                    return DelegationWaitOutcome::Completed;
+                }
+                DelegationEvent::Failed { error, .. } => {
+                    return DelegationWaitOutcome::Failed(error);
+                }
+                DelegationEvent::TimeoutPartial {
+                    partial_quality, ..
+                } => {
+                    return DelegationWaitOutcome::TimeoutPartial(partial_quality);
+                }
+                DelegationEvent::Rejected { reason, .. } => {
+                    return DelegationWaitOutcome::Rejected(reason.to_string());
+                }
+                _ => continue,
+            },
+            Ok(None) => continue,
+            Err(_) => return DelegationWaitOutcome::Timeout,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum TeamModeHandler {
@@ -84,8 +124,7 @@ impl RouteModeHandler {
             .update_delegation_status(team_instance_id, delegation.id, "PENDING")
             .await?;
 
-        let wait_result = self
-            .wait_for_delegation_completion(delegation.id, event_listener, timeout_duration)
+        let wait_result = wait_for_delegation_completion(delegation.id, event_listener, timeout_duration)
             .await;
 
         match wait_result {
@@ -219,48 +258,6 @@ impl RouteModeHandler {
             }
         }
     }
-
-    async fn wait_for_delegation_completion(
-        &self,
-        delegation_id: Uuid,
-        event_listener: Arc<dyn EventListener>,
-        timeout_duration: Duration,
-    ) -> DelegationWaitOutcome {
-        let deadline = Instant::now() + timeout_duration;
-        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
-            return DelegationWaitOutcome::Timeout;
-        };
-
-        let mut stream = stream;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return DelegationWaitOutcome::Timeout;
-            }
-
-            match timeout(remaining, stream.next()).await {
-                Ok(Some(event)) => match event {
-                    DelegationEvent::Completed { .. } => {
-                        return DelegationWaitOutcome::Completed;
-                    }
-                    DelegationEvent::Failed { error, .. } => {
-                        return DelegationWaitOutcome::Failed(error);
-                    }
-                    DelegationEvent::TimeoutPartial {
-                        partial_quality, ..
-                    } => {
-                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
-                    }
-                    DelegationEvent::Rejected { reason, .. } => {
-                        return DelegationWaitOutcome::Rejected(reason.to_string());
-                    }
-                    _ => continue,
-                },
-                Ok(None) => continue,
-                Err(_) => return DelegationWaitOutcome::Timeout,
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -344,8 +341,7 @@ impl BroadcastModeHandler {
         let mut accepted_count = 0;
         let mut failed_count = 0;
         for (i, delegation_id) in delegation_ids.iter().enumerate() {
-            let outcome = self
-                .wait_for_delegation_completion(*delegation_id, event_listener.clone(), timeout_duration)
+            let outcome = wait_for_delegation_completion(*delegation_id, event_listener.clone(), timeout_duration)
                 .await;
 
             match outcome {
@@ -444,48 +440,6 @@ impl BroadcastModeHandler {
             delegation_ids,
             published_artifact_ids: vec![],
         })
-    }
-
-    async fn wait_for_delegation_completion(
-        &self,
-        delegation_id: Uuid,
-        event_listener: Arc<dyn EventListener>,
-        timeout_duration: Duration,
-    ) -> DelegationWaitOutcome {
-        let deadline = Instant::now() + timeout_duration;
-        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
-            return DelegationWaitOutcome::Timeout;
-        };
-
-        let mut stream = stream;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return DelegationWaitOutcome::Timeout;
-            }
-
-            match timeout(remaining, stream.next()).await {
-                Ok(Some(event)) => match event {
-                    DelegationEvent::Completed { .. } => {
-                        return DelegationWaitOutcome::Completed;
-                    }
-                    DelegationEvent::Failed { error, .. } => {
-                        return DelegationWaitOutcome::Failed(error);
-                    }
-                    DelegationEvent::TimeoutPartial {
-                        partial_quality, ..
-                    } => {
-                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
-                    }
-                    DelegationEvent::Rejected { reason, .. } => {
-                        return DelegationWaitOutcome::Rejected(reason.to_string());
-                    }
-                    _ => continue,
-                },
-                Ok(None) => continue,
-                Err(_) => return DelegationWaitOutcome::Timeout,
-            }
-        }
     }
 }
 
@@ -589,8 +543,7 @@ impl CoordinateModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            let outcome = self
-                .wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
+            let outcome = wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
                 .await;
 
             match outcome {
@@ -658,48 +611,6 @@ impl CoordinateModeHandler {
             delegation_ids,
             published_artifact_ids: vec![],
         })
-    }
-
-    async fn wait_for_delegation_completion(
-        &self,
-        delegation_id: Uuid,
-        event_listener: Arc<dyn EventListener>,
-        timeout_duration: Duration,
-    ) -> DelegationWaitOutcome {
-        let deadline = Instant::now() + timeout_duration;
-        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
-            return DelegationWaitOutcome::Timeout;
-        };
-
-        let mut stream = stream;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return DelegationWaitOutcome::Timeout;
-            }
-
-            match timeout(remaining, stream.next()).await {
-                Ok(Some(event)) => match event {
-                    DelegationEvent::Completed { .. } => {
-                        return DelegationWaitOutcome::Completed;
-                    }
-                    DelegationEvent::Failed { error, .. } => {
-                        return DelegationWaitOutcome::Failed(error);
-                    }
-                    DelegationEvent::TimeoutPartial {
-                        partial_quality, ..
-                    } => {
-                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
-                    }
-                    DelegationEvent::Rejected { reason, .. } => {
-                        return DelegationWaitOutcome::Rejected(reason.to_string());
-                    }
-                    _ => continue,
-                },
-                Ok(None) => continue,
-                Err(_) => return DelegationWaitOutcome::Timeout,
-            }
-        }
     }
 }
 
@@ -812,8 +723,7 @@ impl TasksModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            let outcome = self
-                .wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
+            let outcome = wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
                 .await;
 
             match outcome {
@@ -881,48 +791,6 @@ impl TasksModeHandler {
             delegation_ids,
             published_artifact_ids: vec![],
         })
-    }
-
-    async fn wait_for_delegation_completion(
-        &self,
-        delegation_id: Uuid,
-        event_listener: Arc<dyn EventListener>,
-        timeout_duration: Duration,
-    ) -> DelegationWaitOutcome {
-        let deadline = Instant::now() + timeout_duration;
-        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
-            return DelegationWaitOutcome::Timeout;
-        };
-
-        let mut stream = stream;
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return DelegationWaitOutcome::Timeout;
-            }
-
-            match timeout(remaining, stream.next()).await {
-                Ok(Some(event)) => match event {
-                    DelegationEvent::Completed { .. } => {
-                        return DelegationWaitOutcome::Completed;
-                    }
-                    DelegationEvent::Failed { error, .. } => {
-                        return DelegationWaitOutcome::Failed(error);
-                    }
-                    DelegationEvent::TimeoutPartial {
-                        partial_quality, ..
-                    } => {
-                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
-                    }
-                    DelegationEvent::Rejected { reason, .. } => {
-                        return DelegationWaitOutcome::Rejected(reason.to_string());
-                    }
-                    _ => continue,
-                },
-                Ok(None) => continue,
-                Err(_) => return DelegationWaitOutcome::Timeout,
-            }
-        }
     }
 
     fn decompose_task(&self, goal: &str) -> Vec<String> {
