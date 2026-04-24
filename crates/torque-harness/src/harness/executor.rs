@@ -2,6 +2,8 @@ use crate::agent::stream::StreamEvent;
 use crate::harness::planner::{NodeStatus, Planner, SubTask};
 use crate::infra::llm::LlmClient;
 use crate::infra::tool_registry::ToolRegistry;
+use crate::policy::ToolGovernanceService;
+use crate::service::governed_tool::GovernedToolRegistry;
 use crate::service::reflexion::ReflexionService;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -40,10 +42,12 @@ impl PlanExecutor {
     pub fn new(
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolRegistry>,
+        tool_governance: Arc<ToolGovernanceService>,
         reflexion: Option<Arc<ReflexionService>>,
     ) -> Self {
+        let governed_registry = Arc::new(GovernedToolRegistry::new(tools, tool_governance));
         Self {
-            react: crate::harness::ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Registry(tools))),
+            react: crate::harness::ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Governed(governed_registry))),
             reflexion,
             max_concurrency: 3,
         }
@@ -252,11 +256,12 @@ impl PlanningExecutor {
     pub fn new(
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolRegistry>,
+        tool_governance: Arc<ToolGovernanceService>,
         reflexion: Option<Arc<ReflexionService>>,
     ) -> Self {
         Self {
             planner: Planner::new(llm.clone()),
-            executor: PlanExecutor::new(llm, tools, reflexion),
+            executor: PlanExecutor::new(llm, tools, tool_governance, reflexion),
         }
     }
 

@@ -38,6 +38,8 @@ pub struct ExecuteResponse {
     pub state: torque_kernel::ExecutionResult,
 }
 
+use crate::policy::ToolGovernanceService;
+
 pub struct RunService {
     agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
@@ -47,6 +49,7 @@ pub struct RunService {
     checkpointer: Arc<dyn checkpointer::Checkpointer>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
+    tool_governance: Arc<ToolGovernanceService>,
     policy_evaluator: PolicyEvaluator,
     candidate_generator: Arc<dyn CandidateGenerator>,
     gating: Arc<MemoryGatingService>,
@@ -64,6 +67,7 @@ impl RunService {
         checkpointer: Arc<dyn checkpointer::Checkpointer>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
+        tool_governance: Arc<ToolGovernanceService>,
         candidate_generator: Arc<dyn CandidateGenerator>,
         gating: Arc<MemoryGatingService>,
         memory_pipeline: Arc<MemoryPipelineService>,
@@ -78,6 +82,7 @@ impl RunService {
             checkpointer,
             llm,
             tools,
+            tool_governance,
             policy_evaluator: PolicyEvaluator::new(),
             candidate_generator,
             gating,
@@ -378,6 +383,7 @@ impl RunService {
         let mut planning_executor = crate::harness::PlanningExecutor::new(
             self.llm.clone(),
             self.tools.registry(),
+            self.tool_governance.clone(),
             self.reflexion.clone(),
         );
 

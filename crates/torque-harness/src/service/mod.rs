@@ -139,6 +139,17 @@ impl ServiceContainer {
         ));
         let team_event_emitter =
             std::sync::Arc::new(team::TeamEventEmitter::new(repos.team_event.clone()));
+
+        let tool_governance = std::sync::Arc::new(crate::policy::ToolGovernanceService::new(
+            crate::models::v1::tool_policy::ToolGovernanceConfig {
+                default_risk_level: crate::models::v1::tool_policy::ToolRiskLevel::Medium,
+                approval_required_above: crate::models::v1::tool_policy::ToolRiskLevel::High,
+                blocked_tools: vec![],
+                privileged_tools: vec![],
+                side_effect_tracking: false,
+            },
+        ));
+
         let team_supervisor = std::sync::Arc::new(
             TeamSupervisor::new(
                 repos.team_task.clone(),
@@ -146,6 +157,7 @@ impl ServiceContainer {
                 team_selector_resolver,
                 team_shared_state_manager,
                 team_event_emitter,
+                tool_governance.clone(),
             )
             .with_llm(llm.clone()),
         );
@@ -185,6 +197,7 @@ impl ServiceContainer {
             checkpointer.clone(),
             llm.clone(),
             tool.clone(),
+            tool_governance.clone(),
             candidate_generator.clone(),
             gating.clone(),
             memory_pipeline.clone(),
@@ -201,16 +214,6 @@ impl ServiceContainer {
             )
             .with_escalation_service(escalation_service.clone()),
         );
-
-        let tool_governance = std::sync::Arc::new(crate::policy::ToolGovernanceService::new(
-            crate::models::v1::tool_policy::ToolGovernanceConfig {
-                default_risk_level: crate::models::v1::tool_policy::ToolRiskLevel::Medium,
-                approval_required_above: crate::models::v1::tool_policy::ToolRiskLevel::High,
-                blocked_tools: vec![],
-                privileged_tools: vec![],
-                side_effect_tracking: false,
-            },
-        ));
 
         Self {
             session,

@@ -1,6 +1,8 @@
 use crate::harness::{ReActHarness, ReActHarnessError};
 use crate::infra::llm::LlmClient;
 use crate::models::v1::team::TriageResult;
+use crate::policy::ToolGovernanceService;
+use crate::service::governed_tool::GovernedToolRegistry;
 use crate::tools::ToolRegistry;
 use crate::service::team::supervisor_tools::{create_supervisor_tools, SupervisorToolsConfig};
 use std::sync::Arc;
@@ -17,6 +19,7 @@ impl SupervisorAgent {
         llm: Arc<dyn LlmClient>,
         extra_tools: Vec<crate::tools::ToolArc>,
         supervisor_tools_config: Option<SupervisorToolsConfig>,
+        tool_governance: Arc<ToolGovernanceService>,
     ) -> Self {
         let registry = Arc::new(ToolRegistry::new());
 
@@ -31,7 +34,8 @@ impl SupervisorAgent {
             registry.register(tool).await;
         }
 
-        let react = ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Registry(registry.clone())));
+        let governed_registry = Arc::new(GovernedToolRegistry::new(registry.clone(), tool_governance));
+        let react = ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Governed(governed_registry)));
 
         Self {
             react,

@@ -4,6 +4,7 @@ use crate::models::v1::team::{
     MemberSelector, SelectorType, TeamMode, TeamMember, TeamTask,
     TeamTaskStatus, TriageResult, TaskComplexity, ProcessingPath,
 };
+use crate::policy::ToolGovernanceService;
 use crate::repository::{DelegationRepository, TeamTaskRepository};
 use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
@@ -73,6 +74,7 @@ pub struct TeamSupervisor {
     event_listener: Option<Arc<dyn EventListener>>,
     delegation_timeout: Duration,
     current_team_instance_id: TokioMutex<Option<Uuid>>,
+    tool_governance: Arc<ToolGovernanceService>,
 }
 
 impl TeamSupervisor {
@@ -82,6 +84,7 @@ impl TeamSupervisor {
         selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        tool_governance: Arc<ToolGovernanceService>,
     ) -> Self {
         Self {
             task_repo,
@@ -94,6 +97,7 @@ impl TeamSupervisor {
             event_listener: None,
             delegation_timeout: Duration::from_secs(300),
             current_team_instance_id: TokioMutex::new(None),
+            tool_governance,
         }
     }
 
@@ -141,7 +145,7 @@ impl TeamSupervisor {
                 team_task_repo: self.task_repo.clone(),
                 team_instance_id,
             };
-            let agent = SupervisorAgent::new(llm.clone(), vec![], Some(config)).await;
+            let agent = SupervisorAgent::new(llm.clone(), vec![], Some(config), self.tool_governance.clone()).await;
             let mut guard = self.supervisor_agent.lock().await;
             let mut current_id = self.current_team_instance_id.lock().await;
             *guard = Some(agent);
