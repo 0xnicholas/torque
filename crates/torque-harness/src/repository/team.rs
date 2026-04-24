@@ -461,6 +461,11 @@ pub trait SharedTaskStateRepository: Send + Sync {
         team_instance_id: Uuid,
         decision: Decision,
     ) -> anyhow::Result<bool>;
+    async fn update_with_lock(
+        &self,
+        team_instance_id: Uuid,
+        updates: Vec<SharedTaskStateUpdate>,
+    ) -> anyhow::Result<SharedTaskState>;
 }
 
 pub struct PostgresSharedTaskStateRepository {
@@ -588,6 +593,81 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
         .execute(self.db.pool())
         .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn update_with_lock(
+        &self,
+        team_instance_id: Uuid,
+        updates: Vec<SharedTaskStateUpdate>,
+    ) -> anyhow::Result<SharedTaskState> {
+        let mut tx = self.db.pool().begin().await?;
+
+        let state = sqlx::query_as::<_, SharedTaskStateRow>(
+            "SELECT * FROM v1_team_shared_state WHERE team_instance_id = $1 FOR UPDATE",
+        )
+        .bind(team_instance_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let mut shared_state: SharedTaskState = state.into();
+        for update in updates {
+            update.apply(&mut shared_state);
+        }
+
+        let accepted = serde_json::to_value(&shared_state.accepted_artifact_refs)?;
+        let published = serde_json::to_value(&shared_state.published_facts)?;
+        let delegation = serde_json::to_value(&shared_state.delegation_status)?;
+        let blockers = serde_json::to_value(&shared_state.open_blockers)?;
+        let decisions = serde_json::to_value(&shared_state.decisions)?;
+
+        sqlx::query(
+            "UPDATE v1_team_shared_state SET accepted_artifact_refs = $1, published_facts = $2, delegation_status = $3, open_blockers = $4, decisions = $5, updated_at = NOW() WHERE team_instance_id = $6"
+        )
+        .bind(accepted)
+        .bind(published)
+        .bind(delegation)
+        .bind(blockers)
+        .bind(decisions)
+        .bind(team_instance_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(shared_state)
+    }
+}
+
+pub enum SharedTaskStateUpdate {
+    AddArtifact(ArtifactRef),
+    AddFact(PublishedFact),
+    UpdateDelegationStatus(DelegationStatusEntry),
+    AddBlocker(Blocker),
+    ResolveBlocker(Uuid),
+    AddDecision(Decision),
+}
+
+impl SharedTaskStateUpdate {
+    fn apply(self, state: &mut SharedTaskState) {
+        match self {
+            SharedTaskStateUpdate::AddArtifact(artifact) => {
+                state.accepted_artifact_refs.push(artifact);
+            }
+            SharedTaskStateUpdate::AddFact(fact) => {
+                state.published_facts.push(fact);
+            }
+            SharedTaskStateUpdate::UpdateDelegationStatus(entry) => {
+                state.delegation_status.push(entry);
+            }
+            SharedTaskStateUpdate::AddBlocker(blocker) => {
+                state.open_blockers.push(blocker);
+            }
+            SharedTaskStateUpdate::ResolveBlocker(blocker_id) => {
+                state.open_blockers.retain(|b| b.blocker_id != blocker_id);
+            }
+            SharedTaskStateUpdate::AddDecision(decision) => {
+                state.decisions.push(decision);
+            }
+        }
     }
 }
 

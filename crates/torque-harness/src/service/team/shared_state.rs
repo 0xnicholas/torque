@@ -1,7 +1,7 @@
 use crate::models::v1::team::{
     ArtifactRef, Blocker, Decision, PublishScope, PublishedFact, SharedTaskState,
 };
-use crate::repository::SharedTaskStateRepository;
+use crate::repository::team::{SharedTaskStateRepository, SharedTaskStateUpdate};
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -108,5 +108,16 @@ impl SharedTaskStateManager {
             decided_at: Utc::now(),
         };
         self.repo.add_decision(team_instance_id, decision).await
+    }
+
+    pub async fn atomic_update<F>(&self, team_instance_id: Uuid, f: F) -> anyhow::Result<SharedTaskState>
+    where
+        F: FnOnce(&mut Vec<SharedTaskStateUpdate>) + Send + 'static,
+    {
+        let mut updates = Vec::new();
+        f(&mut updates);
+        self.repo
+            .update_with_lock(team_instance_id, updates)
+            .await
     }
 }
