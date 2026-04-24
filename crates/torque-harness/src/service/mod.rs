@@ -11,6 +11,7 @@ pub mod event_replay;
 pub mod gating;
 pub mod memory;
 pub mod memory_pipeline;
+pub mod merge_strategy;
 pub mod notification;
 pub mod recovery;
 pub mod reflexion;
