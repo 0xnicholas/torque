@@ -226,6 +226,21 @@ impl MemoryService {
         self.repo_v1.list_candidates(status, limit, offset).await
     }
 
+    pub async fn v1_count_candidates_by_status(
+        &self,
+        agent_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Option<Vec<(String, i64)>>> {
+        let counts = self
+            .repo_v1
+            .count_candidates_by_status(agent_instance_id)
+            .await?;
+        if counts.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(counts))
+        }
+    }
+
     pub async fn v1_get_candidate(&self, id: Uuid) -> anyhow::Result<Option<MemoryWriteCandidate>> {
         self.repo_v1.get_candidate_by_id(id).await
     }

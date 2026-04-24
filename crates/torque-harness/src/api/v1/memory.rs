@@ -14,9 +14,25 @@ use axum::{
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use llm::OpenAiClient;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[derive(Serialize)]
+pub struct CandidateListResponse {
+    pub data: Vec<crate::models::v1::memory::MemoryWriteCandidate>,
+    pub pagination: Pagination,
+    pub stats: Option<CandidateStats>,
+}
+
+#[derive(Serialize)]
+pub struct CandidateStats {
+    pub total: i64,
+    pub pending: i64,
+    pub review_required: i64,
+    pub approved: i64,
+    pub rejected: i64,
+}
 
 pub async fn create_candidate(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
@@ -75,10 +91,7 @@ pub async fn create_candidate(
 pub async fn list_candidates(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
-) -> Result<
-    Json<ListResponse<crate::models::v1::memory::MemoryWriteCandidate>>,
-    (StatusCode, Json<ErrorBody>),
-> {
+) -> Result<Json<CandidateListResponse>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
     let offset = q
         .cursor
@@ -111,19 +124,64 @@ pub async fn list_candidates(
                 }),
             )
         })?;
+
+    let stats = services
+        .memory
+        .v1_count_candidates_by_status(None)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
+    let stats = stats.map(|counts| {
+        let mut total = 0i64;
+        let mut pending = 0i64;
+        let mut review_required = 0i64;
+        let mut approved = 0i64;
+        let mut rejected = 0i64;
+
+        for (status_str, count) in counts {
+            total += count;
+            match status_str.as_str() {
+                "pending" => pending = count,
+                "review_required" => review_required = count,
+                "approved" => approved = count,
+                "rejected" => rejected = count,
+                _ => {}
+            }
+        }
+
+        CandidateStats {
+            total,
+            pending,
+            review_required,
+            approved,
+            rejected,
+        }
+    });
+
     let has_more = rows.len() >= limit as usize;
     let next_cursor = if has_more {
         Some((offset + limit).to_string())
     } else {
         None
     };
-    Ok(Json(ListResponse {
+    Ok(Json(CandidateListResponse {
         data: rows,
         pagination: Pagination {
             next_cursor,
             prev_cursor: q.cursor,
             has_more,
         },
+        stats,
     }))
 }
 

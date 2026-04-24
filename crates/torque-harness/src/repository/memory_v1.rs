@@ -94,6 +94,11 @@ pub trait MemoryRepositoryV1: Send + Sync {
 
     async fn get_candidate_by_id(&self, id: Uuid) -> anyhow::Result<Option<MemoryWriteCandidate>>;
 
+    async fn count_candidates_by_status(
+        &self,
+        agent_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Vec<(String, i64)>>;
+
     async fn update_candidate_status(
         &self,
         id: Uuid,
@@ -525,6 +530,37 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             )
             .bind(limit)
             .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        };
+
+        Ok(rows)
+    }
+
+    async fn count_candidates_by_status(
+        &self,
+        agent_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Vec<(String, i64)>> {
+        let rows: Vec<(String, i64)> = if let Some(agent_id) = agent_instance_id {
+            sqlx::query_as(
+                r#"
+                SELECT status::text, COUNT(*)
+                FROM v1_memory_write_candidates
+                WHERE agent_instance_id = $1
+                GROUP BY status
+                "#,
+            )
+            .bind(agent_id)
+            .fetch_all(self.db.pool())
+            .await?
+        } else {
+            sqlx::query_as(
+                r#"
+                SELECT status::text, COUNT(*)
+                FROM v1_memory_write_candidates
+                GROUP BY status
+                "#,
+            )
             .fetch_all(self.db.pool())
             .await?
         };
