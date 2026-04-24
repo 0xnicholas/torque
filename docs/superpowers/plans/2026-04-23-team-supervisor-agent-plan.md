@@ -40,8 +40,8 @@
 | TeamEventEmitter | `events.rs` | ✅ Done | |
 | EventListener | `event_listener.rs` | ✅ Done | Used for delegation completion waiting |
 
-**Completed Tasks:** Tasks 1-7, 10, 16 (tools skeleton, individual tools, registry, SupervisorAgent wrapper, wire SupervisorAgent into container, wait_for_delegation_completion)
-**Pending Tasks:** Tasks 8, 12, 15 (integration, final verification, LLM triage without fallback)
+**Completed Tasks:** Tasks 1-7, 10, 12, 16 (tools skeleton, individual tools, registry, SupervisorAgent wrapper, wire SupervisorAgent into container, final verification, wait_for_delegation_completion)
+**Pending Tasks:** Tasks 8, 15 (integration structure in place, LLM triage without fallback)
 
 ---
 
