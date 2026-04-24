@@ -311,3 +311,56 @@ pub struct DecisionFactors {
     pub has_conflict: bool,
     pub consent_required: bool,
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("Invalid threshold for {category}.{field}: {value} (must be 0.0-1.0)")]
+    InvalidThreshold {
+        category: String,
+        field: String,
+        value: f64,
+    },
+
+    #[error("Invalid quality threshold: {0} (must be 0.0-1.0)")]
+    InvalidQualityThreshold(f64),
+
+    #[error("merge threshold must be <= duplicate threshold for {category}")]
+    MergeGreaterThanDuplicate { category: String },
+}
+
+pub struct GatingConfigValidator;
+
+impl GatingConfigValidator {
+    pub fn validate(config: &GatingConfig) -> Result<(), ConfigError> {
+        for (category, thresholds) in &config.dedup_thresholds {
+            if thresholds.duplicate > 1.0 || thresholds.duplicate < 0.0 {
+                return Err(ConfigError::InvalidThreshold {
+                    category: format!("{:?}", category),
+                    field: "duplicate".to_string(),
+                    value: thresholds.duplicate,
+                });
+            }
+
+            if thresholds.merge > thresholds.duplicate {
+                return Err(ConfigError::MergeGreaterThanDuplicate {
+                    category: format!("{:?}", category),
+                });
+            }
+
+            if thresholds.merge < 0.0 || thresholds.merge > 1.0 {
+                return Err(ConfigError::InvalidThreshold {
+                    category: format!("{:?}", category),
+                    field: "merge".to_string(),
+                    value: thresholds.merge,
+                });
+            }
+        }
+
+        if config.auto_approve_quality_threshold > 1.0
+            || config.auto_approve_quality_threshold < 0.0 {
+            return Err(ConfigError::InvalidQualityThreshold(config.auto_approve_quality_threshold));
+        }
+
+        Ok(())
+    }
+}
