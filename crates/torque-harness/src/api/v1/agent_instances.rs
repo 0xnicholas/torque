@@ -13,9 +13,16 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use checkpointer::r#trait::Message;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[derive(serde::Serialize)]
+pub struct ResumeResponse {
+    pub instance: AgentInstance,
+    pub messages: Vec<Message>,
+}
 
 pub async fn create(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
@@ -106,8 +113,8 @@ pub async fn cancel(
 pub async fn resume(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
-) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
-    let (instance, _messages) = services.recovery.resume_instance(id).await.map_err(|e| {
+) -> Result<Json<ResumeResponse>, (StatusCode, Json<ErrorBody>)> {
+    let (instance, messages) = services.recovery.resume_instance(id).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
@@ -118,7 +125,7 @@ pub async fn resume(
             }),
         )
     })?;
-    Ok(Json(instance))
+    Ok(Json(ResumeResponse { instance, messages }))
 }
 
 pub async fn time_travel(
