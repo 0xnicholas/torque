@@ -52,6 +52,8 @@ pub trait MemoryRepositoryV1: Send + Sync {
 
     async fn get_entry_by_id(&self, id: Uuid) -> anyhow::Result<Option<MemoryEntry>>;
 
+    async fn get_entries_by_ids(&self, ids: Vec<Uuid>) -> anyhow::Result<Vec<MemoryEntry>>;
+
     async fn update_entry_access(&self, id: Uuid) -> anyhow::Result<Option<MemoryEntry>>;
 
     // Semantic Search
@@ -187,10 +189,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             r#"
             INSERT INTO v1_memory_entries (
                 id, agent_instance_id, team_instance_id, category, key, value,
-                source_candidate_id, embedding, embedding_model,
+                source_candidate_id, superseded_by, embedding, embedding_model,
                 access_count, last_accessed_at, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10, $11, $12, $13)
             RETURNING *
             "#,
         )
@@ -201,6 +203,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         .bind(&entry.key)
         .bind(&entry.value)
         .bind(entry.source_candidate_id)
+        .bind(entry.superseded_by)
         .bind(&entry.embedding_model)
         .bind(entry.access_count)
         .bind(entry.last_accessed_at)
@@ -230,10 +233,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             r#"
             INSERT INTO v1_memory_entries (
                 id, agent_instance_id, team_instance_id, category, key, value,
-                source_candidate_id, embedding, embedding_model,
+                source_candidate_id, superseded_by, embedding, embedding_model,
                 access_count, last_accessed_at, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, NULL, $10, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, 0, NULL, $10, $10)
             RETURNING *
             "#,
         )
@@ -279,6 +282,17 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         Ok(row.map(Into::into))
     }
 
+    async fn get_entries_by_ids(&self, ids: Vec<Uuid>) -> anyhow::Result<Vec<MemoryEntry>> {
+        let rows = sqlx::query_as::<_, MemoryEntryRow>(
+            r#"SELECT * FROM v1_memory_entries WHERE id = ANY($1)"#,
+        )
+        .bind(&ids)
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
     async fn update_entry_access(&self, id: Uuid) -> anyhow::Result<Option<MemoryEntry>> {
         let row = sqlx::query_as::<_, MemoryEntryRow>(
             r#"
@@ -310,7 +324,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 r#"
                 SELECT
                     id, agent_instance_id, team_instance_id, category, key, value,
-                    source_candidate_id, embedding, embedding_model,
+                    source_candidate_id, superseded_by, embedding, embedding_model,
                     access_count, last_accessed_at, created_at, updated_at,
                     1 - (embedding <=> $1) as similarity
                 FROM v1_memory_entries
@@ -329,7 +343,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 r#"
                 SELECT
                     id, agent_instance_id, team_instance_id, category, key, value,
-                    source_candidate_id, embedding, embedding_model,
+                    source_candidate_id, superseded_by, embedding, embedding_model,
                     access_count, last_accessed_at, created_at, updated_at,
                     1 - (embedding <=> $1) as similarity
                 FROM v1_memory_entries
@@ -372,7 +386,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 r#"
                 SELECT
                     id, agent_instance_id, team_instance_id, category, key, value,
-                    source_candidate_id, embedding, embedding_model,
+                    source_candidate_id, superseded_by, embedding, embedding_model,
                     access_count, last_accessed_at, created_at, updated_at,
                     (
                         $4 * (1 - (embedding <=> $1)) +
@@ -401,7 +415,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 r#"
                 SELECT
                     id, agent_instance_id, team_instance_id, category, key, value,
-                    source_candidate_id, embedding, embedding_model,
+                    source_candidate_id, superseded_by, embedding, embedding_model,
                     access_count, last_accessed_at, created_at, updated_at,
                     (
                         $3 * (1 - (embedding <=> $1)) +

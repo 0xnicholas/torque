@@ -129,6 +129,7 @@ pub fn memory_to_embedding_text(content: &crate::models::v1::memory::MemoryConte
         crate::models::v1::memory::MemoryCategory::TaskOrDomainMemory => "task domain",
         crate::models::v1::memory::MemoryCategory::EpisodicMemory => "episodic",
         crate::models::v1::memory::MemoryCategory::ExternalContextMemory => "external context",
+        crate::models::v1::memory::MemoryCategory::Session => "session",
     };
     let value_str = match &content.value {
         serde_json::Value::String(s) => s.clone(),

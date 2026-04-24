@@ -236,6 +236,11 @@ impl DedupThresholds {
                 merge: 0.80,
                 minimum_content_length: 5,
             },
+            MemoryCategory::Session => DedupThresholds {
+                duplicate: 0.94,
+                merge: 0.85,
+                minimum_content_length: 30,
+            },
         }
     }
 

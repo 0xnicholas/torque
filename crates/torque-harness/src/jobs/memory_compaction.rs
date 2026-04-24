@@ -1,25 +1,24 @@
-use crate::config;
-use crate::models::v1::gating::CandidateGenerationConfig;
+use crate::models::v1::memory::{CompactionRecommendation, CompactionStrategy, MemoryCategory, MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus};
 use crate::repository::MemoryRepositoryV1;
-use crate::service::candidate_generator::CandidateGenerator;
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MemoryCompactionJob {
     memory_repo: Arc<dyn MemoryRepositoryV1>,
-    candidate_generator: Arc<dyn CandidateGenerator>,
     batch_size: i64,
+    max_age_days: i64,
 }
 
 impl MemoryCompactionJob {
     pub fn new(
         memory_repo: Arc<dyn MemoryRepositoryV1>,
-        candidate_generator: Arc<dyn CandidateGenerator>,
     ) -> Self {
         Self {
             memory_repo,
-            candidate_generator,
             batch_size: 10,
+            max_age_days: 30,
         }
     }
 
@@ -28,60 +27,146 @@ impl MemoryCompactionJob {
         self
     }
 
-    pub async fn run(&self) -> anyhow::Result<CompactionResult> {
-        let recent_entries = self.memory_repo.list_entries(self.batch_size, 0).await?;
+    pub fn with_max_age_days(mut self, days: i64) -> Self {
+        self.max_age_days = days;
+        self
+    }
 
-        let entries_count = recent_entries.len();
+    pub async fn run(&self) -> anyhow::Result<CompactionResult> {
+        let cutoff_date = Utc::now() - chrono::Duration::days(self.max_age_days);
+        let entries = self.get_entries_by_age_and_category(cutoff_date).await?;
+        let grouped = self.group_entries(entries);
+
+        let mut recommendations = Vec::new();
+        for (category, group_entries) in grouped {
+            let recommendation = self.evaluate_group_for_compaction(&category, group_entries)?;
+            recommendations.push(recommendation);
+        }
+
         let mut candidates_created = 0;
+        let mut entries_processed = 0;
         let mut errors = 0;
 
-        for entry in recent_entries {
-            let summary_prompt = format!(
-                "Analyze this memory entry and determine if it should be compacted, updated, or kept as-is.\n\nEntry Category: {:?}\nKey: {}\nValue: {}",
-                entry.category, entry.key, entry.value
-            );
-
-            let exec_summary = crate::models::v1::gating::ExecutionSummary {
-                task_id: Uuid::nil(),
-                agent_instance_id: entry.agent_instance_id.unwrap_or(Uuid::nil()),
-                goal: format!("Compaction review for memory entry {}", entry.id),
-                output_summary: summary_prompt,
-                tool_calls: vec![],
-                duration_ms: None,
-            };
-
-            let candidate_config = config::candidate_generation_config();
-
-            match self
-                .candidate_generator
-                .generate_candidates(&exec_summary, &candidate_config)
-                .await
-            {
-                Ok(candidates) => {
-                    for candidate in candidates {
-                        if self.memory_repo.create_candidate(&candidate).await.is_ok() {
-                            candidates_created += 1;
-                        } else {
-                            errors += 1;
-                        }
-                    }
-                }
+        for rec in recommendations {
+            entries_processed += 1;
+            match self.create_compaction_candidate(&rec).await {
+                Ok(_) => candidates_created += 1,
                 Err(e) => {
-                    tracing::warn!(
-                        "Failed to generate compaction candidate for entry {}: {}",
-                        entry.id,
-                        e
-                    );
+                    tracing::warn!("Failed to create compaction candidate: {}", e);
                     errors += 1;
                 }
             }
         }
 
         Ok(CompactionResult {
-            entries_processed: entries_count,
+            entries_processed,
             candidates_created,
             errors,
         })
+    }
+
+    async fn get_entries_by_age_and_category(
+        &self,
+        cutoff_date: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<MemoryEntry>> {
+        let all_entries = self.memory_repo.list_entries(1000, 0).await?;
+        Ok(all_entries
+            .into_iter()
+            .filter(|e| e.created_at < cutoff_date)
+            .collect())
+    }
+
+    fn group_entries(&self, entries: Vec<MemoryEntry>) -> HashMap<MemoryCategory, Vec<MemoryEntry>> {
+        let mut groups: HashMap<MemoryCategory, Vec<MemoryEntry>> = HashMap::new();
+        for entry in entries {
+            groups.entry(entry.category.clone()).or_default().push(entry);
+        }
+        groups
+    }
+
+    fn evaluate_group_for_compaction(
+        &self,
+        category: &MemoryCategory,
+        entries: Vec<MemoryEntry>,
+    ) -> anyhow::Result<CompactionRecommendation> {
+        let total_entries = entries.len();
+        let oldest = entries.iter().min_by_key(|e| e.created_at);
+        let newest = entries.iter().max_by_key(|e| e.created_at);
+
+        let strategy = if total_entries > 10 {
+            CompactionStrategy::Summarize
+        } else if total_entries > 3 {
+            CompactionStrategy::Merge
+        } else {
+            CompactionStrategy::Archive
+        };
+
+        let reason = format!(
+            "Category {:?} has {} entries (oldest: {:?}, newest: {:?})",
+            category,
+            total_entries,
+            oldest.map(|e| e.created_at),
+            newest.map(|e| e.created_at)
+        );
+
+        let entry_id = entries.first().map(|e| e.id).unwrap_or_else(Uuid::new_v4);
+        let supersedes = if entries.len() > 1 {
+            entries.get(1).map(|e| e.id)
+        } else {
+            None
+        };
+
+        Ok(CompactionRecommendation {
+            entry_id,
+            strategy,
+            reason,
+            supersedes,
+        })
+    }
+
+    async fn create_compaction_candidate(
+        &self,
+        recommendation: &CompactionRecommendation,
+    ) -> anyhow::Result<()> {
+        let entries = self
+            .memory_repo
+            .get_entries_by_ids(vec![recommendation.entry_id])
+            .await?;
+
+        let entry = entries.first().ok_or_else(|| anyhow::anyhow!("Entry not found"))?;
+
+        let strategy_str = match recommendation.strategy {
+            CompactionStrategy::Summarize => "summarize",
+            CompactionStrategy::Merge => "merge",
+            CompactionStrategy::Archive => "archive",
+            CompactionStrategy::Drop => "drop",
+        };
+
+        let candidate = MemoryWriteCandidate {
+            id: Uuid::new_v4(),
+            agent_instance_id: entry.agent_instance_id.unwrap_or(Uuid::nil()),
+            team_instance_id: entry.team_instance_id,
+            content: serde_json::json!({
+                "category": entry.category.to_env_suffix(),
+                "key": format!("compaction_{}", strategy_str),
+                "value": serde_json::json!({
+                    "action": strategy_str,
+                    "reason": recommendation.reason,
+                    "supersedes": recommendation.supersedes,
+                    "original_entry_id": recommendation.entry_id,
+                }),
+            }),
+            reasoning: Some(recommendation.reason.clone()),
+            status: MemoryWriteCandidateStatus::Pending,
+            memory_entry_id: None,
+            reviewed_by: None,
+            created_at: chrono::Utc::now(),
+            reviewed_at: None,
+            updated_at: chrono::Utc::now(),
+        };
+
+        self.memory_repo.create_candidate(&candidate).await?;
+        Ok(())
     }
 }
 

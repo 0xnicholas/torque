@@ -11,6 +11,7 @@ pub enum MemoryCategory {
     TaskOrDomainMemory,
     EpisodicMemory,
     ExternalContextMemory,
+    Session,
 }
 
 impl MemoryCategory {
@@ -21,6 +22,7 @@ impl MemoryCategory {
             MemoryCategory::TaskOrDomainMemory => "TASK_DOMAIN".to_string(),
             MemoryCategory::EpisodicMemory => "EPISODIC".to_string(),
             MemoryCategory::ExternalContextMemory => "EXTERNAL_CONTEXT".to_string(),
+            MemoryCategory::Session => "SESSION".to_string(),
         }
     }
 }
@@ -96,6 +98,7 @@ pub struct MemoryEntryRow {
     pub key: String,
     pub value: serde_json::Value,
     pub source_candidate_id: Option<Uuid>,
+    pub superseded_by: Option<Uuid>,
     pub embedding: Option<crate::vector_type::Vector>,
     pub embedding_model: Option<String>,
     pub access_count: i32,
@@ -115,6 +118,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for MemoryEntryRow {
             key: row.try_get("key")?,
             value: row.try_get("value")?,
             source_candidate_id: row.try_get("source_candidate_id")?,
+            superseded_by: row.try_get("superseded_by")?,
             embedding: row.try_get("embedding")?,
             embedding_model: row.try_get("embedding_model")?,
             access_count: row.try_get("access_count")?,
@@ -135,6 +139,7 @@ impl From<MemoryEntryRow> for MemoryEntry {
             key: row.key,
             value: row.value,
             source_candidate_id: row.source_candidate_id,
+            superseded_by: row.superseded_by,
             embedding_model: row.embedding_model,
             access_count: row.access_count,
             last_accessed_at: row.last_accessed_at,
@@ -154,6 +159,7 @@ pub struct MemoryEntry {
     pub key: String,
     pub value: serde_json::Value,
     pub source_candidate_id: Option<Uuid>,
+    pub superseded_by: Option<Uuid>,
     pub embedding_model: Option<String>,
     pub access_count: i32,
     pub last_accessed_at: Option<DateTime<Utc>>,
@@ -170,6 +176,7 @@ pub struct SemanticSearchRow {
     pub key: String,
     pub value: serde_json::Value,
     pub source_candidate_id: Option<Uuid>,
+    pub superseded_by: Option<Uuid>,
     pub embedding: Option<crate::vector_type::Vector>,
     pub embedding_model: Option<String>,
     pub access_count: i32,
@@ -190,6 +197,7 @@ impl From<SemanticSearchRow> for SemanticSearchResult {
                 key: row.key,
                 value: row.value,
                 source_candidate_id: row.source_candidate_id,
+                superseded_by: row.superseded_by,
                 embedding_model: row.embedding_model,
                 access_count: row.access_count,
                 last_accessed_at: row.last_accessed_at,
@@ -211,6 +219,7 @@ pub struct HybridSearchRow {
     pub key: String,
     pub value: serde_json::Value,
     pub source_candidate_id: Option<Uuid>,
+    pub superseded_by: Option<Uuid>,
     pub embedding: Option<crate::vector_type::Vector>,
     pub embedding_model: Option<String>,
     pub access_count: i32,
@@ -231,6 +240,7 @@ impl From<HybridSearchRow> for SemanticSearchResult {
                 key: row.key,
                 value: row.value,
                 source_candidate_id: row.source_candidate_id,
+                superseded_by: row.superseded_by,
                 embedding_model: row.embedding_model,
                 access_count: row.access_count,
                 last_accessed_at: row.last_accessed_at,
@@ -345,4 +355,20 @@ pub struct DecisionStats {
 pub struct RejectionReasonCount {
     pub reason: String,
     pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CompactionStrategy {
+    Summarize,
+    Merge,
+    Archive,
+    Drop,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactionRecommendation {
+    pub entry_id: Uuid,
+    pub strategy: CompactionStrategy,
+    pub reason: String,
+    pub supersedes: Option<Uuid>,
 }

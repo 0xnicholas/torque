@@ -12,6 +12,7 @@ fn create_test_existing() -> MemoryEntry {
         key: "test_key".to_string(),
         value: json!("original value"),
         source_candidate_id: None,
+        superseded_by: None,
         embedding_model: None,
         access_count: 0,
         last_accessed_at: None,
