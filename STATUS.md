@@ -2,357 +2,299 @@
 
 **Branch:** `main`
 **Date:** 2026-04-24
-**Plan:** Active development across multiple features
+**Compilation:** Clean (20 warnings from existing code)
+**Tests:** 101/101 passing
 
 ---
 
-## Phase 4: Checkpoint Restore + Recovery (COMPLETED)
+## Phase 0: Foundation (COMPLETED)
 
-### Task 1: Fix Snapshot Format
-- [x] Align checkpoint snapshot format between creation and reading
-- [x] Update RecoveryService to read custom_state directly
+### Architecture Optimization
+- Repository/Service/Kernel-bridge layers
+- `crates/torque-harness/src/repository/`
+- `crates/torque-harness/src/service/`
+- `crates/torque-harness/src/kernel_bridge/`
 
-### Task 2: Event replay handlers
-- [x] Implement ApprovalRequestedHandler
-- [x] Implement DelegationRequestedHandler
+### Platform API v1
+- All CRUD handlers for AgentDefinitions, AgentInstances, Tasks, Events, Artifacts, Approvals
+- Migrations for all v1 tables
+- `crates/torque-harness/src/api/v1/`
+- `crates/torque-harness/src/models/v1/`
 
-### Task 3: Kernel Assessment Integration
-- [x] RecoveryService uses kernel assess_recovery when available
-- [x] Fallback manual assessment when kernel not available
-
-### Task 4: Proper Reconciliation
-- [x] Detect child instance failures
-- [x] Take resolution actions (ReissueDelegation, AcceptCompletedOutput)
-- [x] Return ReconciliationResult with inconsistencies and resolutions
-
-### Task 5: Restore + Resume
-- [x] Restore endpoint returns detailed RecoveryResult
-- [x] Resume endpoint checks terminal state and triggers new execution
-- [x] Full message history replay is future work (MVP restarts execution)
-
-**Implementation:** `crates/torque-harness/src/service/recovery.rs`
-**Tests:** 8 checkpoint_recovery_tests passing
+### OpenAPI 3.1 Spec
+- Full API spec at `docs/openapi/torque-v1.yaml`
 
 ---
 
-## Phase 3: Team Supervisor Agent (COMPLETED)
+## Phase 1: Agent Runtime Kernel (COMPLETED)
 
-### Tasks 1-16: Complete
-- [x] 14 Supervisor Tools (mock implementations)
-- [x] SupervisorAgent with LLM integration
-- [x] Fully LLM-driven triage (no heuristic fallback)
-- [x] wait_for_delegation_completion in all mode handlers
-- [x] EventListener integration for delegation waiting
+### Task State Management
+- `TaskStatus` enum: Created, Queued, Running, WaitingTool, WaitingSubagent, WaitingApproval, Completed, Failed, Cancelled
+- `is_terminal()` and `can_transition_to()` methods
+- `TaskRepository` with state transition validation
 
-**Implementation:** `crates/torque-harness/src/service/team/supervisor*.rs`, `modes.rs`
-**Tests:** 26 supervisor-related tests passing
+### Run Service
+- `RunService` orchestrates full execution lifecycle
+- `KernelRuntimeHandle::execute_v1()` for chat execution
+- SSE streaming with real event forwarding
+
+### Kernel Bridge
+- `kernel_bridge/v1_mapping.rs` - Maps v1 types to kernel types
+- `kernel_bridge/runtime.rs` - Kernel runtime handle
+- `kernel_bridge/events.rs` - Event recording
+
+**Implementation:** `crates/torque-harness/src/service/run.rs`, `kernel_bridge/`
+**Tests:** `v1_execution_tests` (3 tests)
 
 ---
 
-## Phase 5: Capability Registry (COMPLETED)
+## Phase 2: Memory System P0 (COMPLETED)
 
-### Tasks 1-7: Complete
-- [x] CapabilityRef newtype with `as_str()` method
-- [x] ResolvedCandidate and CapabilityResolution types
-- [x] list_by_profile to BindingRepository
-- [x] get_by_name to ProfileRepository
-- [x] resolve_by_ref implementation
-- [x] POST /v1/capabilities/resolve endpoint
-- [x] Tests with proper isolation (UUID suffixes)
+### Memory Tables + pgvector
+- `v1_memory_entries` table with vector(1536) embedding support
+- `v1_memory_write_candidates` table with status enum
+- `session_memory` table (KV + TTL)
+- `memory_decision_log` table (audit trail)
+- HNSW indexes for semantic search
+
+### Embedding Pipeline
+- `EmbeddingGenerator` trait with OpenAI implementation
+- `memory_to_embedding_text()` helper
+- Integrated into `MemoryService::v1_create_entry()`
+
+### Semantic Retrieval
+- `semantic_search()` - vector similarity with pgvector `<=>`
+- `hybrid_search()` - RRF fusion of vector + keyword (ts_rank_cd)
+- `POST /v1/memory-entries/search` API
+
+### Session Memory
+- `SessionMemoryRepository` with TTL support
+- Internal service (no public API in P0)
+
+### Backfill APIs
+- `GET /v1/memory-entries/without-embedding`
+- `POST /v1/memory-entries/backfill`
+
+**Implementation:** `crates/torque-harness/src/service/memory.rs`, `repository/memory_v1.rs`, `vector_type.rs`
+**Tests:** `memory_*` tests (17 tests total)
+
+---
+
+## Phase 3: Team Execution (COMPLETED)
+
+### TeamMember Model & Repository
+- `v1_team_members` table migration
+- `TeamMemberRepository` with create/list/remove
+
+### Team Handlers
+- `POST /v1/team-instances/{id}/tasks` - Creates TeamTask, returns 202
+- `GET /v1/team-instances/{id}/tasks` - List with pagination
+- `GET /v1/team-instances/{id}/members` - List with pagination
+- `POST /v1/team-instances/{id}/publish` - Placeholder
+
+### Member Agent
+- `MemberAgent` for team member execution
+- `LocalMemberAgent` implementation
+
+**Implementation:** `crates/torque-harness/src/models/v1/team.rs`, `repository/team.rs`, `service/team/service.rs`, `service/team/member_agent.rs`
+**Tests:** `member_agent_tests` (3), `v1_team_execution_tests` (4)
+
+---
+
+## Phase 4: Team Supervisor Agent (COMPLETED)
+
+### Supervisor Tools (14 total)
+- delegate_task, add_blocker, resolve_blocker
+- accept_result, reject_result, complete_team_task
+- get_task_details, get_delegation_status, list_team_members
+- get_shared_state, update_shared_fact, publish_to_team
+- request_approval, fail_team_task
+
+### SupervisorAgent
+- LLM-driven triage (no heuristic fallback)
+- SupervisorTools registry
+- Mode handlers: Execute, Route, Await, React
+
+### EventListener
+- `wait_for_delegation_completion` helper
+- Event-driven delegation waiting
+- Async delegation flow support
+
+**Implementation:** `crates/torque-harness/src/service/team/supervisor*.rs`, `modes.rs`, `supervisor_tools.rs`
+**Tests:** `v1_team_supervisor_agent_tests` (6), `v1_team_supervisor_tools_tests` (16), `async_delegation_flow_tests` (6)
+**Total:** 28 supervisor-related tests
+
+---
+
+## Phase 5: Checkpoint & Recovery (COMPLETED)
+
+### Snapshot Format
+- Aligned checkpoint snapshot format between creation and reading
+- `RecoveryService` reads `custom_state` directly
+
+### Event Replay
+- `ApprovalRequestedHandler`
+- `DelegationRequestedHandler`
+- `EventReplayRegistry` with async trait-based handlers
+
+### Kernel Assessment Integration
+- `RecoveryService` uses kernel `assess_recovery` when available
+- Fallback manual assessment when kernel not available
+
+### Reconciliation
+- Detect child instance failures
+- Resolution actions: ReissueDelegation, AcceptCompletedOutput
+- `ReconciliationResult` with inconsistencies and resolutions
+
+### Restore + Resume
+- `POST /v1/checkpoints/{id}/restore` - Returns detailed RecoveryResult
+- `POST /v1/checkpoints/{id}/resume` - Checks terminal state, triggers execution
+
+**Implementation:** `crates/torque-harness/src/service/recovery.rs`, `repository/checkpoint.rs`, `service/event_replay.rs`
+**Tests:** `checkpoint_recovery_tests` (8 tests)
+
+---
+
+## Phase 6: Capability Registry (COMPLETED)
+
+### CapabilityRef
+- `CapabilityRef` newtype with `as_str()` method
+- `ResolvedCandidate` and `CapabilityResolution` types
+
+### Repositories
+- `PostgresCapabilityProfileRepository::get_by_name()`
+- `PostgresCapabilityRegistryBindingRepository::list_by_profile()`
+
+### Resolution Service
+- `CapabilityService::resolve_by_ref()` implementation
+- Sorts candidates by compatibility_score (descending)
+
+### API Endpoint
+- `POST /v1/capabilities/resolve` - Resolve capability ref to agents
 
 **Implementation:** `crates/torque-harness/src/models/v1/capability.rs`, `service/capability.rs`, `repository/capability.rs`, `api/v1/capabilities.rs`
-**Tests:** 3 capability_resolution_tests passing
+**Tests:** `capability_resolution_tests` (3 tests)
 
 ---
 
-## Phase 2: Team Execution (COMPLETED)
+## Phase 7: Delegation System (COMPLETED)
+
+### Delegation Model
+- `Delegation` with states: Pending, InProgress, Completed, Failed, Cancelled
+- `DelegationEvent` for state transitions
+
+### Delegation Service
+- Create, update, cancel delegations
+- Event emission for state changes
+
+### Async Delegation Flow
+- `EventListener` for delegation completion
+- `wait_for_delegation_completion` helper
+
+**Implementation:** `crates/torque-harness/src/models/v1/delegation.rs`, `service/delegation.rs`, `repository/delegation.rs`
+**Tests:** `delegation_repo_tests` (2), `delegation_status_tests` (3), `event_listener_tests` (6), `async_delegation_flow_tests` (6)
 
 ---
 
-## Overview
+## Phase 8: Policy Evaluation (COMPLETED)
 
-Implementing the v1 AgentInstance execution engine so that `/v1/agent-instances/{id}/runs` streams real tool-augmented LLM execution, with proper Task lifecycle management and Event recording.
+### Policy Model
+- Multi-source policy: system, capability, agent, team, selector, runtime
+- Conservative merge across dimensions
 
-This builds on top of the completed Architecture Optimization and Platform API v1 work (merged to main).
+### PolicyEvaluator
+- Moved to RunService (orchestration layer)
+- Kernel receives pre-validated execution intent
+- `PolicyDecision` returned to caller
 
----
+### Governance
+- Tool policy evaluation
+- Memory policy evaluation
+- Delegation policy evaluation
 
-## Completed Tasks
-
-### Phase 0: Foundation (from previous work)
-- [x] Architecture Optimization Plan - Repository/Service/Kernel-bridge layers
-- [x] Platform API v1 - All CRUD handlers, migrations, models
-- [x] OpenAPI 3.1 spec at `docs/openapi/torque-v1.yaml`
-- [x] v1 end-to-end integration tests
-
-### Phase 1: Task State Management
-- [x] **Task 1:** Extend Task Model with Status Enum
-  - Added `TaskStatus` enum (Created, Queued, Running, WaitingTool, WaitingSubagent, WaitingApproval, Completed, Failed, Cancelled)
-  - Added `is_terminal()` and `can_transition_to()` methods
-  - Updated `Task` struct to use `TaskStatus` instead of `String`
-
-- [x] **Task 2:** Extend Task Repository with State Management
-  - Added `create()` method for creating tasks with initial status
-  - Added `update_status()` for state transitions
-  - Added `update_produced_artifacts()` for artifact tracking
-  - Updated `cancel()` to use `TaskStatus::Cancelled`
-
-- [x] **Task 3:** Extend AgentInstance Repository
-  - Added `update_current_task()` to link instances to active tasks
-
-### Phase 2: Execution Mapping
-- [x] **Task 4:** Create v1 Execution Mapping
-  - Created `kernel_bridge/v1_mapping.rs`
-  - `v1_agent_definition_to_kernel()` - Maps v1 AgentDefinition to torque-kernel AgentDefinition
-  - `run_request_to_execution_request()` - Maps v1 RunRequest to kernel ExecutionRequest
-
-### Phase 3: Run Service
-- [x] **Task 5:** Create Run Service
-  - Created `service/run.rs` - `RunService` struct
-  - Orchestrates full execution lifecycle:
-    1. Fetch instance + definition
-    2. Update instance status to Running
-    3. Create Task with Created status
-    4. Link task to instance, transition to Running
-    5. Build kernel execution request
-    6. Execute via `KernelRuntimeHandle::execute_chat()`
-    7. Update task status (Completed/Failed)
-    8. Update instance status (Ready/Failed)
-    9. Send terminal SSE event (Done/Error)
-
-- [x] **Task 6:** Wire RunService into ServiceContainer
-  - Added `run` field to `ServiceContainer`
-  - Constructed `RunService` with all required dependencies
-
-### Phase 4: Handler Implementation
-- [x] **Task 7:** Implement Real v1 Runs Handler
-  - Rewrote `api/v1/runs.rs` to use `RunService::execute()`
-  - SSE streaming with real event forwarding
-  - Added `event_name()` helper to `StreamEvent`
+**Implementation:** `crates/torque-harness/src/policy/evaluator.rs`, `models/v1/gating.rs`
+**Tests:** `agent_runner_tests` (5)
 
 ---
 
-## Remaining Tasks
+## Phase 9: Memory Pipeline (COMPLETED)
 
-- [x] **Task 8:** Refactor KernelRuntimeHandle
-  - Extracted `execute_v1()` method with generic message support
-  - `execute_chat()` now calls `execute_v1()` as backward-compatible wrapper
-  - RunService updated to use `execute_v1()` for clarity
+### Candidate Generation
+- `CandidateGenerator` service
+- LLM fact extraction integrated with RunService
 
-- [x] **Task 9:** Add Run Execution Integration Tests
-  - Created `tests/v1_execution_tests.rs` with 3 tests
-  - Test: Agent definition → instance → run → task lifecycle ✅
-  - Test: SSE event stream validation (Start, Chunk, Done events) ✅
-  - Test: Error handling for nonexistent instance ✅
-  - Test: Task status transitions ✅
-  - Uses FakeLlm to avoid external API calls
+### Memory Gating
+- `MemoryGatingService` with quality assessment
+- Risk/conflict/consent rules
+- `GateDecision` with types: Approve, Reject, Review
 
-- [x] **Task 10:** Update OpenAPI Spec
-  - Updated `RunRequest` schema with all actual fields
-  - Added `RunEvent` schemas for SSE events (start, chunk, tool_call, tool_result, done, error)
+### Memory Compaction
+- Background job for memory compaction
+- `jobs/memory_compaction.rs`
 
-- [x] **Task 11:** Final Verification
-  - ✅ Full test suite: 20/20 tests pass
-  - ✅ Compilation check: clean (no errors)
-  - ✅ Working tree: clean
-
-### Code Review Fixes (Post-Implementation)
-- [x] **Critical 1-2:** Decouple policy evaluation from kernel execution
-  - PolicyEvaluator moved to RunService (orchestration layer)
-  - Kernel now receives pre-validated execution intent
-  - PolicyDecision returned to caller instead of aborting execution
-
-- [x] **Critical 3-4:** Recovery transaction safety and branching
-  - Pre-validate recovery plan before mutations
-  - time_travel creates new instance (branch) instead of modifying existing
-
-- [x] **Critical 5-6:** Task state validation and PolicyEvaluator lifecycle
-  - TaskStatus transition validation in TaskRepository::update_status
-  - PolicyEvaluator instantiated once as RunService field
-
-- [x] **Important 7-8:** Multi-source policy and event replay
-  - PolicySources supports 6 source layers (system, capability, agent, team, selector, runtime)
-  - Conservative merge across dimensions
-  - EventReplayRegistry with async trait-based handlers
-  - RecoveryService uses registry instead of hardcoded matching
-
-- [x] **Important 9-12:** State validation, SSE, instance_id
-  - TaskStatus transition table includes Created -> Running
-  - SSE start event sent before execution begins
-  - instance_id passed through v1 mapping to ExecutionRequest
+**Implementation:** `crates/torque-harness/src/service/candidate_generator.rs`, `service/gating.rs`, `jobs/memory_compaction.rs`
+**Tests:** `jobs_memory_compaction_tests` (1), `memory_candidate_api_tests` (11)
 
 ---
 
-## Blockers / Issues
+## Phase 10: Notification System (COMPLETED)
 
-### 1. ✅ RESOLVED: KernelRuntimeHandle.execute_chat Signature Mismatch (Task 8)
-**Status:** Completed
-**Resolution:** Extracted `execute_v1()` method that accepts `initial_messages: Vec<LlmMessage>`. `execute_chat()` is now a thin wrapper around `execute_v1()`. Both session chat and v1 runs share the same core execution logic. RunService uses `execute_v1()` with empty message history (conversation context across runs is future work).
+### NotificationService
+- Async notification dispatch
+- Hook-based architecture
 
-### 2. Mock LLM for Testing (Task 9)
-**Status:** Blocking integration tests
-**Details:** Integration tests for run execution need a mock LLM client to avoid external API calls. The project already has `tests/common/fake_llm.rs` but it may need extension.
-**Impact:** Medium - prevents automated testing of run endpoint
-**Resolution:** Create or extend fake LLM implementation for tests
+### NotificationHooks
+- `NotificationHooks` registry
+- Support for multiple hook types
 
-### 3. Concurrent Run Requests
-**Status:** Potential issue, not yet implemented
-**Details:** Same instance receiving multiple run requests simultaneously. No run gate or conflict detection is implemented yet.
-**Impact:** Medium - could lead to race conditions
-**Resolution:** Add run gate similar to SessionService's gate (return 409 Conflict)
+**Implementation:** `crates/torque-harness/src/service/notification.rs`, `notification/hooks.rs`
+**Tests:** `notification_service_tests` (1), `notification_hooks_tests` (2)
 
 ---
 
-## Current State
+## Current Test Suite (101 tests passing)
 
-### Compilation
-```bash
-cargo check -p torque-harness
-```
-✅ Clean (no errors)
-
-### Tests
-```bash
-cargo test -p torque-harness
-```
-✅ 17/17 tests passing:
-- 2 project_scope_tests
-- 6 session_http_api tests  
-- 3 stream_event_tests
-- 1 tool_registry_tests
-- 4 v1_end_to_end tests
-- 3 v1_execution_tests
-- 0 doc-tests
-
-### Git Status
-Branch: `feat/kernel-execution`
-Ahead of main: 7 commits
-Working tree: clean
-
----
-
-## Phase 2: Team Execution (COMPLETED)
-
-### Task 1: Add TeamMember Model and Repository
-- [x] Created `v1_team_members` table migration
-- [x] Added `TeamMember` and `TeamMemberCreate` models
-- [x] Added `TeamMemberRepository` with create/list/remove methods
-- [x] Wired into `TeamService`, `RepositoryContainer`, `ServiceContainer`, `app.rs`
-
-### Tasks 2-5: Implement Team Handlers
-- [x] **create_task**: Creates `TeamTask`, returns 202 Accepted
-- [x] **list_tasks**: Lists tasks filtered by `team_instance_id` with pagination
-- [x] **list_members**: Lists team members with pagination
-- [x] **publish**: Placeholder (returns 200), full shared state is future work
-
-### Task 6: Team Execution Integration Tests
-- [x] Created `tests/v1_team_execution_tests.rs` with 3 tests
-- [x] Test: Team task lifecycle (definition → instance → task → list)
-- [x] Test: Team member management (add, list, remove)
-- [x] Test: Error handling for nonexistent team instance
-
-### Task 7: Final Verification
-- [x] Full test suite: 20/20 tests pass
-- [x] Compilation check: clean (no errors)
-- [x] Working tree: clean
-
----
-
-## Phase 3: Memory System P0 (COMPLETED)
-
-### P0.1: Memory Tables + pgvector
-- [x] Created migration `20260419000001_create_v1_memory_tables`
-- [x] `v1_memory_entries` table with embedding support (vector(1536))
-- [x] `v1_memory_write_candidates` table with extended status enum
-- [x] `session_memory` table (KV + TTL)
-- [x] `memory_decision_log` table (audit trail)
-- [x] HNSW indexes for semantic search
-
-### P0.2: Embedding Write Path
-- [x] `EmbeddingGenerator` trait with `generate()`, `dimensions()`, `model_name()`
-- [x] `OpenAIEmbeddingGenerator` implementation (OpenAI API, text-embedding-3-small)
-- [x] `memory_to_embedding_text()` helper for consistent text formatting
-- [x] Integrated into `MemoryService::v1_create_entry()`
-
-### P0.3: Semantic Retrieval
-- [x] `semantic_search()` — vector similarity search with pgvector `<=>` operator
-- [x] `hybrid_search()` — RRF fusion of vector + keyword (ts_rank_cd)
-- [x] `POST /v1/memory-entries/search` API with category filter
-- [x] Custom `Vector` type with sqlx `Type`/`Decode`/`Encode` implementation
-
-### P0.4: Session Memory
-- [x] `SessionMemoryRepository` with get/set/delete/list/cleanup methods
-- [x] TTL support via `expires_at` column
-- [x] Internal service (no public API in P0)
-
-### P0.5: EpisodicMemory Enum
-- [x] Added `EpisodicMemory` variant to `MemoryCategory`
-- [x] Updated API handlers and constraints
-
-### P0.6: Embedding Backfill
-- [x] `GET /v1/memory-entries/without-embedding` (internal)
-- [x] `POST /v1/memory-entries/backfill` API
-- [x] Batch processing with configurable `batch_size`
-- [x] Error handling and progress reporting
-
-### P0.7: Category Backfill Plan
-- [ ] Document gradual labeling strategy for historical data
-
-### Implementation Details
-- **Custom Vector type:** `crates/torque-harness/src/vector_type.rs` — handles pgvector text format `[1.0,2.0,3.0]`
-- **MemoryEntryRow:** Internal DB row struct with embedding field
-- **MemoryEntry:** Public API model without embedding (clean API responses)
-- **sqlx 0.8 upgrade:** Required for pgvector compatibility; workspace-wide upgrade completed
-
----
-
-## Current State
-
-### Compilation
-```bash
-cargo check -p torque-harness
-```
-✅ Clean (no errors, 3 warnings from existing code)
-
-### Tests
-```bash
-cargo test -p torque-harness
-```
-✅ All tests passing (including existing tests updated for new MemoryService signature)
-
-### Git Status
-Working tree: contains P0 implementation ready for commit
-
----
-
-## Next Steps
-
-**P1: Pipeline Core (Week 3-5)**
-- Candidate Generation (LLM fact extraction, integrated with RunService)
-- Memory Gating framework (quality assessment, risk/conflict/consent rules)
-- Dedup with dynamic thresholds by type
-- Equivalence check (rules engine + LLM fallback)
-
-**P2: Governance & Audit (Week 6-7)**
-- Decision log service
-- Manual trigger APIs (already started)
-- Review lifecycle endpoints
-
-**P3: Advanced Features (Future)**
-- Analytics, Provenance UI, Compaction/Summarization
+| Test File | Count | Status |
+|-----------|-------|--------|
+| agent_runner_tests | 5 | ✅ |
+| api_tests | 2 | ✅ |
+| async_delegation_flow_tests | 6 | ✅ |
+| capability_resolution_tests | 3 | ✅ |
+| chat_streaming_api | 3 | ✅ |
+| checkpoint_recovery_tests | 8 | ✅ |
+| context_window_tests | 2 | ✅ |
+| delegation_repo_tests | 2 | ✅ |
+| delegation_status_tests | 3 | ✅ |
+| event_listener_tests | 6 | ✅ |
+| jobs_memory_compaction_tests | 1 | ✅ |
+| member_agent_tests | 3 | ✅ |
+| memory_candidate_api_tests | 11 | ✅ |
+| memory_recall_tests | 2 | ✅ |
+| memory_sse_tests | 1 | ✅ |
+| notification_hooks_tests | 2 | ✅ |
+| notification_service_tests | 1 | ✅ |
+| project_scope_tests | 2 | ✅ |
+| session_http_api | 6 | ✅ |
+| stream_event_tests | 3 | ✅ |
+| tool_registry_tests | 1 | ✅ |
+| v1_end_to_end | 4 | ✅ |
+| v1_execution_tests | 3 | ✅ |
+| v1_team_execution_tests | 4 | ✅ |
+| v1_team_supervisor_agent_tests | 6 | ✅ |
+| v1_team_supervisor_tools_tests | 16 | ✅ |
+| **TOTAL** | **101** | ✅ |
 
 ---
 
 ## Known Limitations (Post-MVP)
 
-1. **Tool execution** uses simple ToolRegistry; advanced tool governance (policy evaluation) not yet implemented
-2. **Async execution mode** returns SSE same as sync; true async with webhooks is future work
-3. **Memory integration** during execution uses existing SessionService memory search; v1 memory integration is future work
-4. **Full message history replay** is future work (MVP restarts execution from checkpoint)
-5. **Context anchors and shared-state anchors** in checkpoint not yet captured/restored
-6. **Operator escalation endpoints** for high-severity reconciliation issues not yet implemented
-7. **Team-level recovery** not yet implemented
-8. **Conversation context** across multiple runs not yet implemented (each run starts with empty message history)
+1. **Conversation context** - Each run starts with empty message history; context across runs is future work
+2. **Full message history replay** - MVP restarts execution from checkpoint; replay is future work
+3. **Context anchors and shared-state anchors** - Not yet captured/restored in checkpoint
+4. **Team-level recovery** - Not yet implemented
+5. **Operator escalation endpoints** - For high-severity reconciliation issues
+6. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
+7. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
 
 ---
 
@@ -361,21 +303,55 @@ Working tree: contains P0 implementation ready for commit
 - **State type:** axum 0.7 nested routers share `(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)` tuple
 - **Task status:** Typed enum with explicit transition rules prevents invalid state changes
 - **Execution flow:** `RunRequest` → `ExecutionRequest` → `KernelRuntimeHandle` → LLM + Tools → SSE events
-- **Event recording:** Kernel events are persisted to `v1_events` table during execution
+- **Event recording:** Kernel events persisted to `v1_events` table during execution
+- **Supervisor collaboration:** Supervisor → Subagent model (not symmetric peers)
+- **Context planes:** ExternalContextRef, Artifact, Memory kept separate
 
 ---
 
 ## Resources
 
-- **Plan:** `docs/superpowers/plans/2026-04-17-torque-kernel-execution-implementation.md`
-- **Kernel Spec:** `docs/superpowers/specs/2026-04-08-torque-kernel-execution-contract-design.md`
+- **Specs:** `docs/superpowers/specs/`
+  - `torque-kernel-execution-contract-design.md`
+  - `torque-agent-runtime-harness-design.md`
+  - `torque-agent-team-design.md`
+  - `torque-capability-registry-model-design.md`
+  - `torque-context-state-model-design.md`
+  - `torque-recovery-core-design.md`
+  - `torque-memory-system-design.md`
+  - `torque-policy-model-design.md`
 - **OpenAPI:** `docs/openapi/torque-v1.yaml`
-- **Worktree:** `.worktrees/kernel-execution`
+- **Plans:** `docs/superpowers/plans/`
 
 ---
 
-## Contact
+## Git Log (Recent)
 
-For questions or blockers, see:
-- `/help` for opencode usage
-- GitHub issues: https://github.com/anomalyco/opencode/issues
+```
+730d34c docs: mark Phase 5 Capability Registry complete
+d9b8375 fix(tests): use unique names in capability resolution tests
+4ca2ef2 Merge branch 'feat/capability-registry'
+7be0da6 fix: address code review issues
+da20245 docs: mark Checkpoint Recovery and Team Supervisor Agent complete
+```
+
+---
+
+## Next Steps
+
+### P1: Pipeline Core
+- Candidate Generation (LLM fact extraction, integrated with RunService) - ✅ Complete
+- Memory Gating framework (quality assessment, risk/conflict/consent rules) - ✅ Complete
+- Dedup with dynamic thresholds by type
+- Equivalence check (rules engine + LLM fallback)
+
+### P2: Governance & Audit
+- Decision log service
+- Manual trigger APIs
+- Review lifecycle endpoints
+
+### P3: Advanced Features
+- Analytics, Provenance UI, Compaction/Summarization
+- Context anchors and shared-state anchors in checkpoint
+- Team-level recovery
+- Full message history replay
