@@ -30,8 +30,10 @@ pub struct CandidateStats {
     pub total: i64,
     pub pending: i64,
     pub review_required: i64,
+    pub auto_approved: i64,
     pub approved: i64,
     pub rejected: i64,
+    pub merged: i64,
 }
 
 pub async fn create_candidate(
@@ -145,16 +147,20 @@ pub async fn list_candidates(
         let mut total = 0i64;
         let mut pending = 0i64;
         let mut review_required = 0i64;
+        let mut auto_approved = 0i64;
         let mut approved = 0i64;
         let mut rejected = 0i64;
+        let mut merged = 0i64;
 
         for (status_str, count) in counts {
             total += count;
             match status_str.as_str() {
                 "pending" => pending = count,
                 "review_required" => review_required = count,
+                "auto_approved" => auto_approved = count,
                 "approved" => approved = count,
                 "rejected" => rejected = count,
+                "merged" => merged = count,
                 _ => {}
             }
         }
@@ -163,8 +169,10 @@ pub async fn list_candidates(
             total,
             pending,
             review_required,
+            auto_approved,
             approved,
             rejected,
+            merged,
         }
     });
 
