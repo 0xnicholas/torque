@@ -398,11 +398,13 @@ impl MemoryService {
             .collect::<Vec<_>>()
             .join("\n---\n");
 
+        let category = entries.first().map(|e| e.category.clone()).unwrap_or(MemoryCategory::Session);
+
         let summarized = V1MemoryEntry {
             id: Uuid::new_v4(),
             key: format!("_compacted_{}", Uuid::new_v4()),
             value: serde_json::json!(summary_text),
-            category: MemoryCategory::Session,
+            category,
             agent_instance_id: entries.first().and_then(|e| e.agent_instance_id),
             team_instance_id: entries.first().and_then(|e| e.team_instance_id),
             source_candidate_id: None,

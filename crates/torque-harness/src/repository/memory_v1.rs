@@ -56,6 +56,12 @@ pub trait MemoryRepositoryV1: Send + Sync {
 
     async fn update_entry_access(&self, id: Uuid) -> anyhow::Result<Option<MemoryEntry>>;
 
+    async fn update_entries_superseded_by(
+        &self,
+        entry_ids: &[Uuid],
+        superseded_by: Uuid,
+    ) -> anyhow::Result<Vec<MemoryEntry>>;
+
     // Semantic Search
     async fn semantic_search(
         &self,
@@ -309,6 +315,28 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         .await?;
 
         Ok(row.map(Into::into))
+    }
+
+    async fn update_entries_superseded_by(
+        &self,
+        entry_ids: &[Uuid],
+        superseded_by: Uuid,
+    ) -> anyhow::Result<Vec<MemoryEntry>> {
+        let rows = sqlx::query_as::<_, MemoryEntryRow>(
+            r#"
+            UPDATE v1_memory_entries
+            SET superseded_by = $1,
+                updated_at = NOW()
+            WHERE id = ANY($2)
+            RETURNING *
+            "#,
+        )
+        .bind(superseded_by)
+        .bind(entry_ids)
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(rows.into_iter().map(Into::into).collect())
     }
 
     async fn semantic_search(

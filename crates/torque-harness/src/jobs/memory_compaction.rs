@@ -1,5 +1,6 @@
 use crate::models::v1::memory::{CompactionRecommendation, CompactionStrategy, MemoryCategory, MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus};
 use crate::repository::MemoryRepositoryV1;
+use crate::service::MemoryService;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -7,6 +8,7 @@ use uuid::Uuid;
 
 pub struct MemoryCompactionJob {
     memory_repo: Arc<dyn MemoryRepositoryV1>,
+    memory_service: Option<Arc<MemoryService>>,
     batch_size: i64,
     max_age_days: i64,
 }
@@ -14,9 +16,11 @@ pub struct MemoryCompactionJob {
 impl MemoryCompactionJob {
     pub fn new(
         memory_repo: Arc<dyn MemoryRepositoryV1>,
+        memory_service: Option<Arc<MemoryService>>,
     ) -> Self {
         Self {
             memory_repo,
+            memory_service,
             batch_size: 10,
             max_age_days: 30,
         }
@@ -33,15 +37,7 @@ impl MemoryCompactionJob {
     }
 
     pub async fn run(&self) -> anyhow::Result<CompactionResult> {
-        let cutoff_date = Utc::now() - chrono::Duration::days(self.max_age_days);
-        let entries = self.get_entries_by_age_and_category(cutoff_date).await?;
-        let grouped = self.group_entries(entries);
-
-        let mut recommendations = Vec::new();
-        for (category, group_entries) in grouped {
-            let recommendation = self.evaluate_group_for_compaction(&category, group_entries)?;
-            recommendations.push(recommendation);
-        }
+        let recommendations = self.evaluate().await?;
 
         let mut candidates_created = 0;
         let mut entries_processed = 0;
@@ -63,6 +59,20 @@ impl MemoryCompactionJob {
             candidates_created,
             errors,
         })
+    }
+
+    pub async fn evaluate(&self) -> anyhow::Result<Vec<CompactionRecommendation>> {
+        let cutoff_date = Utc::now() - chrono::Duration::days(self.max_age_days);
+        let entries = self.get_entries_by_age_and_category(cutoff_date).await?;
+        let grouped = self.group_entries(entries);
+
+        let mut recommendations = Vec::new();
+        for (category, group_entries) in grouped {
+            let recommendation = self.evaluate_group_for_compaction(&category, group_entries)?;
+            recommendations.push(recommendation);
+        }
+
+        Ok(recommendations)
     }
 
     async fn get_entries_by_age_and_category(
@@ -171,41 +181,13 @@ impl MemoryCompactionJob {
         self.memory_repo.create_candidate(&candidate).await?;
 
         if recommendation.strategy == CompactionStrategy::Summarize {
-            self.summarize_entries(recommendation.entry_ids.clone()).await?;
+            let summarized = self.memory_service.as_ref().expect("MemoryService required for Summarize strategy").summarize_entries(recommendation.entry_ids.clone()).await?;
+            self.memory_repo
+                .update_entries_superseded_by(&recommendation.entry_ids, summarized.id)
+                .await?;
         }
 
         Ok(())
-    }
-
-    async fn summarize_entries(&self, entry_ids: Vec<Uuid>) -> anyhow::Result<MemoryEntry> {
-        let entries = self.memory_repo.get_entries_by_ids(entry_ids).await?;
-        if entries.is_empty() {
-            anyhow::bail!("No entries found");
-        }
-
-        let summary_text = entries
-            .iter()
-            .map(|e| format!("[{:?}] {}: {}", e.category, e.key, e.value))
-            .collect::<Vec<_>>()
-            .join("\n---\n");
-
-        let summarized = MemoryEntry {
-            id: Uuid::new_v4(),
-            key: format!("_compacted_{}", Uuid::new_v4()),
-            value: serde_json::json!(summary_text),
-            category: MemoryCategory::Session,
-            agent_instance_id: entries.first().and_then(|e| e.agent_instance_id),
-            team_instance_id: entries.first().and_then(|e| e.team_instance_id),
-            source_candidate_id: None,
-            superseded_by: None,
-            embedding_model: None,
-            access_count: 0,
-            last_accessed_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-
-        self.memory_repo.create_entry(&summarized).await
     }
 }
 

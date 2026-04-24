@@ -105,9 +105,20 @@ async fn test_compaction_job_processes_entries() {
     repo.create_entry(&entry1).await.expect("entry1 should be created");
     repo.create_entry(&entry2).await.expect("entry2 should be created");
 
-    let job = MemoryCompactionJob::new(repo.clone())
+    let job = MemoryCompactionJob::new(repo.clone(), None)
         .with_batch_size(10)
         .with_max_age_days(30);
+
+    let recommendations = job.evaluate().await.expect("evaluate should work");
+    assert_eq!(recommendations.len(), 1);
+
+    let recommendation = &recommendations[0];
+    assert_eq!(recommendation.entry_ids.len(), 2);
+    assert!(recommendation.entry_ids.contains(&entry1.id));
+    assert!(recommendation.entry_ids.contains(&entry2.id));
+    assert!(recommendation.entry_id == entry1.id || recommendation.entry_id == entry2.id);
+    assert_eq!(recommendation.strategy, CompactionStrategy::Archive);
+    assert!(recommendation.supersedes.is_none());
 
     let result = job.run().await.expect("compaction job should run");
 
