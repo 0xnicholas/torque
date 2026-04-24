@@ -69,6 +69,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         )
         .route("/v1/agent-instances/:id/runs", post(runs::run))
         .route("/v1/runs", post(runs::create))
+        .route("/v1/runs/:id/webhook", get(runs::webhook_status))
         .route("/v1/tasks", get(tasks::list))
         .route("/v1/tasks/:id", get(tasks::get))
         .route("/v1/tasks/:id/cancel", post(tasks::cancel))

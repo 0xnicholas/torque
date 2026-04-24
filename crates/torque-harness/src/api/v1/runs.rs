@@ -20,6 +20,14 @@ pub struct RunResponse {
     pub run: Run,
 }
 
+#[derive(serde::Serialize)]
+pub struct WebhookStatusResponse {
+    pub run_id: Uuid,
+    pub webhook_url: Option<String>,
+    pub webhook_sent_at: Option<chrono::DateTime<Utc>>,
+    pub webhook_attempts: Option<i32>,
+}
+
 pub async fn create(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Json(req): Json<RunRequest>,
@@ -36,6 +44,8 @@ pub async fn create(
         started_at: None,
         completed_at: None,
         error: None,
+        webhook_sent_at: None,
+        webhook_attempts: None,
     };
 
     services
@@ -98,4 +108,43 @@ pub async fn run(
     });
 
     Sse::new(ReceiverStream::new(rx))
+}
+
+pub async fn webhook_status(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<WebhookStatusResponse>, (StatusCode, Json<ErrorBody>)> {
+    let run = services
+        .run_repo
+        .get(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    code: "NOT_FOUND".into(),
+                    message: format!("Run {} not found", id),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
+    Ok(Json(WebhookStatusResponse {
+        run_id: run.id,
+        webhook_url: run.webhook_url,
+        webhook_sent_at: run.webhook_sent_at,
+        webhook_attempts: run.webhook_attempts,
+    }))
 }

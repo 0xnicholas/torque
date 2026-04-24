@@ -65,4 +65,6 @@ pub struct Run {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
     pub error: Option<String>,
+    pub webhook_sent_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub webhook_attempts: Option<i32>,
 }
