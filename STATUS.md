@@ -252,7 +252,59 @@
 
 ---
 
-## Current Test Suite (101 tests passing)
+## Phase 11: Deduplication (COMPLETED)
+
+### Dynamic Dedup Thresholds
+- `DedupThresholds` with per-category thresholds (duplicate, merge, minimum_content_length)
+- `GatingConfig::dedup_thresholds: HashMap<MemoryCategory, DedupThresholds>`
+- Environment variable override support: `MEMORY_DEDUP_{CATEGORY}_DUPLICATE/MERGE`
+- `DedupThresholds::for_category()`, `from_config()`, `with_env_override()`
+
+### Equivalence Check Integration
+- Serial integration: dedup → equivalence check
+- `check_equivalence_for_candidate()` - triggers on boundary cases and mergeable results
+- Uses rules engine `check_equivalence()` for decision support
+
+### LLM Retry and Fallback
+- 3 retry attempts for LLM API calls
+- Fallback to `Distinct` on all retries failing
+- Log warnings for failed LLM calls
+
+### Conflict Detection
+- `ConflictResult` and `ConflictType` types
+- `detect_conflict()` - identifies when keys differ but content is similar
+- Routes to Review with high priority
+
+### Four Merge Strategies
+- `AppendStrategy` - combines values into array with deduplication
+- `KeepSeparateStrategy` - stores as separate entries
+- `WithProvenanceStrategy` - tracks merge history in `_provenance` field
+- `SummarizeStrategy` - uses LLM for consolidation
+- `MergeStrategyExecutor` - routes to appropriate handler
+
+### Gating Flow Rewrite
+- `gate_candidate()` orchestrates: quality → risk → dedup → equivalence → conflict → decision
+- `resolve_with_rules()` - decision matrix combining dedup action and equivalence result
+- `check_equivalence_via_llm_with_fallback()` - LLM fallback for boundary cases
+- Decision logging at end of gating flow
+
+### Configuration Validation
+- `ConfigError` enum for validation errors
+- `GatingConfigValidator::validate()` - validates merge <= duplicate for all categories
+
+**Implementation:**
+- `crates/torque-harness/src/models/v1/gating.rs` - DedupThresholds, GatingConfig, ConflictResult, ConfigError
+- `crates/torque-harness/src/service/gating.rs` - gate_candidate, equivalence, merge
+- `crates/torque-harness/src/service/merge_strategy.rs` - Four merge strategies
+- `crates/torque-harness/src/config/memory.rs` - Dynamic threshold loading
+- `crates/torque-harness/tests/dedup_thresholds_tests.rs` - DedupThresholds unit tests
+- `crates/torque-harness/tests/merge_strategy_tests.rs` - Merge strategy unit tests
+
+**Tests:** `dedup_thresholds_tests` (5), `merge_strategy_tests` (4)
+
+---
+
+## Current Test Suite (111 tests passing)
 
 | Test File | Count | Status |
 |-----------|-------|--------|
@@ -282,7 +334,9 @@
 | v1_team_execution_tests | 4 | ✅ |
 | v1_team_supervisor_agent_tests | 6 | ✅ |
 | v1_team_supervisor_tools_tests | 16 | ✅ |
-| **TOTAL** | **101** | ✅ |
+| dedup_thresholds_tests | 5 | ✅ |
+| merge_strategy_tests | 4 | ✅ |
+| **TOTAL** | **111** | ✅ |
 
 ---
 
