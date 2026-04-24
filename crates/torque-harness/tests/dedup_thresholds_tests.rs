@@ -2,6 +2,32 @@ use torque_harness::models::v1::gating::{DedupThresholds, GatingConfig};
 use torque_harness::models::v1::memory::MemoryCategory;
 
 #[test]
+fn test_dedup_thresholds_with_env_override_duplicate() {
+    std::env::set_var("MEMORY_DEDUP_AGENT_PROFILE_DUPLICATE", "0.98");
+
+    let thresholds = DedupThresholds::for_category(&MemoryCategory::AgentProfileMemory)
+        .with_env_override(&MemoryCategory::AgentProfileMemory);
+
+    assert_eq!(thresholds.duplicate, 0.98);
+    assert_eq!(thresholds.merge, 0.88); // unchanged
+
+    std::env::remove_var("MEMORY_DEDUP_AGENT_PROFILE_DUPLICATE");
+}
+
+#[test]
+fn test_dedup_thresholds_with_env_override_merge() {
+    std::env::set_var("MEMORY_DEDUP_USER_PREFERENCE_MERGE", "0.92");
+
+    let thresholds = DedupThresholds::for_category(&MemoryCategory::UserPreferenceMemory)
+        .with_env_override(&MemoryCategory::UserPreferenceMemory);
+
+    assert_eq!(thresholds.duplicate, 0.96); // unchanged
+    assert_eq!(thresholds.merge, 0.92);
+
+    std::env::remove_var("MEMORY_DEDUP_USER_PREFERENCE_MERGE");
+}
+
+#[test]
 fn test_dedup_thresholds_default_values() {
     let thresholds = DedupThresholds::for_category(&MemoryCategory::AgentProfileMemory);
     assert_eq!(thresholds.duplicate, 0.96);
