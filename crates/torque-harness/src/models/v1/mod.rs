@@ -21,3 +21,4 @@ pub mod team;
 pub use delegation::{Delegation, DelegationCreate, DelegationStatus};
 pub use delegation_event::{DelegationEvent, RejectionReason};
 pub use partial_quality::PartialQuality;
+pub use run::{Run, RunStatus};

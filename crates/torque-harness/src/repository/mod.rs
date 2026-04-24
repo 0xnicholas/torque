@@ -16,6 +16,7 @@ pub mod memory;
 pub mod memory_v1;
 pub mod message;
 pub mod rule;
+pub mod run;
 pub mod session;
 pub mod task;
 pub mod team;
@@ -39,6 +40,7 @@ pub use memory::{MemoryRepository, PostgresMemoryRepository};
 pub use memory_v1::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
 pub use message::{MessageRepository, PostgresMessageRepository};
 pub use rule::{PostgresRuleRepository, RuleRepository};
+pub use run::{PostgresRunRepository, RunRepository};
 pub use session::{PostgresSessionRepository, SessionKernelState, SessionRepository};
 pub use task::{PostgresTaskRepository, TaskRepository};
 pub use team::{
