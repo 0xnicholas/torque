@@ -1248,15 +1248,15 @@ git commit -m "test(team): add supervisor agent integration test"
 **Files:**
 - Review: `docs/superpowers/specs/2026-04-21-team-supervisor-design.md`
 
-- [ ] **Step 1: Review spec section 3.2 (Supervisor Agent)**
+- [x] **Step 1: Review spec section 3.2 (Supervisor Agent)**
 
 Check that our implementation aligns:
 - Supervisor is ReActHarness agent with team tools ✅ (Task 7)
-- Triage is done by supervisor reasoning ✅ (Task 15 removes fallback)
+- Triage is done by supervisor reasoning ✅ (with fallback - Task 15 removes fallback)
 - Mode selection can be overridden by supervisor ✅ (LLM-driven triage in Task 15)
 - wait_for_delegation_completion integrated ✅ (Task 16)
 
-- [ ] **Step 2: Verify all 14 tools implemented and registered**
+- [x] **Step 2: Verify all 14 tools implemented and registered**
 
 Per Task 14, all 14 supervisor tools should be in create_supervisor_tools():
 - delegate_task, accept_result, reject_result, get_delegation_status
@@ -1266,28 +1266,24 @@ Per Task 14, all 14 supervisor tools should be in create_supervisor_tools():
 - list_team_members, get_task_details, request_approval
 
 Run: `cd crates/torque-harness && cargo test test_all_14_tools_registered -- --nocapture`
-Expected: PASS
+Expected: PASS ✅
 
-- [ ] **Step 3: Document deferred items (out of scope for this plan)**
+- [x] **Step 3: Document deferred items (out of scope for this plan)**
 
 These items are deferred to follow-on plans:
 1. **Full tool implementations** - Tools currently return mock data; need real implementations that call delegation_repo, shared_state, events
 2. **Accept/reject result loops** - Tools call delegation_repo.update_status() but don't implement the full accept/reject decision loop
 3. **Mode handler integration with tools** - Mode handlers exist but don't call SupervisorAgent tools yet
+4. **Remove heuristic fallback** - Triage should be fully LLM-driven without fallback to length-based heuristics
 
 These require deeper integration with the existing mode handler infrastructure.
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `cd crates/torque-harness && cargo test 2>&1 | tail -20`
-Expected: All tests pass (or known failures documented)
+Expected: All tests pass ✅
 
 - [ ] **Step 5: Commit**
-
-```bash
-git add docs/superpowers/plans/2026-04-23-team-supervisor-agent-plan.md
-git commit -m "docs: add supervisor agent implementation plan"
-```
 
 ---
 
