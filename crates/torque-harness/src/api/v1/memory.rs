@@ -838,7 +838,7 @@ pub async fn trigger_compaction(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
-                    code: "COMPACTION_ERROR".into(),
+                    code: "DB_ERROR".into(),
                     message: e.to_string(),
                     details: None,
                     request_id: None,
