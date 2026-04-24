@@ -7,6 +7,7 @@ pub mod checkpoint;
 pub mod common;
 pub mod delegation;
 pub mod delegation_event;
+pub mod escalation;
 pub mod event;
 pub mod external_context;
 pub mod gating;
