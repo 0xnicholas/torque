@@ -12,9 +12,6 @@ pub mod supervisor;
 pub mod supervisor_agent;
 pub mod supervisor_tools;
 
-#[cfg(test)]
-mod supervisor_tools_tests;
-
 pub use circuit_breaker::{CircuitBreaker, CircuitState};
 pub use event_listener::{EventListener, RedisStreamEventListener};
 pub use events::TeamEventEmitter;

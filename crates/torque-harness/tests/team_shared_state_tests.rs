@@ -79,6 +79,14 @@ impl SharedTaskStateRepository for MockSharedTaskStateRepository {
     async fn add_decision(&self, _team_instance_id: Uuid, _decision: Decision) -> anyhow::Result<bool> {
         Ok(true)
     }
+
+    async fn update_with_lock(
+        &self,
+        _team_instance_id: Uuid,
+        _updates: Vec<torque_harness::repository::team::SharedTaskStateUpdate>,
+    ) -> anyhow::Result<SharedTaskState> {
+        Ok(self.state.clone())
+    }
 }
 
 #[tokio::test]
