@@ -15,6 +15,7 @@ pub mod capabilities;
 pub mod checkpoints;
 pub mod delegations;
 pub mod events;
+pub mod escalations;
 pub mod memory;
 pub mod runs;
 pub mod tasks;
@@ -181,4 +182,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
             get(memory::get_decision_stats),
         )
         .route("/v1/memory/compact", post(memory::trigger_compaction))
+        .route("/v1/escalations", get(escalations::list))
+        .route("/v1/escalations/:id", get(escalations::get))
+        .route("/v1/escalations/:id/resolve", post(escalations::resolve))
 }
