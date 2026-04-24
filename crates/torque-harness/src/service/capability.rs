@@ -1,6 +1,6 @@
 use crate::models::v1::capability::{
     CapabilityProfile, CapabilityProfileCreate, CapabilityRegistryBinding,
-    CapabilityRegistryBindingCreate, CapabilityResolveRequest,
+    CapabilityRegistryBindingCreate, CapabilityResolveByRefRequest, CapabilityResolveRequest,
     CapabilityResolution, ResolvedCandidate,
 };
 use crate::repository::{CapabilityProfileRepository, CapabilityRegistryBindingRepository};
