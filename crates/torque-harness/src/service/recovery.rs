@@ -417,24 +417,25 @@ impl RecoveryService {
     }
 
     /// Resume agent instance from latest checkpoint.
-    pub async fn resume_instance(&self, instance_id: Uuid) -> anyhow::Result<AgentInstance> {
-        // Find latest checkpoint for instance
+    pub async fn resume_instance(
+        &self,
+        instance_id: Uuid,
+    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>)> {
         let checkpoints = self
             .checkpoint_repo
             .list_by_instance(instance_id, 1)
             .await?;
 
         if let Some(checkpoint) = checkpoints.into_iter().next() {
-            let (instance, _messages) = self.restore_from_checkpoint(checkpoint.id).await?;
-            Ok(instance)
+            let (instance, messages) = self.restore_from_checkpoint(checkpoint.id).await?;
+            Ok((instance, messages))
         } else {
-            // No checkpoint found, just return current instance state
             let instance = self
                 .agent_instance_repo
                 .get(instance_id)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Agent instance not found: {}", instance_id))?;
-            Ok(instance)
+            Ok((instance, vec![]))
         }
     }
 

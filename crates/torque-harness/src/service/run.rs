@@ -1,6 +1,6 @@
 use crate::agent::stream::StreamEvent;
 use crate::config;
-use crate::infra::llm::LlmClient;
+use crate::infra::llm::{LlmClient, LlmMessage};
 use crate::kernel_bridge::{
     run_request_to_execution_request, v1_agent_definition_to_kernel, KernelRuntimeHandle,
 };
@@ -23,6 +23,18 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::warn;
 use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub struct ExecuteRequest {
+    pub agent_definition_id: Uuid,
+    pub agent_instance_id: Uuid,
+    pub system_prompt: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct ExecuteResponse {
+    pub state: torque_kernel::ExecutionResult,
+}
 
 pub struct RunService {
     agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
@@ -462,5 +474,50 @@ impl RunService {
         result
             .map(|r| r.summary.unwrap_or_default())
             .map_err(|e| anyhow::anyhow!("Kernel execution failed: {}", e))
+    }
+
+    pub async fn execute_with_messages(
+        &self,
+        request: ExecuteRequest,
+        initial_messages: Vec<LlmMessage>,
+        event_sink: mpsc::Sender<StreamEvent>,
+    ) -> anyhow::Result<ExecuteResponse> {
+        let definition = self
+            .agent_definition_repo
+            .get(request.agent_definition_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Agent definition not found: {}",
+                    request.agent_definition_id
+                )
+            })?;
+
+        let kernel_def = v1_agent_definition_to_kernel(&definition);
+        let execution_request = torque_kernel::ExecutionRequest::new(
+            kernel_def.id,
+            "continue".to_string(),
+            vec![],
+        );
+
+        let mut kernel = KernelRuntimeHandle::new(
+            vec![kernel_def],
+            self.event_repo.clone(),
+            self.checkpoint_repo.clone(),
+            self.checkpointer.clone(),
+        );
+
+        let state = kernel
+            .execute_v1(
+                execution_request,
+                self.llm.clone(),
+                self.tools.registry(),
+                event_sink,
+                initial_messages,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Kernel execution failed: {}", e))?;
+
+        Ok(ExecuteResponse { state })
     }
 }
