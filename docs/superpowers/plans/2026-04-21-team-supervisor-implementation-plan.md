@@ -8,32 +8,29 @@
 
 **Tech Stack:** Rust, sqlx, tokio, ReActHarness
 
+**Status:** This plan covers the infrastructure phase. Supervisor Agent and tools are covered in `2026-04-23-team-supervisor-agent-plan.md`.
+
 ---
 
 ## File Structure
 
 ```
-src/
+crates/torque-harness/src/
 ├── service/team/
 │   ├── mod.rs              # TeamService + new methods
 │   ├── supervisor.rs       # TeamSupervisor orchestration
-│   ├── modes/
-│   │   ├── mod.rs
-│   │   ├── route.rs
-│   │   ├── broadcast.rs
-│   │   ├── coordinate.rs
-│   │   └── tasks.rs
+│   ├── modes.rs            # Mode handlers (route, broadcast, coordinate, tasks)
 │   ├── selector.rs         # SelectorResolver
 │   ├── shared_state.rs     # SharedTaskState management
 │   └── events.rs           # TeamEvent emission
-├── models/v1/team.rs      # Add TeamTask, SharedTaskState, TeamEvent, etc.
+├── models/v1/team.rs      # TeamTask, SharedTaskState, TeamEvent, etc.
 ├── repository/
-│   ├── mod.rs              # Add new repo traits/instances
-│   └── team.rs            # Add new repository implementations
+│   ├── mod.rs              # Repository exports
+│   └── team.rs            # Team-related repositories
 ├── tools/
-│   └── team_tools.rs       # Supervisor agent tools
+│   └── supervisor_tools.rs  # Supervisor agent tools
 └── api/v1/
-    └── teams.rs            # Add tasks endpoint
+    └── teams.rs            # Team tasks endpoints
 
 migrations/
 ├── 20260421000001_create_v1_team_tasks.up.sql
@@ -141,11 +138,11 @@ git commit -m "feat(team): add team tasks, shared state, and events tables"
 ### Task 2: Add Models
 
 **Files:**
-- Modify: `src/models/v1/team.rs`
+- Modify: `crates/torque-harness/src/models/v1/team.rs`
 
 - [ ] **Step 1: Add TeamTask model**
 
-Add to `src/models/v1/team.rs`:
+Add to `crates/torque-harness/src/models/v1/team.rs`:
 
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -228,7 +225,7 @@ pub enum TeamMode {
 
 - [ ] **Step 2: Add SharedTaskState model**
 
-Add to `src/models/v1/team.rs`:
+Add to `crates/torque-harness/src/models/v1/team.rs`:
 
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -293,7 +290,7 @@ pub struct Decision {
 
 - [ ] **Step 3: Add TeamEvent model**
 
-Add to `src/models/v1/team.rs`:
+Add to `crates/torque-harness/src/models/v1/team.rs`:
 
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -365,7 +362,7 @@ impl std::fmt::Display for TeamEventType {
 
 - [ ] **Step 4: Add MemberSelector and CandidateMember models**
 
-Add to `src/models/v1/team.rs`:
+Add to `crates/torque-harness/src/models/v1/team.rs`:
 
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -406,7 +403,7 @@ pub struct PolicyCheckSummary {
 
 - [ ] **Step 5: Add TeamTaskCreate**
 
-Add to `src/models/v1/team.rs`:
+Add to `crates/torque-harness/src/models/v1/team.rs`:
 
 ```rust
 #[derive(Debug, Deserialize)]
@@ -420,7 +417,7 @@ pub struct TeamTaskCreate {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/models/v1/team.rs
+git add crates/torque-harness/src/models/v1/team.rs
 git commit -m "feat(team): add TeamTask, SharedTaskState, TeamEvent models"
 ```
 
@@ -431,12 +428,12 @@ git commit -m "feat(team): add TeamTask, SharedTaskState, TeamEvent models"
 ### Task 3: Repository Traits and Implementations
 
 **Files:**
-- Modify: `src/repository/mod.rs`
-- Modify: `src/repository/team.rs`
+- Modify: `crates/torque-harness/src/repository/mod.rs`
+- Modify: `crates/torque-harness/src/repository/team.rs`
 
 - [ ] **Step 1: Add TeamTaskRepository trait**
 
-Add to `src/repository/team.rs`:
+Add to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 #[async_trait]
@@ -454,7 +451,7 @@ pub trait TeamTaskRepository: Send + Sync {
 
 - [ ] **Step 2: Add SharedTaskStateRepository trait**
 
-Add to `src/repository/team.rs`:
+Add to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 #[async_trait]
@@ -472,7 +469,7 @@ pub trait SharedTaskStateRepository: Send + Sync {
 
 - [ ] **Step 3: Add TeamEventRepository trait**
 
-Add to `src/repository/team.rs`:
+Add to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 #[async_trait]
@@ -485,7 +482,7 @@ pub trait TeamEventRepository: Send + Sync {
 
 - [ ] **Step 4: Implement PostgresTeamTaskRepository**
 
-Add implementation to `src/repository/team.rs`:
+Add implementation to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 pub struct PostgresTeamTaskRepository {
@@ -512,7 +509,7 @@ impl TeamTaskRepository for PostgresTeamTaskRepository {
 
 - [ ] **Step 5: Implement PostgresSharedTaskStateRepository**
 
-Add implementation to `src/repository/team.rs`:
+Add implementation to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 pub struct PostgresSharedTaskStateRepository {
@@ -537,7 +534,7 @@ impl SharedTaskStateRepository for PostgresSharedTaskStateRepository {
 
 - [ ] **Step 6: Implement PostgresTeamEventRepository**
 
-Add implementation to `src/repository/team.rs`:
+Add implementation to `crates/torque-harness/src/repository/team.rs`:
 
 ```rust
 pub struct PostgresTeamEventRepository {
@@ -569,7 +566,7 @@ impl TeamEventRepository for PostgresTeamEventRepository {
 
 - [ ] **Step 7: Export new repositories in mod.rs**
 
-Modify `src/repository/mod.rs`:
+Modify `crates/torque-harness/src/repository/mod.rs`:
 
 ```rust
 pub use team::{
@@ -586,7 +583,7 @@ Expected: Compiles successfully
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/repository/
+git add crates/torque-harness/src/repository/
 git commit -m "feat(team): add repository layer for tasks, shared state, events"
 ```
 
@@ -597,7 +594,7 @@ git commit -m "feat(team): add repository layer for tasks, shared state, events"
 ### Task 4: SelectorResolver
 
 **Files:**
-- Create: `src/service/team/selector.rs`
+- Create: `crates/torque-harness/src/service/team/selector.rs`
 
 - [ ] **Step 1: Create SelectorResolver**
 
@@ -671,7 +668,7 @@ impl SelectorResolver {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add src/service/team/selector.rs
+git add crates/torque-harness/src/service/team/selector.rs
 git commit -m "feat(team): add SelectorResolver"
 ```
 
@@ -680,7 +677,7 @@ git commit -m "feat(team): add SelectorResolver"
 ### Task 5: SharedTaskState Manager
 
 **Files:**
-- Create: `src/service/team/shared_state.rs`
+- Create: `crates/torque-harness/src/service/team/shared_state.rs`
 
 - [ ] **Step 1: Create SharedTaskStateManager**
 
@@ -793,7 +790,7 @@ impl SharedTaskStateManager {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add src/service/team/shared_state.rs
+git add crates/torque-harness/src/service/team/shared_state.rs
 git commit -m "feat(team): add SharedTaskStateManager"
 ```
 
@@ -802,7 +799,7 @@ git commit -m "feat(team): add SharedTaskStateManager"
 ### Task 6: TeamEvent Emitter
 
 **Files:**
-- Create: `src/service/team/events.rs`
+- Create: `crates/torque-harness/src/service/team/events.rs`
 
 - [ ] **Step 1: Create TeamEventEmitter**
 
@@ -957,7 +954,7 @@ impl TeamEventEmitter {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add src/service/team/events.rs
+git add crates/torque-harness/src/service/team/events.rs
 git commit -m "feat(team): add TeamEventEmitter"
 ```
 
@@ -966,11 +963,7 @@ git commit -m "feat(team): add TeamEventEmitter"
 ### Task 7: Mode Handlers
 
 **Files:**
-- Create: `src/service/team/modes/mod.rs`
-- Create: `src/service/team/modes/route.rs`
-- Create: `src/service/team/modes/broadcast.rs`
-- Create: `src/service/team/modes/coordinate.rs`
-- Create: `src/service/team/modes/tasks.rs`
+- Create: `crates/torque-harness/src/service/team/modes.rs` (combined mode handlers)
 
 - [ ] **Step 1: Create modes/mod.rs**
 
@@ -1352,7 +1345,7 @@ impl ModeHandler for TasksModeHandler {
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/service/team/modes/
+git add crates/torque-harness/src/service/team/modes.rs
 git commit -m "feat(team): add mode handlers (route, broadcast, coordinate, tasks)"
 ```
 
@@ -1363,7 +1356,7 @@ git commit -m "feat(team): add mode handlers (route, broadcast, coordinate, task
 ### Task 8: TeamSupervisor
 
 **Files:**
-- Create: `src/service/team/supervisor.rs`
+- Create: `crates/torque-harness/src/service/team/supervisor.rs`
 
 - [ ] **Step 1: Create TeamSupervisor**
 
@@ -1538,7 +1531,7 @@ pub struct SupervisorResult {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add src/service/team/supervisor.rs
+git add crates/torque-harness/src/service/team/supervisor.rs
 git commit -m "feat(team): add TeamSupervisor orchestration"
 ```
 
@@ -1549,7 +1542,7 @@ git commit -m "feat(team): add TeamSupervisor orchestration"
 ### Task 9: Update TeamService
 
 **Files:**
-- Modify: `src/service/team/mod.rs`
+- Modify: `crates/torque-harness/src/service/team/mod.rs`
 
 - [ ] **Step 1: Update mod.rs to export new components**
 
@@ -1621,7 +1614,7 @@ impl TeamService {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add src/service/team/mod.rs
+git add crates/torque-harness/src/service/team/mod.rs
 git commit -m "feat(team): integrate supervisor into TeamService"
 ```
 
@@ -1630,11 +1623,11 @@ git commit -m "feat(team): integrate supervisor into TeamService"
 ### Task 10: Add API Endpoint
 
 **Files:**
-- Modify: `src/api/v1/teams.rs`
+- Modify: `crates/torque-harness/src/api/v1/teams.rs`
 
 - [ ] **Step 1: Add create team task endpoint**
 
-Add to `src/api/v1/teams.rs`:
+Add to `crates/torque-harness/src/api/v1/teams.rs`:
 
 ```rust
 pub async fn create_team_task(
@@ -1674,7 +1667,7 @@ pub async fn get_team_task(
 
 - [ ] **Step 2: Wire up routes in router**
 
-Modify `src/api/v1/mod.rs`:
+Modify `crates/torque-harness/src/api/v1/mod.rs`:
 
 ```rust
 .route("/team-instances/:team_instance_id/tasks", post(teams::create_team_task))
@@ -1685,7 +1678,7 @@ Modify `src/api/v1/mod.rs`:
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/api/v1/teams.rs src/api/v1/mod.rs
+git add crates/torque-harness/src/api/v1/teams.rs crates/torque-harness/src/api/v1/mod.rs
 git commit -m "feat(api): add team tasks endpoints"
 ```
 
@@ -1693,335 +1686,51 @@ git commit -m "feat(api): add team tasks endpoints"
 
 ## Phase 6: Supervisor Agent Tools
 
+> **Note:** Supervisor Agent and tools are covered in `2026-04-23-team-supervisor-agent-plan.md`. The tools are implemented at `crates/torque-harness/src/service/team/supervisor_tools.rs`.
+
 ### Task 11: Supervisor Agent Tools
 
+**Status:** Deferred to `2026-04-23-team-supervisor-agent-plan.md`
+
 **Files:**
-- Create: `src/tools/team_tools.rs`
+- Implemented at: `crates/torque-harness/src/service/team/supervisor_tools.rs`
+- Registry function: `create_supervisor_tools()` returns all 14 tools
 
-- [ ] **Step 1: Create supervisor tools**
-
-```rust
-use crate::agent::stream::StreamEvent;
-use crate::models::v1::team::{MemberSelector, PublishScope};
-use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
-use crate::repository::DelegationRepository;
-use crate::tools::{Tool, ToolCall, ToolResult};
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use uuid::Uuid;
-
-pub struct DelegateTaskTool {
-    delegation_repo: Arc<dyn DelegationRepository>,
-    selector_resolver: Arc<SelectorResolver>,
-    events: Arc<TeamEventEmitter>,
-}
-
-impl DelegateTaskTool {
-    pub fn new(
-        delegation_repo: Arc<dyn DelegationRepository>,
-        selector_resolver: Arc<SelectorResolver>,
-        events: Arc<TeamEventEmitter>,
-    ) -> Self {
-        Self {
-            delegation_repo,
-            selector_resolver,
-            events,
-        }
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct DelegateTaskParams {
-    pub member_selector: MemberSelector,
-    pub goal: String,
-    pub instructions: Option<String>,
-    pub return_contract: Option<String>,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct DelegateTaskResult {
-    pub delegation_id: Uuid,
-    pub status: String,
-}
-
-#[async_trait::async_trait]
-impl Tool for DelegateTaskTool {
-    fn name(&self) -> &str {
-        "delegate_task"
-    }
-
-    fn description(&self) -> &str {
-        "Delegate a task to a team member selected by capability, role, or direct reference"
-    }
-
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-        _event_sink: mpsc::Sender<StreamEvent>,
-    ) -> ToolResult {
-        let params: DelegateTaskParams = match serde_json::from_value(params) {
-            Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid params: {}", e)),
-        };
-
-        // Resolve selector to candidates
-        let candidates = match self.selector_resolver.resolve(&params.member_selector, Uuid::nil()).await {
-            Ok(c) => c,
-            Err(e) => return ToolResult::error(format!("Selector resolution failed: {}", e)),
-        };
-
-        if candidates.is_empty() {
-            return ToolResult::error("No matching members found".to_string());
-        }
-
-        let selected = &candidates[0];
-
-        // Create delegation
-        let delegation = match self.delegation_repo.create(
-            Uuid::nil(), // task_id - would be passed in real impl
-            selected.agent_instance_id,
-            serde_json::json!({
-                "goal": params.goal,
-                "instructions": params.instructions,
-                "return_contract": params.return_contract,
-            }),
-        ).await {
-            Ok(d) => d,
-            Err(e) => return ToolResult::error(format!("Failed to create delegation: {}", e)),
-        };
-
-        ToolResult::success(serde_json::to_value(DelegateTaskResult {
-            delegation_id: delegation.id,
-            status: delegation.status,
-        }).unwrap())
-    }
-}
-
-pub struct AcceptResultTool {
-    delegation_repo: Arc<dyn DelegationRepository>,
-}
-
-impl AcceptResultTool {
-    pub fn new(delegation_repo: Arc<dyn DelegationRepository>) -> Self {
-        Self { delegation_repo }
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct AcceptResultParams {
-    pub delegation_id: Uuid,
-}
-
-#[async_trait::async_trait]
-impl Tool for AcceptResultTool {
-    fn name(&self) -> &str {
-        "accept_result"
-    }
-
-    fn description(&self) -> &str {
-        "Accept a delegation result"
-    }
-
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-        _event_sink: mpsc::Sender<StreamEvent>,
-    ) -> ToolResult {
-        let params: AcceptResultParams = match serde_json::from_value(params) {
-            Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid params: {}", e)),
-        };
-
-        match self.delegation_repo.update_status(params.delegation_id, "ACCEPTED").await {
-            Ok(true) => ToolResult::success(serde_json::json!({"status": "ACCEPTED"})),
-            Ok(false) => ToolResult::error("Delegation not found".to_string()),
-            Err(e) => ToolResult::error(format!("Failed to accept: {}", e)),
-        }
-    }
-}
-
-pub struct PublishToTeamTool {
-    shared_state: Arc<SharedTaskStateManager>,
-}
-
-impl PublishToTeamTool {
-    pub fn new(shared_state: Arc<SharedTaskStateManager>) -> Self {
-        Self { shared_state }
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct PublishToTeamParams {
-    pub artifact_id: Uuid,
-    pub scope: PublishScope,
-    pub summary: Option<String>,
-}
-
-#[async_trait::async_trait]
-impl Tool for PublishToTeamTool {
-    fn name(&self) -> &str {
-        "publish_to_team"
-    }
-
-    fn description(&self) -> &str {
-        "Publish an artifact to team shared state"
-    }
-
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-        _event_sink: mpsc::Sender<StreamEvent>,
-    ) -> ToolResult {
-        let params: PublishToTeamParams = match serde_json::from_value(params) {
-            Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid params: {}", e)),
-        };
-
-        // Note: team_instance_id would be passed from context in real impl
-        ToolResult::success(serde_json::json!({
-            "published": true,
-            "artifact_id": params.artifact_id,
-            "scope": params.scope,
-        }))
-    }
-}
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/tools/team_tools.rs
-git commit -m "feat(team): add supervisor agent tools"
-```
-
----
+- [ ] **Step 1: (See 04-23 plan for tool implementation details)**
 
 ## Phase 7: Testing
 
 ### Task 12: Integration Tests
 
+**Status:** Deferred - integration tests pending full system wiring
+
 **Files:**
-- Create: `tests/v1_team_supervisor_tests.rs`
+- Location: `crates/torque-harness/tests/`
 
-- [ ] **Step 1: Write supervisor tests**
-
-```rust
-mod common;
-
-use common::setup_test_db_or_skip;
-use serial_test::serial;
-use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
-use torque_harness::models::v1::team::{TeamDefinitionCreate, TeamInstanceCreate};
-use torque_harness::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository, PostgresAgentDefinitionRepository,
-    PostgresAgentInstanceRepository, PostgresTeamDefinitionRepository,
-    PostgresTeamInstanceRepository, PostgresTeamMemberRepository,
-};
-use torque_harness::service::TeamService;
-use std::sync::Arc;
-
-#[tokio::test]
-#[serial]
-async fn test_team_task_triage_simple() {
-    let db = match setup_test_db_or_skip().await {
-        Some(db) => db,
-        None => return,
-    };
-
-    // Setup
-    let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
-    let team_def_repo = Arc::new(PostgresTeamDefinitionRepository::new(db.clone()));
-    let team_inst_repo = Arc::new(PostgresTeamInstanceRepository::new(db.clone()));
-    let team_member_repo = Arc::new(PostgresTeamMemberRepository::new(db.clone()));
-
-    let team_service = TeamService::new(
-        team_def_repo.clone(),
-        team_inst_repo.clone(),
-        team_member_repo.clone(),
-        task_repo.clone(), // TODO: add task repo
-    );
-
-    // Create supervisor
-    let supervisor_def = def_repo
-        .create(&AgentDefinitionCreate {
-            name: "Supervisor".into(),
-            description: None,
-            system_prompt: None,
-            tool_policy: serde_json::json!({}),
-            memory_policy: serde_json::json!({}),
-            delegation_policy: serde_json::json!({}),
-            limits: serde_json::json!({}),
-            default_model_policy: serde_json::json!({}),
-        })
-        .await
-        .expect("create supervisor");
-
-    // Create team
-    let team_def = team_def_repo
-        .create(&TeamDefinitionCreate {
-            name: "Test Team".into(),
-            description: None,
-            supervisor_agent_definition_id: supervisor_def.id,
-            sub_agents: vec![],
-            policy: serde_json::json!({}),
-        })
-        .await
-        .expect("create team def");
-
-    let team_instance = team_inst_repo
-        .create(&TeamInstanceCreate {
-            team_definition_id: team_def.id,
-        })
-        .await
-        .expect("create team instance");
-
-    // Create task
-    let task = team_service
-        .create_team_task(team_instance.id, "Simple goal", None)
-        .await
-        .expect("create task");
-
-    // Verify task created
-    assert_eq!(task.goal, "Simple goal");
-
-    // TODO: Execute supervisor and verify triage
-
-    // Cleanup
-    team_inst_repo.delete(team_instance.id).await.expect("cleanup");
-    team_def_repo.delete(team_def.id).await.expect("cleanup");
-    def_repo.delete(supervisor_def.id).await.expect("cleanup");
-}
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add tests/v1_team_supervisor_tests.rs
-git commit -m "test(team): add supervisor integration tests"
-```
+**Implementation Notes:**
+- Supervisor tools are implemented but integration with full system wiring is pending
+- Mode handlers exist but `wait_for_delegation_completion` integration is pending (Task 16 in 04-23 plan)
+- Triage currently uses length heuristic - LLM-driven triage is Task 15 in 04-23 plan
 
 ---
 
 ## Summary
 
-The implementation is divided into 7 phases:
+| Phase | Task | Status |
+|-------|------|--------|
+| 1 | Database Migrations | ✅ Done |
+| 1 | Models (TeamTask, SharedTaskState, TeamEvent) | ✅ Done |
+| 2 | Repository Layer | ✅ Done |
+| 3 | SelectorResolver | ✅ Done |
+| 3 | SharedTaskStateManager | ✅ Done |
+| 3 | TeamEventEmitter | ✅ Done |
+| 3 | Mode Handlers | ✅ Done |
+| 4 | TeamSupervisor | ✅ Done |
+| 5 | TeamService Integration | ✅ Done |
+| 5 | API Endpoints | ✅ Done |
+| 6 | Supervisor Agent Tools | ✅ Done (see 04-23 plan) |
+| 7 | Integration Tests | ⏳ Pending |
 
-1. **Database & Models** - 2 tasks (migrations, models)
-2. **Repository Layer** - 1 task (repository traits and implementations)
-3. **Core Services** - 4 tasks (SelectorResolver, SharedTaskStateManager, TeamEventEmitter, ModeHandlers)
-4. **Supervisor Orchestration** - 1 task (TeamSupervisor)
-5. **TeamService Integration & API** - 1 task (update TeamService, add API endpoints)
-6. **Supervisor Agent Tools** - 1 task (team tools for supervisor agent)
-7. **Testing** - 1 task (integration tests)
+**Total: 12 tasks** (11 infrastructure + integration tests)
 
-Total: 11 tasks
-
----
-
-## Execution Options
-
-**1. Subagent-Driven (recommended)** - Dispatch a fresh subagent per task, review between tasks
-
-**2. Inline Execution** - Execute tasks in this session using executing-plans
-
-Which approach?
+**Next Steps:** See `2026-04-23-team-supervisor-agent-plan.md` for Supervisor Agent and LLM-driven triage implementation.
