@@ -3,8 +3,9 @@ mod common;
 use chrono::{Duration, Utc};
 use common::setup_test_db_or_skip;
 use serial_test::serial;
-use torque_harness::models::v1::memory::MemoryDecisionLog;
+use torque_harness::models::v1::memory::{MemoryDecisionLog, MemoryWriteCandidate, MemoryWriteCandidateStatus};
 use torque_harness::repository::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
+use uuid::Uuid;
 
 async fn setup_repo() -> Option<PostgresMemoryRepositoryV1> {
     let db = setup_test_db_or_skip().await?;
@@ -33,6 +34,56 @@ fn create_decision_log(
             )
             .await
             .expect("decision should be logged")
+        })
+}
+
+fn create_decision_log_with_candidate(
+    repo: &PostgresMemoryRepositoryV1,
+    agent_instance_id: Uuid,
+    decision_type: &str,
+    processed_by: &str,
+) -> (MemoryDecisionLog, Uuid) {
+    let factors = serde_json::json!({
+        "reason": "test decision",
+        "confidence": 0.95
+    });
+
+    let candidate_id = Uuid::new_v4();
+    let now = chrono::Utc::now();
+
+    let candidate = MemoryWriteCandidate {
+        id: candidate_id,
+        agent_instance_id,
+        team_instance_id: None,
+        content: serde_json::json!({"key": "test", "value": "test"}),
+        reasoning: Some("test reasoning".to_string()),
+        status: MemoryWriteCandidateStatus::Pending,
+        memory_entry_id: None,
+        reviewed_by: None,
+        created_at: now,
+        reviewed_at: None,
+        updated_at: now,
+    };
+
+    tokio::runtime::Handle::current()
+        .block_on(async {
+            repo.create_candidate(&candidate)
+                .await
+                .expect("candidate should be created");
+
+            let decision = repo
+                .log_decision(
+                    Some(candidate_id),
+                    None,
+                    decision_type,
+                    Some("test reason"),
+                    factors,
+                    processed_by,
+                )
+                .await
+                .expect("decision should be logged");
+
+            (decision, candidate_id)
         })
 }
 
@@ -182,18 +233,38 @@ async fn list_decisions_combines_multiple_filters() {
         None => return,
     };
 
+    let now = Utc::now();
+    let yesterday = now - Duration::days(1);
+    let tomorrow = now + Duration::days(1);
+
     create_decision_log(&repo, "approval", "system");
     create_decision_log(&repo, "rejection", "system");
-    create_decision_log(&repo, "approval", "admin");
+    let _decision_in_range = create_decision_log(&repo, "approval", "admin");
+
+    let old_decision = {
+        let _old_time = now - Duration::days(30);
+        repo.log_decision(
+            None,
+            None,
+            "approval",
+            Some("old decision"),
+            serde_json::json!({"reason": "old"}),
+            "system",
+        )
+        .await
+        .expect("decision should be logged")
+    };
 
     let decisions = repo
-        .list_decisions(None, Some("approval"), None, None, 100, 0)
+        .list_decisions(None, Some("approval"), Some(yesterday), Some(tomorrow), 100, 0)
         .await
         .expect("list_decisions should succeed");
 
-    for decision in decisions {
+    for decision in &decisions {
         assert_eq!(decision.decision_type, "approval");
+        assert!(decision.created_at >= yesterday && decision.created_at <= tomorrow);
     }
+    assert!(!decisions.iter().any(|d| d.id == old_decision.id));
 }
 
 #[tokio::test]
@@ -212,4 +283,41 @@ async fn list_decisions_returns_empty_when_no_matches() {
         .expect("list_decisions should succeed");
 
     assert!(decisions.is_empty());
+}
+
+#[tokio::test]
+#[serial]
+async fn list_decisions_filters_by_agent_instance_id() {
+    let repo = match setup_repo().await {
+        Some(r) => r,
+        None => return,
+    };
+
+    let agent_a = Uuid::new_v4();
+    let agent_b = Uuid::new_v4();
+
+    let (decision_a, _candidate_a) =
+        create_decision_log_with_candidate(&repo, agent_a, "approval", "system");
+    let (_decision_b, _candidate_b) =
+        create_decision_log_with_candidate(&repo, agent_b, "rejection", "system");
+    let (_decision_no_candidate, _) =
+        create_decision_log_with_candidate(&repo, agent_a, "review", "system");
+
+    let decisions_for_a = repo
+        .list_decisions(Some(agent_a), None, None, None, 100, 0)
+        .await
+        .expect("list_decisions should succeed");
+
+    assert!(!decisions_for_a.is_empty());
+    for decision in &decisions_for_a {
+        assert_eq!(decision.candidate_id, Some(decision_a.candidate_id.unwrap()));
+    }
+
+    let decisions_for_b = repo
+        .list_decisions(Some(agent_b), None, None, None, 100, 0)
+        .await
+        .expect("list_decisions should succeed");
+
+    assert_eq!(decisions_for_b.len(), 1);
+    assert_eq!(decisions_for_b[0].decision_type, "rejection");
 }

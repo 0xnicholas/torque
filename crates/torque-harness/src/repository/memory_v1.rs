@@ -712,56 +712,248 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         limit: i64,
         offset: i64,
     ) -> anyhow::Result<Vec<MemoryDecisionLog>> {
-        let mut query = String::from(
-            "SELECT mdl.* FROM memory_decision_log mdl WHERE 1=1",
-        );
-        let mut param_index = 1;
+        let rows = if let (Some(agent_id), Some(dt), Some(start), Some(end)) =
+            (agent_instance_id, decision_type, start_date, end_date)
+        {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.decision_type = $2
+                  AND mdl.created_at >= $3
+                  AND mdl.created_at <= $4
+                ORDER BY mdl.created_at DESC
+                LIMIT $5 OFFSET $6
+                "#,
+            )
+            .bind(agent_id)
+            .bind(dt)
+            .bind(start)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(dt), Some(start)) =
+            (agent_instance_id, decision_type, start_date)
+        {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.decision_type = $2
+                  AND mdl.created_at >= $3
+                ORDER BY mdl.created_at DESC
+                LIMIT $4 OFFSET $5
+                "#,
+            )
+            .bind(agent_id)
+            .bind(dt)
+            .bind(start)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(dt), Some(end)) =
+            (agent_instance_id, decision_type, end_date)
+        {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.decision_type = $2
+                  AND mdl.created_at <= $3
+                ORDER BY mdl.created_at DESC
+                LIMIT $4 OFFSET $5
+                "#,
+            )
+            .bind(agent_id)
+            .bind(dt)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(start), Some(end)) =
+            (agent_instance_id, start_date, end_date)
+        {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.created_at >= $2
+                  AND mdl.created_at <= $3
+                ORDER BY mdl.created_at DESC
+                LIMIT $4 OFFSET $5
+                "#,
+            )
+            .bind(agent_id)
+            .bind(start)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(dt)) = (agent_instance_id, decision_type) {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.decision_type = $2
+                ORDER BY mdl.created_at DESC
+                LIMIT $3 OFFSET $4
+                "#,
+            )
+            .bind(agent_id)
+            .bind(dt)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(start)) = (agent_instance_id, start_date) {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.created_at >= $2
+                ORDER BY mdl.created_at DESC
+                LIMIT $3 OFFSET $4
+                "#,
+            )
+            .bind(agent_id)
+            .bind(start)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(agent_id), Some(end)) = (agent_instance_id, end_date) {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                  AND mdl.created_at <= $2
+                ORDER BY mdl.created_at DESC
+                LIMIT $3 OFFSET $4
+                "#,
+            )
+            .bind(agent_id)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let Some(agent_id) = agent_instance_id {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+                WHERE wc.agent_instance_id = $1
+                ORDER BY mdl.created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(agent_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(dt), Some(start), Some(end)) = (decision_type, start_date, end_date) {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                WHERE mdl.decision_type = $1
+                  AND mdl.created_at >= $2
+                  AND mdl.created_at <= $3
+                ORDER BY mdl.created_at DESC
+                LIMIT $4 OFFSET $5
+                "#,
+            )
+            .bind(dt)
+            .bind(start)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let Some(dt) = decision_type {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                WHERE mdl.decision_type = $1
+                ORDER BY mdl.created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(dt)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let (Some(start), Some(end)) = (start_date, end_date) {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                WHERE mdl.created_at >= $1
+                  AND mdl.created_at <= $2
+                ORDER BY mdl.created_at DESC
+                LIMIT $3 OFFSET $4
+                "#,
+            )
+            .bind(start)
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let Some(start) = start_date {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                WHERE mdl.created_at >= $1
+                ORDER BY mdl.created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(start)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else if let Some(end) = end_date {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                WHERE mdl.created_at <= $1
+                ORDER BY mdl.created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(end)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        } else {
+            sqlx::query_as::<_, MemoryDecisionLog>(
+                r#"
+                SELECT mdl.* FROM memory_decision_log mdl
+                ORDER BY mdl.created_at DESC
+                LIMIT $1 OFFSET $2
+                "#,
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(self.db.pool())
+            .await?
+        };
 
-        if agent_instance_id.is_some() {
-            query.push_str(&format!(
-                " AND mdl.candidate_id IN (SELECT id FROM v1_memory_write_candidates WHERE agent_instance_id = ${})",
-                param_index
-            ));
-            param_index += 1;
-        }
-
-        if decision_type.is_some() {
-            query.push_str(&format!(" AND mdl.decision_type = ${}", param_index));
-            param_index += 1;
-        }
-
-        if start_date.is_some() {
-            query.push_str(&format!(" AND mdl.created_at >= ${}", param_index));
-            param_index += 1;
-        }
-
-        if end_date.is_some() {
-            query.push_str(&format!(" AND mdl.created_at <= ${}", param_index));
-            param_index += 1;
-        }
-
-        query.push_str(&format!(
-            " ORDER BY mdl.created_at DESC LIMIT ${} OFFSET ${}",
-            param_index, param_index + 1
-        ));
-
-        let mut builder = sqlx::query_as::<_, MemoryDecisionLog>(&query);
-
-        if let Some(agent_id) = agent_instance_id {
-            builder = builder.bind(agent_id);
-        }
-        if let Some(dt) = decision_type {
-            builder = builder.bind(dt);
-        }
-        if let Some(start) = start_date {
-            builder = builder.bind(start);
-        }
-        if let Some(end) = end_date {
-            builder = builder.bind(end);
-        }
-        builder = builder.bind(limit).bind(offset);
-
-        let rows = builder.fetch_all(self.db.pool()).await?;
         Ok(rows)
     }
 
