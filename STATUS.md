@@ -126,6 +126,28 @@
 
 ---
 
+## P4: Full Message History Replay (COMPLETED)
+
+### Message History Endpoint
+- `GET /v1/checkpoints/{id}/messages` - Returns all messages for a checkpoint
+- Messages reconstructed from event replay
+- Includes sequence ordering and timestamps
+
+### Resume with Rebuilt State
+- `POST /v1/checkpoints/{id}/resume` - Returns messages and rebuilt state
+- Full execution context reconstruction from checkpoint
+- Terminal state detection before re-execution
+
+### Event Replay for State Reconstruction
+- Event replay service for checkpoint recovery
+- Sequential event processing for state reconstruction
+- Support for delegation and approval event types
+
+**Implementation:** `crates/torque-harness/src/service/recovery.rs`, `repository/checkpoint.rs`, `service/event_replay.rs`, `api/v1/checkpoints.rs`
+**Tests:** `checkpoint_recovery_tests` (8 tests)
+
+---
+
 ## Phase 5: Checkpoint & Recovery (COMPLETED)
 
 ### Snapshot Format
@@ -396,10 +418,9 @@
 
 ## Known Limitations (Post-MVP)
 
-1. **Full message history replay** - MVP restarts execution from checkpoint; replay is future work
-2. **Operator escalation endpoints** - For high-severity reconciliation issues
-3. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
-4. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
+1. **Operator escalation endpoints** - For high-severity reconciliation issues
+2. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
+3. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
 
 ---
 
@@ -448,7 +469,6 @@ a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 ## Next Steps
 
 ### Future
-- Full message history replay
 - Operator escalation endpoints
 - Advanced tool governance
 - True async execution with webhooks
