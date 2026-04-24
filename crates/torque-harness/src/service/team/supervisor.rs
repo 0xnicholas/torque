@@ -238,44 +238,19 @@ impl TeamSupervisor {
     }
 
     async fn triage(&self, task: &TeamTask) -> anyhow::Result<TriageResult> {
-        {
+        let agent = {
             let guard = self.supervisor_agent.lock().await;
-            if let Some(ref agent) = *guard {
-                match agent.triage(&task.goal).await {
-                    Ok(result) => return Ok(result),
-                    Err(e) => {
-                        tracing::warn!("LLM triage failed, falling back to heuristic: {}", e);
-                    }
+            match &*guard {
+                Some(agent) => agent.triage(&task.goal).await?,
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "SupervisorAgent not available - LLM client may not be configured"
+                    ));
                 }
             }
-        }
-
-        let complexity = if task.goal.len() > 200 {
-            TaskComplexity::Complex
-        } else if task.goal.len() > 100 {
-            TaskComplexity::Medium
-        } else {
-            TaskComplexity::Simple
         };
 
-        let (processing_path, selected_mode) = match complexity {
-            TaskComplexity::Simple => (ProcessingPath::SingleRoute, TeamMode::Route),
-            TaskComplexity::Medium => (ProcessingPath::GuidedDelegate, TeamMode::Route),
-            TaskComplexity::Complex => (ProcessingPath::StructuredOrchestration, TeamMode::Tasks),
-        };
-
-        Ok(TriageResult {
-            complexity: complexity.clone(),
-            processing_path,
-            selected_mode: selected_mode.clone(),
-            lead_member_ref: None,
-            rationale: format!(
-                "Heuristic triage fallback: {:?} complexity (goal len: {}), using {:?} mode.",
-                complexity,
-                task.goal.len(),
-                selected_mode
-            ),
-        })
+        Ok(agent)
     }
 }
 
