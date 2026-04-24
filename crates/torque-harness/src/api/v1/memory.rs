@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::models::v1::memory::{
-    MemoryWriteCandidateCreate, MemoryWriteCandidateStatus, MergeCandidateRequest,
+    MemoryDecisionLog, MemoryWriteCandidateCreate, MemoryWriteCandidateStatus, MergeCandidateRequest,
     RejectCandidateRequest, SemanticSearchQuery, SemanticSearchResult,
 };
 use crate::service::ServiceContainer;
@@ -11,8 +11,10 @@ use axum::{
     response::sse::{Event, Sse},
     Json,
 };
+use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use llm::OpenAiClient;
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -115,6 +117,72 @@ pub async fn list_candidates(
     } else {
         None
     };
+    Ok(Json(ListResponse {
+        data: rows,
+        pagination: Pagination {
+            next_cursor,
+            prev_cursor: q.cursor,
+            has_more,
+        },
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DecisionListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    pub cursor: Option<String>,
+    pub agent_instance_id: Option<Uuid>,
+    pub decision_type: Option<String>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+}
+
+fn default_limit() -> i64 {
+    20
+}
+
+pub async fn list_decisions(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Query(q): Query<DecisionListQuery>,
+) -> Result<Json<ListResponse<MemoryDecisionLog>>, (StatusCode, Json<ErrorBody>)> {
+    let limit = q.limit.clamp(1, 100);
+    let offset = q
+        .cursor
+        .as_ref()
+        .and_then(|c| c.parse::<i64>().ok())
+        .unwrap_or(0);
+
+    let rows = services
+        .memory
+        .list_decisions(
+            q.agent_instance_id,
+            q.decision_type.as_deref(),
+            q.start_date,
+            q.end_date,
+            limit,
+            offset,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
+    let has_more = rows.len() >= limit as usize;
+    let next_cursor = if has_more {
+        Some((offset + limit).to_string())
+    } else {
+        None
+    };
+
     Ok(Json(ListResponse {
         data: rows,
         pagination: Pagination {

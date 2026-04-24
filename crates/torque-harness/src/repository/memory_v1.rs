@@ -137,6 +137,16 @@ pub trait MemoryRepositoryV1: Send + Sync {
         processed_by: &str,
     ) -> anyhow::Result<MemoryDecisionLog>;
 
+    async fn list_decisions(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        decision_type: Option<&str>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryDecisionLog>>;
+
     // Backfill
     async fn get_entries_without_embedding(&self, limit: i64) -> anyhow::Result<Vec<MemoryEntry>>;
 
@@ -691,6 +701,68 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         .await?;
 
         Ok(row)
+    }
+
+    async fn list_decisions(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        decision_type: Option<&str>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryDecisionLog>> {
+        let mut query = String::from(
+            "SELECT mdl.* FROM memory_decision_log mdl WHERE 1=1",
+        );
+        let mut param_index = 1;
+
+        if agent_instance_id.is_some() {
+            query.push_str(&format!(
+                " AND mdl.candidate_id IN (SELECT id FROM v1_memory_write_candidates WHERE agent_instance_id = ${})",
+                param_index
+            ));
+            param_index += 1;
+        }
+
+        if decision_type.is_some() {
+            query.push_str(&format!(" AND mdl.decision_type = ${}", param_index));
+            param_index += 1;
+        }
+
+        if start_date.is_some() {
+            query.push_str(&format!(" AND mdl.created_at >= ${}", param_index));
+            param_index += 1;
+        }
+
+        if end_date.is_some() {
+            query.push_str(&format!(" AND mdl.created_at <= ${}", param_index));
+            param_index += 1;
+        }
+
+        query.push_str(&format!(
+            " ORDER BY mdl.created_at DESC LIMIT ${} OFFSET ${}",
+            param_index, param_index + 1
+        ));
+
+        let mut builder = sqlx::query_as::<_, MemoryDecisionLog>(&query);
+
+        if let Some(agent_id) = agent_instance_id {
+            builder = builder.bind(agent_id);
+        }
+        if let Some(dt) = decision_type {
+            builder = builder.bind(dt);
+        }
+        if let Some(start) = start_date {
+            builder = builder.bind(start);
+        }
+        if let Some(end) = end_date {
+            builder = builder.bind(end);
+        }
+        builder = builder.bind(limit).bind(offset);
+
+        let rows = builder.fetch_all(self.db.pool()).await?;
+        Ok(rows)
     }
 
     async fn get_entries_without_embedding(&self, limit: i64) -> anyhow::Result<Vec<MemoryEntry>> {

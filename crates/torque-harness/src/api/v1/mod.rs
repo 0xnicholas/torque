@@ -174,4 +174,5 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
             "/v1/memory-notifications/sse",
             get(memory::review_notifications_sse),
         )
+        .route("/v1/memory/decisions", get(memory::list_decisions))
 }

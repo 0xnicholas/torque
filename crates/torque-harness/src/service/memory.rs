@@ -6,6 +6,7 @@ use crate::models::v1::memory::{
 };
 use crate::models::{MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus};
 use crate::repository::{MemoryRepository, MemoryRepositoryV1};
+use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -298,6 +299,27 @@ impl MemoryService {
                 decision_reason,
                 factors,
                 processed_by,
+            )
+            .await
+    }
+
+    pub async fn list_decisions(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        decision_type: Option<&str>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryDecisionLog>> {
+        self.repo_v1
+            .list_decisions(
+                agent_instance_id,
+                decision_type,
+                start_date,
+                end_date,
+                limit,
+                offset,
             )
             .await
     }
