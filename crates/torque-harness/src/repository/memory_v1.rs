@@ -1,9 +1,9 @@
 use crate::db::Database;
 use crate::models::v1::gating::SimilarMemoryResult;
 use crate::models::v1::memory::{
-    HybridSearchRow, MemoryCategory, MemoryDecisionLog, MemoryEntry, MemoryEntryRow,
-    MemoryWriteCandidate, MemoryWriteCandidateStatus, SemanticSearchResult, SemanticSearchRow,
-    SessionMemoryEntry,
+    DecisionStats, HybridSearchRow, MemoryCategory, MemoryDecisionLog, MemoryEntry, MemoryEntryRow,
+    MemoryWriteCandidate, MemoryWriteCandidateStatus, RejectionReasonCount, SemanticSearchResult,
+    SemanticSearchRow, SessionMemoryEntry,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -151,6 +151,13 @@ pub trait MemoryRepositoryV1: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> anyhow::Result<Vec<MemoryDecisionLog>>;
+
+    async fn get_decision_stats(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<DecisionStats>;
 
     // Backfill
     async fn get_entries_without_embedding(&self, limit: i64) -> anyhow::Result<Vec<MemoryEntry>>;
@@ -1034,5 +1041,210 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
         .await?;
 
         Ok(row.map(Into::into))
+    }
+
+    async fn get_decision_stats(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> anyhow::Result<DecisionStats> {
+        let base_query = if let Some(agent_id) = agent_instance_id {
+            r#"
+            SELECT mdl.decision_type, COUNT(*) as count
+            FROM memory_decision_log mdl
+            JOIN v1_memory_write_candidates wc ON mdl.candidate_id = wc.id
+            WHERE wc.agent_instance_id = $1
+            "#
+        } else {
+            r#"
+            SELECT mdl.decision_type, COUNT(*) as count
+            FROM memory_decision_log mdl
+            WHERE 1=1
+            "#
+        };
+
+        let start_filter = if start_date.is_some() { " AND mdl.created_at >= $2" } else { "" };
+        let end_filter = if end_date.is_some() {
+            if start_date.is_some() { " AND mdl.created_at <= $3" } else { " AND mdl.created_at <= $2" }
+        } else { "" };
+
+        let group_by = " GROUP BY mdl.decision_type";
+
+        let (type_rows, rejection_rows): (Vec<(String, i64)>, Vec<(String, i64)>) =
+            if let (Some(agent_id), Some(start), Some(end)) = (agent_instance_id, start_date, end_date) {
+                let query = format!("{}{}{}{}", base_query, start_filter, end_filter, group_by);
+                let rejection_query = format!("{}{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, end_filter, group_by);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(agent_id)
+                    .bind(start)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(agent_id)
+                    .bind(start)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let (Some(agent_id), Some(start)) = (agent_instance_id, start_date) {
+                let query = format!("{}{}{}", base_query, start_filter, group_by);
+                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, group_by);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(agent_id)
+                    .bind(start)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(agent_id)
+                    .bind(start)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let (Some(agent_id), Some(end)) = (agent_instance_id, end_date) {
+                let query = format!("{}{}{}", base_query, end_filter, group_by);
+                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, end_filter, group_by);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(agent_id)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(agent_id)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let Some(agent_id) = agent_instance_id {
+                let query = format!("{}{}", base_query, group_by);
+                let rejection_query = format!("{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(agent_id)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(agent_id)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let (Some(start), Some(end)) = (start_date, end_date) {
+                let query = format!("{}{}{}{}", base_query, start_filter, end_filter, group_by);
+                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, end_filter);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(start)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(start)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let Some(start) = start_date {
+                let query = format!("{}{}{}", base_query, start_filter, group_by);
+                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, group_by);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(start)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(start)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else if let Some(end) = end_date {
+                let query = format!("{}{}{}", base_query, end_filter, group_by);
+                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, end_filter, group_by);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .bind(end)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            } else {
+                let query = format!("{} {}", base_query, group_by);
+                let rejection_query = format!("{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query);
+
+                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
+                    .fetch_all(self.db.pool())
+                    .await?;
+
+                (type_rows, rejection_rows)
+            };
+
+        let mut approved = 0i64;
+        let mut rejected = 0i64;
+        let mut merged = 0i64;
+        let mut review = 0i64;
+
+        for (decision_type, count) in type_rows {
+            match decision_type.as_str() {
+                "approved" => approved = count,
+                "rejected" => rejected = count,
+                "merged" => merged = count,
+                "review" => review = count,
+                _ => {}
+            }
+        }
+
+        let total_decisions = approved + rejected + merged + review;
+        let approval_rate = if total_decisions > 0 {
+            approved as f64 / total_decisions as f64
+        } else {
+            0.0
+        };
+        let rejection_rate = if total_decisions > 0 {
+            rejected as f64 / total_decisions as f64
+        } else {
+            0.0
+        };
+
+        let top_rejection_reasons: Vec<RejectionReasonCount> = rejection_rows
+            .into_iter()
+            .filter(|(reason, _)| !reason.is_empty())
+            .map(|(reason, count)| RejectionReasonCount { reason, count })
+            .collect();
+
+        Ok(DecisionStats {
+            total_decisions,
+            approved,
+            rejected,
+            merged,
+            review,
+            approval_rate,
+            rejection_rate,
+            avg_quality_score: None,
+            top_rejection_reasons,
+        })
     }
 }

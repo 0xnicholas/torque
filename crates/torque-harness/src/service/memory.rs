@@ -1,6 +1,6 @@
 use crate::embedding::{memory_to_embedding_text, EmbeddingGenerator};
 use crate::models::v1::memory::{
-    CompactionJob, CompactionJobStatus, MemoryCategory, MemoryDecisionLog,
+    CompactionJob, CompactionJobStatus, DecisionStats, MemoryCategory, MemoryDecisionLog,
     MemoryEntry as V1MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus,
     SemanticSearchQuery, SemanticSearchResult, SessionMemoryEntry, SessionMemorySet,
 };
@@ -336,6 +336,17 @@ impl MemoryService {
                 limit,
                 offset,
             )
+            .await
+    }
+
+    pub async fn get_decision_stats(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> anyhow::Result<DecisionStats> {
+        self.repo_v1
+            .get_decision_stats(agent_instance_id, start_date, end_date)
             .await
     }
 

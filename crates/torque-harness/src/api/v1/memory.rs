@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::models::v1::memory::{
-    CompactionJob, MemoryCategory, MemoryDecisionLog, MemoryWriteCandidateCreate,
+    CompactionJob, DecisionStats, MemoryCategory, MemoryDecisionLog, MemoryWriteCandidateCreate,
     MemoryWriteCandidateStatus, MergeCandidateRequest, RejectCandidateRequest, SemanticSearchQuery,
     SemanticSearchResult,
 };
@@ -846,4 +846,33 @@ pub async fn trigger_compaction(
             )
         })?;
     Ok(Json(job))
+}
+
+#[derive(serde::Deserialize)]
+pub struct DecisionStatsQuery {
+    pub agent_instance_id: Option<Uuid>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+}
+
+pub async fn get_decision_stats(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Query(q): Query<DecisionStatsQuery>,
+) -> Result<Json<DecisionStats>, (StatusCode, Json<ErrorBody>)> {
+    let stats = services
+        .memory
+        .get_decision_stats(q.agent_instance_id, q.start_date, q.end_date)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+    Ok(Json(stats))
 }

@@ -326,3 +326,23 @@ pub struct MemoryDecisionLog {
     pub processed_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
 }
+
+// Decision Statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionStats {
+    pub total_decisions: i64,
+    pub approved: i64,
+    pub rejected: i64,
+    pub merged: i64,
+    pub review: i64,
+    pub approval_rate: f64,
+    pub rejection_rate: f64,
+    pub avg_quality_score: Option<f64>,
+    pub top_rejection_reasons: Vec<RejectionReasonCount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectionReasonCount {
+    pub reason: String,
+    pub count: i64,
+}
