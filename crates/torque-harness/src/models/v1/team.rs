@@ -52,7 +52,7 @@ pub struct TeamTaskCreate {
     pub parent_task_id: Option<Uuid>,
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct TeamMember {
     pub id: Uuid,
     pub team_instance_id: Uuid,
@@ -75,7 +75,7 @@ fn default_member_role() -> String {
     "member".to_string()
 }
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, FromRow)]
 pub struct TeamTask {
     pub id: Uuid,
     pub team_instance_id: Uuid,
@@ -89,6 +89,8 @@ pub struct TeamTask {
     pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub retry_count: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -342,4 +344,34 @@ pub struct PolicyCheckSummary {
     pub resource_available: bool,
     pub approval_required: bool,
     pub risk_level: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TeamRecoveryDisposition {
+    TeamHealthy,
+    TeamDegraded,
+    TeamFailed,
+    AwaitingSupervisor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamRecoveryAssessment {
+    pub team_instance_id: Uuid,
+    pub disposition: TeamRecoveryDisposition,
+    pub failed_member_ids: Vec<Uuid>,
+    pub recommendation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TeamRecoveryAction {
+    Retry,
+    EscalateToSupervisor,
+    NoOp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamTaskRecoveryResult {
+    pub task_id: Uuid,
+    pub action_taken: String,
+    pub new_status: TeamTaskStatus,
 }

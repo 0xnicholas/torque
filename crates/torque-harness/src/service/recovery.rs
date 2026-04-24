@@ -1,11 +1,17 @@
 use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
 use crate::models::v1::checkpoint::{Checkpoint, ContextAnchorType};
 use crate::models::v1::event::Event;
+use crate::models::v1::team::{
+    TeamRecoveryAction, TeamRecoveryAssessment, TeamRecoveryDisposition, TeamTaskRecoveryResult,
+    TeamTaskStatus,
+};
 use crate::repository::{
     AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt, MemoryRepositoryV1,
+    TeamMemberRepository, TeamTaskRepository,
 };
 use crate::service::event_replay::EventReplayRegistry;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -85,6 +91,9 @@ pub struct RecoveryService {
     event_repo: Arc<dyn EventRepositoryExt>,
     event_registry: EventReplayRegistry,
     repo_v1: Option<Arc<dyn MemoryRepositoryV1>>,
+    team_member_repo: Option<Arc<dyn TeamMemberRepository>>,
+    team_task_repo: Option<Arc<dyn TeamTaskRepository>>,
+    task_retry_counts: HashMap<Uuid, u32>,
 }
 
 impl RecoveryService {
@@ -99,6 +108,9 @@ impl RecoveryService {
             event_repo,
             event_registry: EventReplayRegistry::new(),
             repo_v1: None,
+            team_member_repo: None,
+            team_task_repo: None,
+            task_retry_counts: HashMap::new(),
         }
     }
 
@@ -107,6 +119,16 @@ impl RecoveryService {
             repo_v1: Some(repo_v1),
             ..self
         }
+    }
+
+    pub fn with_team_repos(
+        mut self,
+        team_member_repo: Arc<dyn TeamMemberRepository>,
+        team_task_repo: Arc<dyn TeamTaskRepository>,
+    ) -> Self {
+        self.team_member_repo = Some(team_member_repo);
+        self.team_task_repo = Some(team_task_repo);
+        self
     }
 
     /// Assess recovery for a checkpoint without applying it.
@@ -673,5 +695,99 @@ impl RecoveryService {
         }
         tracing::info!("Applied {} recovery resolutions", applied);
         Ok(applied)
+    }
+
+    pub async fn assess_team_recovery(
+        &self,
+        team_instance_id: Uuid,
+    ) -> anyhow::Result<TeamRecoveryAssessment> {
+        let member_repo = self.team_member_repo.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Team member repository not configured")
+        })?;
+
+        let members = member_repo.list_by_team(team_instance_id, 100).await?;
+
+        let failed_member_ids: Vec<Uuid> = members
+            .iter()
+            .filter(|m| m.status == "Failed" || m.status == "failed")
+            .map(|m| m.id)
+            .collect();
+
+        let waiting_member_ids: Vec<Uuid> = members
+            .iter()
+            .filter(|m| m.status == "WaitingMembers" || m.status == "WAITING_MEMBERS")
+            .map(|m| m.id)
+            .collect();
+
+        let total_members = members.len();
+        let failed_count = failed_member_ids.len();
+        let waiting_count = waiting_member_ids.len();
+
+        let disposition = if failed_count == 0 && waiting_count == 0 {
+            TeamRecoveryDisposition::TeamHealthy
+        } else if failed_count > 0 && failed_count < total_members {
+            TeamRecoveryDisposition::TeamDegraded
+        } else if failed_count == total_members && total_members > 0 {
+            TeamRecoveryDisposition::TeamFailed
+        } else if waiting_count > 0 && failed_count == 0 {
+            TeamRecoveryDisposition::AwaitingSupervisor
+        } else {
+            TeamRecoveryDisposition::TeamHealthy
+        };
+
+        let recommendation = match disposition {
+            TeamRecoveryDisposition::TeamHealthy => "Team is operational".to_string(),
+            TeamRecoveryDisposition::TeamDegraded => format!(
+                "Team is degraded with {} failed members out of {}. Consider retry or replacement.",
+                failed_count, total_members
+            ),
+            TeamRecoveryDisposition::TeamFailed => {
+                "All team members have failed. Escalate to supervisor for recovery.".to_string()
+            }
+            TeamRecoveryDisposition::AwaitingSupervisor => {
+                "Team is waiting for supervisor guidance.".to_string()
+            }
+        };
+
+        Ok(TeamRecoveryAssessment {
+            team_instance_id,
+            disposition,
+            failed_member_ids,
+            recommendation,
+        })
+    }
+
+    pub async fn recover_team_task(
+        &mut self,
+        task_id: Uuid,
+    ) -> anyhow::Result<TeamTaskRecoveryResult> {
+        let task_repo = self.team_task_repo.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Team task repository not configured")
+        })?;
+
+        let task = task_repo
+            .get(task_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Task not found: {}", task_id))?;
+
+        let current_retry_count = self.task_retry_counts.get(&task_id).copied().unwrap_or(0);
+
+        let (action_taken, new_status) = if task.status == TeamTaskStatus::Failed {
+            if current_retry_count < 3 {
+                self.task_retry_counts.insert(task_id, current_retry_count + 1);
+                task_repo.update_status(task_id, TeamTaskStatus::Open).await?;
+                (String::from("Retry"), TeamTaskStatus::Open)
+            } else {
+                (String::from("EscalateToSupervisor"), task.status)
+            }
+        } else {
+            (String::from("NoOp"), task.status)
+        };
+
+        Ok(TeamTaskRecoveryResult {
+            task_id,
+            action_taken,
+            new_status,
+        })
     }
 }

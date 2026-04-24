@@ -219,6 +219,7 @@ struct TeamTaskRow {
     idempotency_key: Option<String>,
     created_at: chrono::DateTime<Utc>,
     completed_at: Option<chrono::DateTime<Utc>>,
+    retry_count: Option<i32>,
 }
 
 impl From<TeamTaskRow> for TeamTask {
@@ -242,6 +243,7 @@ impl From<TeamTaskRow> for TeamTask {
             idempotency_key: row.idempotency_key,
             created_at: row.created_at,
             completed_at: row.completed_at,
+            retry_count: row.retry_count.unwrap_or(0) as u32,
         }
     }
 }
