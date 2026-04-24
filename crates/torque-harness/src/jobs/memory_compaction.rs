@@ -116,8 +116,11 @@ impl MemoryCompactionJob {
             None
         };
 
+        let entry_ids: Vec<Uuid> = entries.iter().map(|e| e.id).collect();
+
         Ok(CompactionRecommendation {
             entry_id,
+            entry_ids,
             strategy,
             reason,
             supersedes,
@@ -166,7 +169,43 @@ impl MemoryCompactionJob {
         };
 
         self.memory_repo.create_candidate(&candidate).await?;
+
+        if recommendation.strategy == CompactionStrategy::Summarize {
+            self.summarize_entries(recommendation.entry_ids.clone()).await?;
+        }
+
         Ok(())
+    }
+
+    async fn summarize_entries(&self, entry_ids: Vec<Uuid>) -> anyhow::Result<MemoryEntry> {
+        let entries = self.memory_repo.get_entries_by_ids(entry_ids).await?;
+        if entries.is_empty() {
+            anyhow::bail!("No entries found");
+        }
+
+        let summary_text = entries
+            .iter()
+            .map(|e| format!("[{:?}] {}: {}", e.category, e.key, e.value))
+            .collect::<Vec<_>>()
+            .join("\n---\n");
+
+        let summarized = MemoryEntry {
+            id: Uuid::new_v4(),
+            key: format!("_compacted_{}", Uuid::new_v4()),
+            value: serde_json::json!(summary_text),
+            category: MemoryCategory::Session,
+            agent_instance_id: entries.first().and_then(|e| e.agent_instance_id),
+            team_instance_id: entries.first().and_then(|e| e.team_instance_id),
+            source_candidate_id: None,
+            superseded_by: None,
+            embedding_model: None,
+            access_count: 0,
+            last_accessed_at: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        self.memory_repo.create_entry(&summarized).await
     }
 }
 

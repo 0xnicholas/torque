@@ -134,10 +134,12 @@ fn test_compaction_strategy_serialization() {
     assert!(json_drop.contains("Drop"));
 }
 
-#[test]
-fn test_compaction_recommendation_struct() {
+#[tokio::test]
+async fn test_compaction_recommendation_struct() {
+    let entry_id = Uuid::new_v4();
     let recommendation = CompactionRecommendation {
-        entry_id: Uuid::new_v4(),
+        entry_id,
+        entry_ids: vec![entry_id],
         strategy: CompactionStrategy::Summarize,
         reason: "Test reason".to_string(),
         supersedes: Some(Uuid::new_v4()),

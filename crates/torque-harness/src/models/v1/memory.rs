@@ -357,7 +357,7 @@ pub struct RejectionReasonCount {
     pub count: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CompactionStrategy {
     Summarize,
     Merge,
@@ -368,6 +368,7 @@ pub enum CompactionStrategy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompactionRecommendation {
     pub entry_id: Uuid,
+    pub entry_ids: Vec<Uuid>,
     pub strategy: CompactionStrategy,
     pub reason: String,
     pub supersedes: Option<Uuid>,
