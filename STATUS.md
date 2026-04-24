@@ -49,6 +49,22 @@
 
 ---
 
+## Phase 5: Capability Registry (COMPLETED)
+
+### Tasks 1-7: Complete
+- [x] CapabilityRef newtype with `as_str()` method
+- [x] ResolvedCandidate and CapabilityResolution types
+- [x] list_by_profile to BindingRepository
+- [x] get_by_name to ProfileRepository
+- [x] resolve_by_ref implementation
+- [x] POST /v1/capabilities/resolve endpoint
+- [x] Tests with proper isolation (UUID suffixes)
+
+**Implementation:** `crates/torque-harness/src/models/v1/capability.rs`, `service/capability.rs`, `repository/capability.rs`, `api/v1/capabilities.rs`
+**Tests:** 3 capability_resolution_tests passing
+
+---
+
 ## Phase 2: Team Execution (COMPLETED)
 
 ---
