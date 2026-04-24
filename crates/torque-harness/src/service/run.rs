@@ -1,6 +1,6 @@
 use crate::agent::stream::StreamEvent;
 use crate::config;
-use crate::infra::llm::{LlmClient, LlmMessage};
+use crate::infra::llm::LlmClient;
 use crate::kernel_bridge::{
     run_request_to_execution_request, v1_agent_definition_to_kernel, KernelRuntimeHandle,
 };
@@ -25,6 +25,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ExecuteRequest {
     pub agent_definition_id: Uuid,
     pub agent_instance_id: Uuid,
@@ -32,6 +33,7 @@ pub struct ExecuteRequest {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ExecuteResponse {
     pub state: torque_kernel::ExecutionResult,
 }
