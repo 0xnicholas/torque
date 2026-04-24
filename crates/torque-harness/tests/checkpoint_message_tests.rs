@@ -359,3 +359,83 @@ async fn test_checkpoint_repository_get_messages() {
 
     let _ = checkpointer.delete(checkpoint_id).await;
 }
+
+#[tokio::test]
+#[serial]
+async fn test_resume_instance_returns_messages() {
+    let Some(db) = setup_test_db().await else {
+        return;
+    };
+
+    let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
+    let instance_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(PostgresCheckpointRepositoryExt::new(db.clone()));
+    let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
+    let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+
+    let def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "test-agent".to_string(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .expect("should create agent definition");
+
+    let instance = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .expect("should create agent instance");
+
+    let test_messages = vec![
+        Message {
+            role: "user".to_string(),
+            content: "First message".to_string(),
+        },
+        Message {
+            role: "assistant".to_string(),
+            content: "Second message".to_string(),
+        },
+    ];
+
+    let state = checkpointer::CheckpointState {
+        messages: test_messages.clone(),
+        tool_call_count: 0,
+        intermediate_results: vec![],
+        custom_state: Some(serde_json::json!({
+            "instance_state": "Running",
+            "checkpoint_reason": "test_resume",
+        })),
+    };
+
+    let _checkpoint_id = checkpointer
+        .save(instance.id, instance.id, state)
+        .await
+        .expect("should save checkpoint");
+
+    let recovery = RecoveryService::new(
+        instance_repo.clone(),
+        checkpoint_repo.clone(),
+        event_repo,
+    );
+
+    let (restored_instance, messages) = recovery
+        .resume_instance(instance.id)
+        .await
+        .expect("should resume instance");
+
+    assert_eq!(restored_instance.id, instance.id);
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0].role, "user");
+    assert_eq!(messages[0].content, "First message");
+    assert_eq!(messages[1].role, "assistant");
+    assert_eq!(messages[1].content, "Second message");
+}
