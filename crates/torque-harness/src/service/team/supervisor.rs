@@ -8,7 +8,7 @@ use crate::repository::{DelegationRepository, TeamTaskRepository};
 use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::supervisor_agent::SupervisorAgent;
-use crate::service::team::supervisor_tools::create_supervisor_tools;
+use crate::service::team::supervisor_tools::SupervisorToolsConfig;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
@@ -26,6 +26,7 @@ pub struct TeamSupervisor {
     llm: Option<Arc<dyn LlmClient>>,
     event_listener: Option<Arc<dyn EventListener>>,
     delegation_timeout: Duration,
+    current_team_instance_id: TokioMutex<Option<Uuid>>,
 }
 
 impl TeamSupervisor {
@@ -46,6 +47,7 @@ impl TeamSupervisor {
             llm: None,
             event_listener: None,
             delegation_timeout: Duration::from_secs(300),
+            current_team_instance_id: TokioMutex::new(None),
         }
     }
 
@@ -69,18 +71,35 @@ impl TeamSupervisor {
         self
     }
 
-    async fn ensure_supervisor_agent(&self) -> anyhow::Result<()> {
-        {
+    async fn ensure_supervisor_agent(&self, team_instance_id: Uuid) -> anyhow::Result<()> {
+        let needs_recreate = {
+            let current_id = self.current_team_instance_id.lock().await;
+            current_id.map_or(true, |id| id != team_instance_id)
+        };
+
+        if !needs_recreate {
             let guard = self.supervisor_agent.lock().await;
             if guard.is_some() {
                 return Ok(());
             }
         }
+
         if let Some(llm) = &self.llm {
-            let tools = create_supervisor_tools();
-            let agent = SupervisorAgent::new(llm.clone(), tools).await;
+            let team_member_repo = self.selector_resolver.team_member_repo();
+
+            let config = SupervisorToolsConfig {
+                delegation_repo: self.delegation_repo.clone(),
+                selector_resolver: self.selector_resolver.clone(),
+                shared_state: self.shared_state.clone(),
+                team_member_repo,
+                team_task_repo: self.task_repo.clone(),
+                team_instance_id,
+            };
+            let agent = SupervisorAgent::new(llm.clone(), vec![], Some(config)).await;
             let mut guard = self.supervisor_agent.lock().await;
+            let mut current_id = self.current_team_instance_id.lock().await;
             *guard = Some(agent);
+            *current_id = Some(team_instance_id);
         }
         Ok(())
     }
@@ -89,7 +108,7 @@ impl TeamSupervisor {
         &self,
         team_instance_id: Uuid,
     ) -> anyhow::Result<Option<SupervisorResult>> {
-        self.ensure_supervisor_agent().await?;
+        self.ensure_supervisor_agent(team_instance_id).await?;
 
         let open_tasks = self.task_repo.list_open(team_instance_id, 10).await?;
 

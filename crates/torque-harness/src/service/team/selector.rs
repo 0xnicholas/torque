@@ -28,6 +28,10 @@ impl SelectorResolver {
         }
     }
 
+    pub fn team_member_repo(&self) -> Arc<dyn TeamMemberRepository> {
+        self.team_member_repo.clone()
+    }
+
     pub async fn resolve(
         &self,
         selector: &MemberSelector,
