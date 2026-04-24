@@ -304,6 +304,32 @@
 
 ---
 
+## Phase 12: Governance & Audit (COMPLETED)
+
+### Decision Log Service
+- `MemoryDecisionRepository` for audit trail persistence
+- `DecisionLogService` with query/filter/list operations
+- `GET /v1/memory/decisions` - Query with filtering (status, category, agent_id, since/until)
+
+### Enhanced Review Queue
+- `GET /v1/memory/review` - Review queue with stats (pending, approved, rejected counts by category)
+- `POST /v1/memory/review/{id}/approve` - Approve/reject entries
+- `POST /v1/memory/review/{id}/reject`
+- Review state machine: PendingReview → Approved/Rejected
+
+### Manual Compaction Trigger
+- `POST /v1/memory/compact` - Triggers background compaction job
+- Returns job status for tracking
+
+### Decision Analytics
+- `GET /v1/memory/decisions/stats` - Decision analytics (counts by status/category, time series)
+- `DecisionStats` response type
+
+**Implementation:** `crates/torque-harness/src/service/decision_log.rs`, `service/review_queue.rs`, `api/v1/memory/decisions.rs`, `api/v1/memory/review.rs`
+**Tests:** `decision_log_tests` (5), `review_queue_tests` (4)
+
+---
+
 ## Current Test Suite (182 tests passing)
 
 | Test File | Count | Status |
@@ -400,9 +426,10 @@ da20245 docs: mark Checkpoint Recovery and Team Supervisor Agent complete
 - Equivalence check (rules engine + LLM fallback)
 
 ### P2: Governance & Audit
-- Decision log service
-- Manual trigger APIs
-- Review lifecycle endpoints
+- Decision log query API (GET /v1/memory/decisions) - ✅ Complete
+- Enhanced review queue with stats - ✅ Complete
+- Manual compaction trigger (POST /v1/memory/compact) - ✅ Complete
+- Decision analytics (GET /v1/memory/decisions/stats) - ✅ Complete
 
 ### P3: Advanced Features
 - Analytics, Provenance UI, Compaction/Summarization
