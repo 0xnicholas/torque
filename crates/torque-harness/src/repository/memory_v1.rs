@@ -68,6 +68,13 @@ pub trait MemoryRepositoryV1: Send + Sync {
 
     async fn list_entries(&self, limit: i64, offset: i64) -> anyhow::Result<Vec<MemoryEntry>>;
 
+    async fn list_entries_by_agent(
+        &self,
+        agent_instance_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryEntry>>;
+
     async fn get_entry_by_id(&self, id: Uuid) -> anyhow::Result<Option<MemoryEntry>>;
 
     async fn get_entries_by_ids(&self, ids: Vec<Uuid>) -> anyhow::Result<Vec<MemoryEntry>>;
@@ -210,9 +217,28 @@ impl PostgresMemoryRepositoryV1 {
 impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
     async fn get_external_context_refs(
         &self,
-        _agent_instance_id: Uuid,
+        agent_instance_id: Uuid,
     ) -> anyhow::Result<Vec<ExternalContextRef>> {
-        Ok(vec![])
+        let row: Option<(serde_json::Value,)> = sqlx::query_as(
+            r#"
+            SELECT external_context_refs FROM v1_agent_instances
+            WHERE id = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(agent_instance_id)
+        .fetch_optional(self.db.pool())
+        .await?;
+
+        let refs_json = match row {
+            Some((json,)) => json,
+            None => return Ok(vec![]),
+        };
+
+        let refs: Vec<ExternalContextRef> = serde_json::from_value(refs_json)
+            .unwrap_or_default();
+
+        Ok(refs)
     }
 
     async fn get_team_for_agent(&self, agent_instance_id: Uuid) -> anyhow::Result<Option<Uuid>> {
@@ -339,6 +365,29 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             LIMIT $1 OFFSET $2
             "#,
         )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(self.db.pool())
+        .await?;
+
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    async fn list_entries_by_agent(
+        &self,
+        agent_instance_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<MemoryEntry>> {
+        let rows = sqlx::query_as::<_, MemoryEntryRow>(
+            r#"
+            SELECT * FROM v1_memory_entries
+            WHERE agent_instance_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(agent_instance_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(self.db.pool())

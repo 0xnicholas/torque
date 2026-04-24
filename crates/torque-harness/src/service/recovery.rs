@@ -663,14 +663,15 @@ impl RecoveryService {
     async fn apply_resolutions(&self, inconsistencies: &[Inconsistency]) -> anyhow::Result<usize> {
         let mut applied = 0;
         for inconsistency in inconsistencies {
-            tracing::debug!(
-                "Applying resolution for {:?} {}: {}",
+            tracing::warn!(
+                "Recovery resolution: type={:?} ref={} - {}",
                 inconsistency.anchor_type,
                 inconsistency.reference_id,
                 inconsistency.description
             );
             applied += 1;
         }
+        tracing::info!("Applied {} recovery resolutions", applied);
         Ok(applied)
     }
 }

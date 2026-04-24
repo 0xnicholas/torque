@@ -461,7 +461,7 @@ impl MemoryService {
         let mut anchors = Vec::new();
         let now = chrono::Utc::now();
 
-        let entries = self.repo_v1.list_entries(50, 0).await?;
+        let entries = self.repo_v1.list_entries_by_agent(agent_instance_id, 50, 0).await?;
         for entry in entries {
             anchors.push(ContextAnchor {
                 anchor_type: ContextAnchorType::MemoryEntry,
