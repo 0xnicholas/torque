@@ -1,6 +1,7 @@
 use crate::models::v1::run::RunStatus;
 use crate::repository::RunRepository;
 use crate::service::webhook_manager::{WebhookManager, WebhookPayload};
+use chrono::Utc;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -37,7 +38,14 @@ impl AsyncRunner {
                 let error = result.as_ref().err().map(|e| e.to_string());
                 let payload = WebhookPayload::new(run_id, status, error);
 
-                if let Err(e) = self.webhook_manager.send_with_retry(webhook_url, &payload).await {
+                let webhook_result = self.webhook_manager.send_with_retry(webhook_url, &payload).await;
+                let webhook_attempts = self.webhook_manager.attempts();
+
+                self.run_repo
+                    .update_webhook_status(run_id, Utc::now(), webhook_attempts as i32)
+                    .await?;
+
+                if let Err(e) = webhook_result {
                     tracing::warn!("Failed to send webhook for run {}: {}", run_id, e);
                 }
             }

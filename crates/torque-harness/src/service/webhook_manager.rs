@@ -20,18 +20,26 @@ impl WebhookManager {
         }
     }
 
+    pub fn attempts(&self) -> u32 {
+        self.max_retries + 1
+    }
+
     pub async fn send_with_retry(&self, url: &str, payload: &WebhookPayload) -> Result<()> {
         let mut attempts = 0;
         let mut delay = self.base_delay;
 
         loop {
+            attempts += 1;
+            if attempts > 1 {
+                tracing::debug!("Webhook retry attempt {} for URL: {}", attempts - 1, url);
+            }
+
             match self.send(url, payload).await {
                 Ok(_) => return Ok(()),
-                Err(e) if attempts >= self.max_retries => return Err(e),
+                Err(e) if attempts > self.max_retries => return Err(e),
                 Err(_) => {
                     tokio::time::sleep(delay).await;
                     delay *= 2;
-                    attempts += 1;
                 }
             }
         }
