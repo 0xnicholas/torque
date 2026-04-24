@@ -120,7 +120,7 @@ async fn execute_ok(registry: &ToolRegistry, name: &str, args: serde_json::Value
 }
 
 #[tokio::test]
-async fn write_todos_creates_todo_document_artifact_for_scope() {
+async fn todo_tools_tests_write_todos_creates_todo_document_artifact_for_scope() {
     let (registry, _artifact_service, repo) = setup_registry().await;
 
     let _ = execute_ok(
@@ -147,7 +147,7 @@ async fn write_todos_creates_todo_document_artifact_for_scope() {
 }
 
 #[tokio::test]
-async fn read_todos_returns_latest_document() {
+async fn todo_tools_tests_read_todos_returns_latest_document() {
     let (registry, _artifact_service, _repo) = setup_registry().await;
 
     let _ = execute_ok(
@@ -173,7 +173,7 @@ async fn read_todos_returns_latest_document() {
 }
 
 #[tokio::test]
-async fn update_todo_status_updates_single_item_without_replacing_document() {
+async fn todo_tools_tests_update_todo_status_updates_single_item_without_replacing_document() {
     let (registry, _artifact_service, _repo) = setup_registry().await;
 
     let _ = execute_ok(
