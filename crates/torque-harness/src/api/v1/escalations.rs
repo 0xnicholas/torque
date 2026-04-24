@@ -58,6 +58,10 @@ pub async fn resolve(
     Path(id): Path<Uuid>,
     Json(req): Json<EscalationResolveRequest>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
+    let _existing = services.escalation_service.get_escalation(id).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(ErrorBody { code: "NOT_FOUND".into(), message: "Escalation not found".into(), details: None, request_id: None })));
+
     let escalation = services.escalation_service.resolve_escalation(id, &req.resolution, req.resolved_by).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?;
 
