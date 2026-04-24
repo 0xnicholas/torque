@@ -4,6 +4,9 @@ use torque_harness::db::Database;
 #[allow(dead_code)]
 pub mod fake_llm;
 
+#[allow(dead_code)]
+pub mod fake_event_listener;
+
 pub async fn setup_test_db_or_skip() -> Option<Database> {
     let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
         "postgres://postgres:postgres@localhost/torque_harness_test".to_string()

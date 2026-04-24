@@ -27,14 +27,32 @@
 
 ---
 
+## Current Implementation Status
+
+| Component | File | Status | Notes |
+|----------|------|--------|-------|
+| 14 Supervisor Tools | `supervisor_tools.rs` | ✅ Done | Mock implementations, need real repo integration |
+| SupervisorAgent | `supervisor_agent.rs` | ✅ Done | Framework exists, needs full integration |
+| Mode Handlers | `modes.rs` | ✅ Done | Basic implementation exists |
+| Triage Logic | `supervisor.rs` | ⚠️ Partial | Uses length heuristic, needs LLM-driven |
+| SelectorResolver | `selector.rs` | ✅ Done | |
+| SharedStateManager | `shared_state.rs` | ✅ Done | |
+| TeamEventEmitter | `events.rs` | ✅ Done | |
+
+**Completed Tasks:** Tasks 1-7 (tools skeleton, individual tools, registry, SupervisorAgent wrapper)
+**Pending Tasks:** Tasks 8-16 (integration, LLM triage, wait_for_delegation_completion)
+
+---
+
 ## File Structure
 
 ```
-src/
+crates/torque-harness/src/
 ├── service/team/
 │   ├── mod.rs                          # TeamService (existing)
 │   ├── supervisor.rs                   # MODIFY: Convert to ReActHarness agent
 │   ├── supervisor_tools.rs             # CREATE: Team supervisor tools
+│   ├── supervisor_agent.rs             # CREATE: SupervisorAgent wrapper
 │   ├── modes.rs                        # EXISTING: Mode handlers (keep, refactor to use tools)
 │   ├── selector.rs                     # EXISTING: SelectorResolver
 │   ├── shared_state.rs                 # EXISTING: SharedTaskStateManager
@@ -48,7 +66,7 @@ src/
 └── api/v1/
     └── teams.rs                        # EXISTING: API endpoints
 
-tests/
+crates/torque-harness/tests/
 └── v1_team_execution_tests.rs          # EXISTING: Integration tests
 ```
 
@@ -1822,33 +1840,5 @@ git commit -m "feat(team): integrate wait_for_delegation_completion into mode ha
 - Tasks 13-14 add the **remaining 7 tools** from the spec
 - Task 15 makes **triage fully LLM-driven** (removes hardcoded length heuristic)
 - Task 16 properly **waits for delegation completion** instead of auto-accepting
-
-Each task is designed to be **self-contained and testable** - you can verify each piece works before moving to the next.
-
-| Phase | Task | Status |
-|-------|------|--------|
-| 1 | Supervisor Tools Skeleton | ⬜ |
-| 2 | AcceptResult/RejectResult Tools | ⬜ |
-| 3 | PublishToTeam/GetSharedState Tools | ⬜ |
-| 4 | CompleteTeamTask/ListTeamMembers Tools | ⬜ |
-| 5 | TeamSupervisorToolRegistry | ⬜ |
-| 6 | ToolRegistry Integration | ⬜ |
-| 7 | SupervisorAgent (ReActHarness wrapper) | ⬜ |
-| 8 | Update TeamSupervisor to use Agent | ⬜ |
-| 9 | Replace Hardcoded Triage with Agent | ⬜ |
-| 10 | Wire into ServiceContainer | ⬜ |
-| 11 | Integration Tests | ⬜ |
-| 12 | Final Verification | ⬜ |
-
----
-
-## Notes
-
-- Tasks 1-6 build the **supervisor tools** that the agent will use
-- Task 7 creates the **SupervisorAgent** wrapper around ReActHarness
-- Tasks 8-10 integrate the agent into the existing TeamSupervisor structure
-- Task 9 is the key spec-alignment task: replacing hardcoded triage with LLM reasoning
-- Task 11 provides **integration testing** to verify the full flow works
-- Task 12 reviews spec alignment and documents remaining gaps
 
 Each task is designed to be **self-contained and testable** - you can verify each piece works before moving to the next.

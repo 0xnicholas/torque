@@ -9,7 +9,8 @@ use crate::service::team::event_listener::EventListener;
 use crate::service::team::modes::TeamModeHandler;
 use crate::service::team::supervisor_agent::SupervisorAgent;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::time::{timeout, Duration, Instant};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -20,8 +21,10 @@ pub struct TeamSupervisor {
     selector_resolver: Arc<SelectorResolver>,
     shared_state: Arc<SharedTaskStateManager>,
     events: Arc<TeamEventEmitter>,
-    supervisor_agent: Mutex<Option<SupervisorAgent>>,
+    supervisor_agent: TokioMutex<Option<SupervisorAgent>>,
     llm: Option<Arc<dyn LlmClient>>,
+    event_listener: Option<Arc<dyn EventListener>>,
+    delegation_timeout: Duration,
 }
 
 impl TeamSupervisor {
@@ -38,8 +41,10 @@ impl TeamSupervisor {
             selector_resolver,
             shared_state,
             events,
-            supervisor_agent: Mutex::new(None),
+            supervisor_agent: TokioMutex::new(None),
             llm: None,
+            event_listener: None,
+            delegation_timeout: Duration::from_secs(300),
         }
     }
 
@@ -49,20 +54,30 @@ impl TeamSupervisor {
     }
 
     pub fn with_supervisor_agent(mut self, agent: SupervisorAgent) -> Self {
-        self.supervisor_agent = Mutex::new(Some(agent));
+        self.supervisor_agent = TokioMutex::new(Some(agent));
+        self
+    }
+
+    pub fn with_event_listener(mut self, event_listener: Arc<dyn EventListener>) -> Self {
+        self.event_listener = Some(event_listener);
+        self
+    }
+
+    pub fn with_delegation_timeout(mut self, timeout: Duration) -> Self {
+        self.delegation_timeout = timeout;
         self
     }
 
     async fn ensure_supervisor_agent(&self) -> anyhow::Result<()> {
         {
-            let guard = self.supervisor_agent.lock().unwrap();
+            let guard = self.supervisor_agent.lock().await;
             if guard.is_some() {
                 return Ok(());
             }
         }
         if let Some(llm) = &self.llm {
             let agent = SupervisorAgent::new(llm.clone(), vec![]).await;
-            let mut guard = self.supervisor_agent.lock().unwrap();
+            let mut guard = self.supervisor_agent.lock().await;
             *guard = Some(agent);
         }
         Ok(())
@@ -177,6 +192,11 @@ impl TeamSupervisor {
         let handler = TeamModeHandler::from_mode_name(mode_name)
             .ok_or_else(|| anyhow::anyhow!("No handler for mode: {}", mode_name))?;
 
+        let event_listener = self
+            .event_listener
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("EventListener not configured"))?;
+
         let result = handler
             .execute(
                 task,
@@ -186,6 +206,8 @@ impl TeamSupervisor {
                 self.selector_resolver.clone(),
                 self.shared_state.clone(),
                 self.events.clone(),
+                event_listener,
+                self.delegation_timeout,
             )
             .await?;
 
@@ -215,10 +237,14 @@ impl TeamSupervisor {
 
     async fn triage(&self, task: &TeamTask) -> anyhow::Result<TriageResult> {
         {
-            let guard = self.supervisor_agent.lock().unwrap();
-            if guard.is_some() {
-                // For MVP, we still use heuristic but could call LLM here
-                // Full LLM integration is deferred to Task 15
+            let guard = self.supervisor_agent.lock().await;
+            if let Some(ref agent) = *guard {
+                match agent.triage(&task.goal).await {
+                    Ok(result) => return Ok(result),
+                    Err(e) => {
+                        tracing::warn!("LLM triage failed, falling back to heuristic: {}", e);
+                    }
+                }
             }
         }
 
@@ -242,7 +268,7 @@ impl TeamSupervisor {
             selected_mode: selected_mode.clone(),
             lead_member_ref: None,
             rationale: format!(
-                "Triage determined {:?} complexity (goal len: {}), using {:?} mode. LLM integration deferred to Task 15.",
+                "Heuristic triage fallback: {:?} complexity (goal len: {}), using {:?} mode.",
                 complexity,
                 task.goal.len(),
                 selected_mode

@@ -1,7 +1,13 @@
+use crate::models::v1::delegation_event::DelegationEvent;
+use crate::models::v1::partial_quality::PartialQuality;
 use crate::models::v1::team::{CandidateMember, TeamTask};
 use crate::repository::DelegationRepository;
+use crate::service::team::event_listener::EventListener;
 use crate::service::team::{SelectorResolver, SharedTaskStateManager, TeamEventEmitter};
+use std::pin::Pin;
 use std::sync::Arc;
+use tokio::time::{timeout, Duration, Instant};
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -29,6 +35,8 @@ impl RouteModeHandler {
         _selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
     ) -> anyhow::Result<ModeExecutionResult> {
         if candidates.is_empty() {
             return Ok(ModeExecutionResult {
@@ -76,50 +84,192 @@ impl RouteModeHandler {
             .update_delegation_status(team_instance_id, delegation.id, "PENDING")
             .await?;
 
-        delegation_repo
-            .update_status(delegation.id, "ACCEPTED")
-            .await?;
+        let wait_result = self
+            .wait_for_delegation_completion(delegation.id, event_listener, timeout_duration)
+            .await;
 
-        // TODO(Task 16): Integrate wait_for_delegation_completion here.
-        // The delegation should wait for completion result before being marked ACCEPTED.
-        // Requires EventListener to be passed to mode handlers and proper event subscription.
-        // After integration: call wait_for_delegation_completion(delegation.id) and
-        // accept/reject based on the returned DelegationResult.
-
-        shared_state
-            .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
-            .await?;
-        events
-            .delegation_accepted(
-                team_instance_id,
-                task.id,
-                delegation.id,
-                selected.agent_instance_id,
-                vec![],
-            )
-            .await?;
-
-        shared_state
-            .add_decision(
-                team_instance_id,
-                &format!(
-                    "Route completed via member {} for task: {}",
-                    selected.role, task.goal
-                ),
-                "supervisor",
-            )
-            .await?;
-
-        Ok(ModeExecutionResult {
-            success: true,
-            summary: format!(
-                "Route completed via member {} (delegation: {})",
-                selected.role, delegation.id
-            ),
-            delegation_ids: vec![delegation.id],
-            published_artifact_ids: vec![],
-        })
+        match wait_result {
+            DelegationWaitOutcome::Completed => {
+                delegation_repo
+                    .update_status(delegation.id, "ACCEPTED")
+                    .await?;
+                shared_state
+                    .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+                    .await?;
+                events
+                    .delegation_accepted(
+                        team_instance_id,
+                        task.id,
+                        delegation.id,
+                        selected.agent_instance_id,
+                        vec![],
+                    )
+                    .await?;
+                shared_state
+                    .add_decision(
+                        team_instance_id,
+                        &format!(
+                            "Route completed via member {} for task: {}",
+                            selected.role, task.goal
+                        ),
+                        "supervisor",
+                    )
+                    .await?;
+                Ok(ModeExecutionResult {
+                    success: true,
+                    summary: format!(
+                        "Route completed via member {} (delegation: {})",
+                        selected.role, delegation.id
+                    ),
+                    delegation_ids: vec![delegation.id],
+                    published_artifact_ids: vec![],
+                })
+            }
+            DelegationWaitOutcome::Failed(error) => {
+                delegation_repo.update_status(delegation.id, "FAILED").await?;
+                shared_state
+                    .update_delegation_status(team_instance_id, delegation.id, "FAILED")
+                    .await?;
+                events
+                    .member_result_received(
+                        team_instance_id,
+                        task.id,
+                        delegation.id,
+                        selected.agent_instance_id,
+                        vec![],
+                    )
+                    .await?;
+                shared_state
+                    .add_decision(
+                        team_instance_id,
+                        &format!(
+                            "Route failed via member {} for task: {} - {}",
+                            selected.role, task.goal, error
+                        ),
+                        "supervisor",
+                    )
+                    .await?;
+                Ok(ModeExecutionResult {
+                    success: false,
+                    summary: format!("Delegation failed: {}", error),
+                    delegation_ids: vec![delegation.id],
+                    published_artifact_ids: vec![],
+                })
+            }
+            DelegationWaitOutcome::Rejected(reason) => {
+                delegation_repo.update_status(delegation.id, "REJECTED").await?;
+                shared_state
+                    .update_delegation_status(team_instance_id, delegation.id, "REJECTED")
+                    .await?;
+                events
+                    .delegation_rejected(
+                        team_instance_id,
+                        task.id,
+                        delegation.id,
+                        selected.agent_instance_id,
+                        &reason,
+                        vec![],
+                    )
+                    .await?;
+                shared_state
+                    .add_decision(
+                        team_instance_id,
+                        &format!(
+                            "Route rejected by member {} for task: {} - {}",
+                            selected.role, task.goal, reason
+                        ),
+                        "supervisor",
+                    )
+                    .await?;
+                Ok(ModeExecutionResult {
+                    success: false,
+                    summary: format!("Delegation rejected: {}", reason),
+                    delegation_ids: vec![delegation.id],
+                    published_artifact_ids: vec![],
+                })
+            }
+            DelegationWaitOutcome::Timeout => {
+                delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                shared_state
+                    .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
+                    .await?;
+                Ok(ModeExecutionResult {
+                    success: false,
+                    summary: "Delegation timed out".to_string(),
+                    delegation_ids: vec![delegation.id],
+                    published_artifact_ids: vec![],
+                })
+            }
+            DelegationWaitOutcome::TimeoutPartial(partial_quality) => {
+                delegation_repo
+                    .update_status(delegation.id, "TIMEOUT_PARTIAL")
+                    .await?;
+                shared_state
+                    .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT_PARTIAL")
+                    .await?;
+                Ok(ModeExecutionResult {
+                    success: false,
+                    summary: format!(
+                        "Delegation timed out with partial quality: {:?}",
+                        partial_quality
+                    ),
+                    delegation_ids: vec![delegation.id],
+                    published_artifact_ids: vec![],
+                })
+            }
+        }
     }
+
+    async fn wait_for_delegation_completion(
+        &self,
+        delegation_id: Uuid,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
+    ) -> DelegationWaitOutcome {
+        let deadline = Instant::now() + timeout_duration;
+        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
+            return DelegationWaitOutcome::Timeout;
+        };
+
+        let mut stream = stream;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return DelegationWaitOutcome::Timeout;
+            }
+
+            match timeout(remaining, stream.next()).await {
+                Ok(Some(event)) => match event {
+                    DelegationEvent::Completed { .. } => {
+                        return DelegationWaitOutcome::Completed;
+                    }
+                    DelegationEvent::Failed { error, .. } => {
+                        return DelegationWaitOutcome::Failed(error);
+                    }
+                    DelegationEvent::TimeoutPartial {
+                        partial_quality, ..
+                    } => {
+                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
+                    }
+                    DelegationEvent::Rejected { reason, .. } => {
+                        return DelegationWaitOutcome::Rejected(reason.to_string());
+                    }
+                    _ => continue,
+                },
+                Ok(None) => continue,
+                Err(_) => return DelegationWaitOutcome::Timeout,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DelegationWaitOutcome {
+    Completed,
+    Failed(String),
+    Rejected(String),
+    TimeoutPartial(PartialQuality),
+    Timeout,
 }
 
 #[derive(Clone)]
@@ -139,6 +289,8 @@ impl BroadcastModeHandler {
         _selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
     ) -> anyhow::Result<ModeExecutionResult> {
         if candidates.is_empty() {
             return Ok(ModeExecutionResult {
@@ -190,36 +342,89 @@ impl BroadcastModeHandler {
         }
 
         let mut accepted_count = 0;
+        let mut failed_count = 0;
         for (i, delegation_id) in delegation_ids.iter().enumerate() {
-            delegation_repo
-                .update_status(*delegation_id, "ACCEPTED")
-                .await?;
+            let outcome = self
+                .wait_for_delegation_completion(*delegation_id, event_listener.clone(), timeout_duration)
+                .await;
 
-            // TODO(Task 16): Integrate wait_for_delegation_completion here.
-            // The delegation should wait for completion result before being marked ACCEPTED.
-            // Requires EventListener to be passed to mode handlers and proper event subscription.
-
-            shared_state
-                .update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED")
-                .await?;
-            events
-                .delegation_accepted(
-                    team_instance_id,
-                    task.id,
-                    *delegation_id,
-                    candidates[i].agent_instance_id,
-                    vec![],
-                )
-                .await?;
-            accepted_count += 1;
+            match outcome {
+                DelegationWaitOutcome::Completed => {
+                    delegation_repo.update_status(*delegation_id, "ACCEPTED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED")
+                        .await?;
+                    events
+                        .delegation_accepted(
+                            team_instance_id,
+                            task.id,
+                            *delegation_id,
+                            candidates[i].agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                    accepted_count += 1;
+                }
+                DelegationWaitOutcome::Failed(_) => {
+                    delegation_repo.update_status(*delegation_id, "FAILED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, *delegation_id, "FAILED")
+                        .await?;
+                    events
+                        .member_result_received(
+                            team_instance_id,
+                            task.id,
+                            *delegation_id,
+                            candidates[i].agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                    failed_count += 1;
+                }
+                DelegationWaitOutcome::Rejected(_) => {
+                    delegation_repo.update_status(*delegation_id, "REJECTED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, *delegation_id, "REJECTED")
+                        .await?;
+                    events
+                        .delegation_rejected(
+                            team_instance_id,
+                            task.id,
+                            *delegation_id,
+                            candidates[i].agent_instance_id,
+                            "member rejected",
+                            vec![],
+                        )
+                        .await?;
+                    failed_count += 1;
+                }
+                DelegationWaitOutcome::Timeout => {
+                    delegation_repo.update_status(*delegation_id, "TIMEOUT").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, *delegation_id, "TIMEOUT")
+                        .await?;
+                    failed_count += 1;
+                }
+                DelegationWaitOutcome::TimeoutPartial(_) => {
+                    delegation_repo
+                        .update_status(*delegation_id, "TIMEOUT_PARTIAL")
+                        .await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, *delegation_id, "TIMEOUT_PARTIAL")
+                        .await?;
+                    failed_count += 1;
+                }
+            }
         }
 
         shared_state
             .add_decision(
                 team_instance_id,
                 &format!(
-                    "Broadcast completed: {}/{} members accepted results for task: {}",
+                    "Broadcast completed: {}/{} accepted, {}/{} failed for task: {}",
                     accepted_count,
+                    delegation_ids.len(),
+                    failed_count,
                     delegation_ids.len(),
                     task.goal
                 ),
@@ -228,15 +433,59 @@ impl BroadcastModeHandler {
             .await?;
 
         Ok(ModeExecutionResult {
-            success: true,
+            success: failed_count == 0,
             summary: format!(
-                "Broadcast completed with {}/{} accepted",
+                "Broadcast completed with {}/{} accepted, {}/{} failed",
                 accepted_count,
+                delegation_ids.len(),
+                failed_count,
                 delegation_ids.len()
             ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
+    }
+
+    async fn wait_for_delegation_completion(
+        &self,
+        delegation_id: Uuid,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
+    ) -> DelegationWaitOutcome {
+        let deadline = Instant::now() + timeout_duration;
+        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
+            return DelegationWaitOutcome::Timeout;
+        };
+
+        let mut stream = stream;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return DelegationWaitOutcome::Timeout;
+            }
+
+            match timeout(remaining, stream.next()).await {
+                Ok(Some(event)) => match event {
+                    DelegationEvent::Completed { .. } => {
+                        return DelegationWaitOutcome::Completed;
+                    }
+                    DelegationEvent::Failed { error, .. } => {
+                        return DelegationWaitOutcome::Failed(error);
+                    }
+                    DelegationEvent::TimeoutPartial {
+                        partial_quality, ..
+                    } => {
+                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
+                    }
+                    DelegationEvent::Rejected { reason, .. } => {
+                        return DelegationWaitOutcome::Rejected(reason.to_string());
+                    }
+                    _ => continue,
+                },
+                Ok(None) => continue,
+                Err(_) => return DelegationWaitOutcome::Timeout,
+            }
+        }
     }
 }
 
@@ -256,9 +505,11 @@ impl CoordinateModeHandler {
         team_instance_id: Uuid,
         candidates: Vec<CandidateMember>,
         delegation_repo: Arc<dyn DelegationRepository>,
-        selector_resolver: Arc<SelectorResolver>,
+        _selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
     ) -> anyhow::Result<ModeExecutionResult> {
         if candidates.is_empty() {
             return Ok(ModeExecutionResult {
@@ -285,6 +536,7 @@ impl CoordinateModeHandler {
 
         let mut delegation_ids = Vec::new();
         let mut previous_result_available = false;
+        let mut failed_rounds = 0;
 
         for round in 1..=coordination_rounds {
             let member_index = (round - 1) % candidates.len();
@@ -337,50 +589,117 @@ impl CoordinateModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            delegation_repo
-                .update_status(delegation.id, "ACCEPTED")
-                .await?;
+            let outcome = self
+                .wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
+                .await;
 
-            // TODO(Task 16): Integrate wait_for_delegation_completion here.
-            // The delegation should wait for completion result before being marked ACCEPTED.
-            // Requires EventListener to be passed to mode handlers and proper event subscription.
-
-            shared_state
-                .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
-                .await?;
-            events
-                .delegation_accepted(
-                    team_instance_id,
-                    task.id,
-                    delegation.id,
-                    selected.agent_instance_id,
-                    vec![],
-                )
-                .await?;
-
-            previous_result_available = true;
+            match outcome {
+                DelegationWaitOutcome::Completed => {
+                    delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+                        .await?;
+                    events
+                        .delegation_accepted(
+                            team_instance_id,
+                            task.id,
+                            delegation.id,
+                            selected.agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                    previous_result_available = true;
+                }
+                DelegationWaitOutcome::Failed(_) | DelegationWaitOutcome::Rejected(_) => {
+                    delegation_repo.update_status(delegation.id, "FAILED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "FAILED")
+                        .await?;
+                    events
+                        .member_result_received(
+                            team_instance_id,
+                            task.id,
+                            delegation.id,
+                            selected.agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                    failed_rounds += 1;
+                    break;
+                }
+                DelegationWaitOutcome::Timeout | DelegationWaitOutcome::TimeoutPartial(_) => {
+                    delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
+                        .await?;
+                    failed_rounds += 1;
+                    break;
+                }
+            }
         }
 
         shared_state
             .add_decision(
                 team_instance_id,
                 &format!(
-                    "Coordinate mode completed: {} rounds for task: {}",
-                    coordination_rounds, task.goal
+                    "Coordinate mode completed: {} rounds ({} failed) for task: {}",
+                    coordination_rounds, failed_rounds, task.goal
                 ),
                 "supervisor",
             )
             .await?;
 
         Ok(ModeExecutionResult {
-            success: true,
+            success: failed_rounds == 0,
             summary: format!(
-                "Coordinate mode completed with {} rounds",
-                coordination_rounds
+                "Coordinate mode completed with {} rounds ({} failed)",
+                coordination_rounds, failed_rounds
             ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
+    }
+
+    async fn wait_for_delegation_completion(
+        &self,
+        delegation_id: Uuid,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
+    ) -> DelegationWaitOutcome {
+        let deadline = Instant::now() + timeout_duration;
+        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
+            return DelegationWaitOutcome::Timeout;
+        };
+
+        let mut stream = stream;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return DelegationWaitOutcome::Timeout;
+            }
+
+            match timeout(remaining, stream.next()).await {
+                Ok(Some(event)) => match event {
+                    DelegationEvent::Completed { .. } => {
+                        return DelegationWaitOutcome::Completed;
+                    }
+                    DelegationEvent::Failed { error, .. } => {
+                        return DelegationWaitOutcome::Failed(error);
+                    }
+                    DelegationEvent::TimeoutPartial {
+                        partial_quality, ..
+                    } => {
+                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
+                    }
+                    DelegationEvent::Rejected { reason, .. } => {
+                        return DelegationWaitOutcome::Rejected(reason.to_string());
+                    }
+                    _ => continue,
+                },
+                Ok(None) => continue,
+                Err(_) => return DelegationWaitOutcome::Timeout,
+            }
+        }
     }
 }
 
@@ -402,9 +721,11 @@ impl TasksModeHandler {
         team_instance_id: Uuid,
         candidates: Vec<CandidateMember>,
         delegation_repo: Arc<dyn DelegationRepository>,
-        selector_resolver: Arc<SelectorResolver>,
+        _selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
     ) -> anyhow::Result<ModeExecutionResult> {
         if candidates.is_empty() {
             return Ok(ModeExecutionResult {
@@ -432,6 +753,7 @@ impl TasksModeHandler {
             .await?;
 
         let mut delegation_ids = Vec::new();
+        let mut failed_count = 0;
 
         for (idx, subtask) in subtasks_to_execute.iter().enumerate() {
             let member_index = idx % candidates.len();
@@ -490,34 +812,59 @@ impl TasksModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            delegation_repo
-                .update_status(delegation.id, "ACCEPTED")
-                .await?;
+            let outcome = self
+                .wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
+                .await;
 
-            // TODO(Task 16): Integrate wait_for_delegation_completion here.
-            // The delegation should wait for completion result before being marked ACCEPTED.
-            // Requires EventListener to be passed to mode handlers and proper event subscription.
-
-            shared_state
-                .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
-                .await?;
-            events
-                .delegation_accepted(
-                    team_instance_id,
-                    task.id,
-                    delegation.id,
-                    selected.agent_instance_id,
-                    vec![],
-                )
-                .await?;
+            match outcome {
+                DelegationWaitOutcome::Completed => {
+                    delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
+                        .await?;
+                    events
+                        .delegation_accepted(
+                            team_instance_id,
+                            task.id,
+                            delegation.id,
+                            selected.agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                }
+                DelegationWaitOutcome::Failed(_) | DelegationWaitOutcome::Rejected(_) => {
+                    delegation_repo.update_status(delegation.id, "FAILED").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "FAILED")
+                        .await?;
+                    events
+                        .member_result_received(
+                            team_instance_id,
+                            task.id,
+                            delegation.id,
+                            selected.agent_instance_id,
+                            vec![],
+                        )
+                        .await?;
+                    failed_count += 1;
+                }
+                DelegationWaitOutcome::Timeout | DelegationWaitOutcome::TimeoutPartial(_) => {
+                    delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                    shared_state
+                        .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
+                        .await?;
+                    failed_count += 1;
+                }
+            }
         }
 
         shared_state
             .add_decision(
                 team_instance_id,
                 &format!(
-                    "Task decomposition completed: {} delegations for goal: {}",
+                    "Task decomposition completed: {} delegations ({} failed) for goal: {}",
                     delegation_ids.len(),
+                    failed_count,
                     task.goal
                 ),
                 "supervisor",
@@ -525,14 +872,57 @@ impl TasksModeHandler {
             .await?;
 
         Ok(ModeExecutionResult {
-            success: true,
+            success: failed_count == 0,
             summary: format!(
-                "Tasks mode completed: {} subtasks delegated",
-                delegation_ids.len()
+                "Tasks mode completed: {} subtasks delegated ({} failed)",
+                delegation_ids.len(),
+                failed_count
             ),
             delegation_ids,
             published_artifact_ids: vec![],
         })
+    }
+
+    async fn wait_for_delegation_completion(
+        &self,
+        delegation_id: Uuid,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
+    ) -> DelegationWaitOutcome {
+        let deadline = Instant::now() + timeout_duration;
+        let Ok(stream) = event_listener.subscribe_delegation(delegation_id).await else {
+            return DelegationWaitOutcome::Timeout;
+        };
+
+        let mut stream = stream;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return DelegationWaitOutcome::Timeout;
+            }
+
+            match timeout(remaining, stream.next()).await {
+                Ok(Some(event)) => match event {
+                    DelegationEvent::Completed { .. } => {
+                        return DelegationWaitOutcome::Completed;
+                    }
+                    DelegationEvent::Failed { error, .. } => {
+                        return DelegationWaitOutcome::Failed(error);
+                    }
+                    DelegationEvent::TimeoutPartial {
+                        partial_quality, ..
+                    } => {
+                        return DelegationWaitOutcome::TimeoutPartial(partial_quality);
+                    }
+                    DelegationEvent::Rejected { reason, .. } => {
+                        return DelegationWaitOutcome::Rejected(reason.to_string());
+                    }
+                    _ => continue,
+                },
+                Ok(None) => continue,
+                Err(_) => return DelegationWaitOutcome::Timeout,
+            }
+        }
     }
 
     fn decompose_task(&self, goal: &str) -> Vec<String> {
@@ -606,6 +996,8 @@ impl TeamModeHandler {
         selector_resolver: Arc<SelectorResolver>,
         shared_state: Arc<SharedTaskStateManager>,
         events: Arc<TeamEventEmitter>,
+        event_listener: Arc<dyn EventListener>,
+        timeout_duration: Duration,
     ) -> anyhow::Result<ModeExecutionResult> {
         match self {
             TeamModeHandler::Route(h) => {
@@ -617,6 +1009,8 @@ impl TeamModeHandler {
                     selector_resolver,
                     shared_state,
                     events,
+                    event_listener,
+                    timeout_duration,
                 )
                 .await
             }
@@ -629,6 +1023,8 @@ impl TeamModeHandler {
                     selector_resolver,
                     shared_state,
                     events,
+                    event_listener,
+                    timeout_duration,
                 )
                 .await
             }
@@ -641,6 +1037,8 @@ impl TeamModeHandler {
                     selector_resolver,
                     shared_state,
                     events,
+                    event_listener,
+                    timeout_duration,
                 )
                 .await
             }
@@ -653,6 +1051,8 @@ impl TeamModeHandler {
                     selector_resolver,
                     shared_state,
                     events,
+                    event_listener,
+                    timeout_duration,
                 )
                 .await
             }
