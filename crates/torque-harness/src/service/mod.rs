@@ -6,6 +6,7 @@ pub mod candidate_generator;
 pub mod capability;
 pub mod checkpoint;
 pub mod delegation;
+pub mod escalation;
 pub mod event;
 pub mod event_replay;
 pub mod gating;
@@ -31,6 +32,7 @@ pub use candidate_generator::{
 pub use capability::CapabilityService;
 pub use checkpoint::CheckpointService;
 pub use delegation::DelegationService;
+pub use escalation::EscalationService;
 pub use event::EventService;
 pub use gating::MemoryGatingService;
 pub use memory::MemoryService;
@@ -63,6 +65,7 @@ pub struct ServiceContainer {
     pub event: std::sync::Arc<EventService>,
     pub run: std::sync::Arc<RunService>,
     pub recovery: std::sync::Arc<RecoveryService>,
+    pub escalation_service: std::sync::Arc<EscalationService>,
     pub idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
     pub run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
     pub candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator>,
@@ -179,11 +182,15 @@ impl ServiceContainer {
             memory_pipeline.clone(),
             None,
         ));
-        let recovery = std::sync::Arc::new(RecoveryService::new(
-            repos.agent_instance.clone(),
-            repos.checkpoint_ext.clone(),
-            repos.event_ext.clone(),
-        ));
+        let escalation_service = std::sync::Arc::new(EscalationService::new(repos.escalation.clone()));
+        let recovery = std::sync::Arc::new(
+            RecoveryService::new(
+                repos.agent_instance.clone(),
+                repos.checkpoint_ext.clone(),
+                repos.event_ext.clone(),
+            )
+            .with_escalation_service(escalation_service.clone()),
+        );
 
         Self {
             session,
@@ -202,6 +209,7 @@ impl ServiceContainer {
             event,
             run,
             recovery,
+            escalation_service,
             idempotency,
             run_gate,
             candidate_generator,

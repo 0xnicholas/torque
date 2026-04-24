@@ -1,5 +1,6 @@
 use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
 use crate::models::v1::checkpoint::{Checkpoint, ContextAnchorType};
+use crate::models::v1::escalation::{Escalation, EscalationType, EscalationSeverity};
 use crate::models::v1::event::Event;
 use crate::models::v1::team::{
     TeamRecoveryAction, TeamRecoveryAssessment, TeamRecoveryDisposition, TeamTaskRecoveryResult,
@@ -9,6 +10,7 @@ use crate::repository::{
     AgentInstanceRepository, CheckpointRepositoryExt, EventRepositoryExt, MemoryRepositoryV1,
     TeamMemberRepository, TeamTaskRepository,
 };
+use crate::service::escalation::EscalationService;
 use crate::service::event_replay::EventReplayRegistry;
 use checkpointer::r#trait::{self, ArtifactPointer};
 use serde::Serialize;
@@ -99,6 +101,7 @@ pub struct RecoveryService {
     repo_v1: Option<Arc<dyn MemoryRepositoryV1>>,
     team_member_repo: Option<Arc<dyn TeamMemberRepository>>,
     team_task_repo: Option<Arc<dyn TeamTaskRepository>>,
+    escalation_service: Option<Arc<EscalationService>>,
 }
 
 impl RecoveryService {
@@ -115,6 +118,7 @@ impl RecoveryService {
             repo_v1: None,
             team_member_repo: None,
             team_task_repo: None,
+            escalation_service: None,
         }
     }
 
@@ -132,6 +136,11 @@ impl RecoveryService {
     ) -> Self {
         self.team_member_repo = Some(team_member_repo);
         self.team_task_repo = Some(team_task_repo);
+        self
+    }
+
+    pub fn with_escalation_service(mut self, escalation_service: Arc<EscalationService>) -> Self {
+        self.escalation_service = Some(escalation_service);
         self
     }
 
@@ -863,5 +872,39 @@ impl RecoveryService {
             action_taken,
             new_status,
         })
+    }
+
+    pub async fn assess_and_escalate_if_needed(
+        &self,
+        instance_id: Uuid,
+    ) -> anyhow::Result<Option<Escalation>> {
+        let checkpoints = self
+            .checkpoint_repo
+            .list_by_instance(instance_id, 1)
+            .await?;
+
+        let Some(checkpoint) = checkpoints.into_iter().next() else {
+            return Ok(None);
+        };
+
+        let assessment = self.assess_recovery(checkpoint.id).await?;
+
+        if matches!(assessment.disposition, RecoveryDisposition::Failed) {
+            let escalation_service = self.escalation_service.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Escalation service not configured")
+            })?;
+
+            let escalation = escalation_service
+                .create_escalation(
+                    instance_id,
+                    EscalationType::RecoveryFailed,
+                    EscalationSeverity::High,
+                    format!("Recovery failed: {:?}", assessment.recommended_action),
+                    serde_json::json!({ "assessment": assessment }),
+                )
+                .await?;
+            return Ok(Some(escalation));
+        }
+        Ok(None)
     }
 }
