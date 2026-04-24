@@ -116,6 +116,10 @@ impl EventRepositoryExt for MockEventRepository {
     async fn list(&self, _limit: i64) -> anyhow::Result<Vec<Event>> {
         Ok(vec![])
     }
+
+    async fn list_after(&self, _event_id: Uuid) -> anyhow::Result<Vec<Event>> {
+        Ok(vec![])
+    }
 }
 
 struct MockTeamMemberRepository {
@@ -355,7 +359,7 @@ async fn test_team_recovery_retry_on_failure() {
 
     let member_repo = Arc::new(MockTeamMemberRepository::new(vec![]));
 
-    let mut service = RecoveryService::new(
+    let service = RecoveryService::new(
         Arc::new(MockAgentInstanceRepository::new()),
         Arc::new(MockCheckpointRepository::new()),
         Arc::new(MockEventRepository::new()),
