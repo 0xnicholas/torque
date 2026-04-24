@@ -2,7 +2,8 @@ use crate::agent::stream::StreamEvent;
 use crate::infra::llm::{Chunk, LlmClient, LlmMessage, ToolCall};
 use crate::infra::tool_registry::ToolRegistry;
 use crate::models::v1::team::{ProcessingPath, TaskComplexity, TeamMode, TriageResult};
-use crate::tools::ToolResult;
+use crate::service::governed_tool::GovernedToolRegistry;
+use crate::tools::{ToolArc, ToolResult};
 use llm::{ChatRequest, FinishReason, Message};
 use serde_json::Value;
 use std::sync::Arc;
@@ -11,6 +12,34 @@ use torque_kernel::StepDecision;
 
 const MAX_STEPS: usize = 50;
 const MAX_CONSECUTIVE_TOOL_FAILURES: usize = 3;
+
+pub enum ToolExecution {
+    Registry(Arc<ToolRegistry>),
+    Governed(Arc<GovernedToolRegistry>),
+}
+
+impl ToolExecution {
+    pub async fn execute(&self, name: &str, args: Value) -> anyhow::Result<ToolResult> {
+        match self {
+            ToolExecution::Registry(r) => r.execute(name, args).await,
+            ToolExecution::Governed(g) => g.execute(name, args, None).await,
+        }
+    }
+
+    pub async fn list(&self) -> Vec<ToolArc> {
+        match self {
+            ToolExecution::Registry(r) => r.list().await,
+            ToolExecution::Governed(g) => g.list().await,
+        }
+    }
+
+    pub async fn to_llm_tools(&self) -> Vec<llm::ToolDef> {
+        match self {
+            ToolExecution::Registry(r) => r.to_llm_tools().await,
+            ToolExecution::Governed(g) => g.to_llm_tools().await,
+        }
+    }
+}
 
 pub enum ReActStep {
     Think {
@@ -33,12 +62,12 @@ pub enum ReActAction {
 
 pub struct ReActHarness {
     llm: Arc<dyn LlmClient>,
-    tools: Arc<ToolRegistry>,
+    tools: Arc<ToolExecution>,
     step_history: Vec<ReActStep>,
 }
 
 impl ReActHarness {
-    pub fn new(llm: Arc<dyn LlmClient>, tools: Arc<ToolRegistry>) -> Self {
+    pub fn new(llm: Arc<dyn LlmClient>, tools: Arc<ToolExecution>) -> Self {
         Self {
             llm,
             tools,

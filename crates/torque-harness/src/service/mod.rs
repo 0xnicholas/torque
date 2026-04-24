@@ -7,6 +7,7 @@ pub mod candidate_generator;
 pub mod capability;
 pub mod checkpoint;
 pub mod delegation;
+pub mod governed_tool;
 pub mod escalation;
 pub mod event;
 pub mod event_replay;

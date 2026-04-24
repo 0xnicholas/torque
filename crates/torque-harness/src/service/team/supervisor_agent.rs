@@ -31,7 +31,7 @@ impl SupervisorAgent {
             registry.register(tool).await;
         }
 
-        let react = ReActHarness::new(llm, registry.clone());
+        let react = ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Registry(registry.clone())));
 
         Self {
             react,

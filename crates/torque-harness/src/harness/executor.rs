@@ -43,7 +43,7 @@ impl PlanExecutor {
         reflexion: Option<Arc<ReflexionService>>,
     ) -> Self {
         Self {
-            react: crate::harness::ReActHarness::new(llm, tools),
+            react: crate::harness::ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Registry(tools))),
             reflexion,
             max_concurrency: 3,
         }
