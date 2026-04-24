@@ -292,6 +292,27 @@ pub struct SessionMemorySet {
     pub ttl_seconds: Option<i64>,
 }
 
+// Compaction Job
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactionJob {
+    pub id: Uuid,
+    pub agent_instance_id: Option<Uuid>,
+    pub team_instance_id: Option<Uuid>,
+    pub status: CompactionJobStatus,
+    pub categories_processed: Vec<MemoryCategory>,
+    pub entries_compacted: i64,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CompactionJobStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+}
+
 // Decision Log
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct MemoryDecisionLog {

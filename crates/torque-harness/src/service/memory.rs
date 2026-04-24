@@ -1,8 +1,8 @@
 use crate::embedding::{memory_to_embedding_text, EmbeddingGenerator};
 use crate::models::v1::memory::{
-    MemoryCategory, MemoryDecisionLog, MemoryEntry as V1MemoryEntry, MemoryWriteCandidate,
-    MemoryWriteCandidateStatus, SemanticSearchQuery, SemanticSearchResult, SessionMemoryEntry,
-    SessionMemorySet,
+    CompactionJob, CompactionJobStatus, MemoryCategory, MemoryDecisionLog,
+    MemoryEntry as V1MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus,
+    SemanticSearchQuery, SemanticSearchResult, SessionMemoryEntry, SessionMemorySet,
 };
 use crate::models::{MemoryCandidate, MemoryCandidateStatus, MemoryEntry, MemoryEntryStatus};
 use crate::repository::{MemoryRepository, MemoryRepositoryV1};
@@ -371,5 +371,39 @@ impl MemoryService {
         self.repo_v1
             .update_entry_embedding(entry_id, &embedding, &model)
             .await
+    }
+
+    pub async fn trigger_compaction(
+        &self,
+        agent_instance_id: Option<Uuid>,
+        team_instance_id: Option<Uuid>,
+        categories: Option<Vec<MemoryCategory>>,
+    ) -> anyhow::Result<CompactionJob> {
+        let job = CompactionJob {
+            id: Uuid::new_v4(),
+            agent_instance_id,
+            team_instance_id,
+            status: CompactionJobStatus::Pending,
+            categories_processed: categories.unwrap_or_default(),
+            entries_compacted: 0,
+            created_at: chrono::Utc::now(),
+            completed_at: None,
+        };
+
+        let repo = self.repo_v1.clone();
+        let job_id = job.id;
+
+        tokio::spawn(async move {
+            let _ = Self::run_compaction(repo, job_id).await;
+        });
+
+        Ok(job)
+    }
+
+    async fn run_compaction(
+        repo: Arc<dyn MemoryRepositoryV1>,
+        job_id: Uuid,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }

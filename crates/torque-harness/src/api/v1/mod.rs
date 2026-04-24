@@ -175,4 +175,5 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
             get(memory::review_notifications_sse),
         )
         .route("/v1/memory/decisions", get(memory::list_decisions))
+        .route("/v1/memory/compact", post(memory::trigger_compaction))
 }

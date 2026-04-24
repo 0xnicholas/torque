@@ -1,8 +1,9 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::models::v1::memory::{
-    MemoryDecisionLog, MemoryWriteCandidateCreate, MemoryWriteCandidateStatus, MergeCandidateRequest,
-    RejectCandidateRequest, SemanticSearchQuery, SemanticSearchResult,
+    CompactionJob, MemoryCategory, MemoryDecisionLog, MemoryWriteCandidateCreate,
+    MemoryWriteCandidateStatus, MergeCandidateRequest, RejectCandidateRequest, SemanticSearchQuery,
+    SemanticSearchResult,
 };
 use crate::service::ServiceContainer;
 use axum::{
@@ -816,4 +817,33 @@ pub async fn review_notifications_sse(
     };
 
     Ok(Sse::new(stream))
+}
+
+#[derive(serde::Deserialize)]
+pub struct CompactionRequest {
+    pub agent_instance_id: Option<Uuid>,
+    pub team_instance_id: Option<Uuid>,
+    pub categories: Option<Vec<MemoryCategory>>,
+}
+
+pub async fn trigger_compaction(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Json(req): Json<CompactionRequest>,
+) -> Result<Json<CompactionJob>, (StatusCode, Json<ErrorBody>)> {
+    let job = services
+        .memory
+        .trigger_compaction(req.agent_instance_id, req.team_instance_id, req.categories)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "COMPACTION_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+    Ok(Json(job))
 }
