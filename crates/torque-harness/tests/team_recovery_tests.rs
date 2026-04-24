@@ -87,6 +87,10 @@ impl CheckpointRepositoryExt for MockCheckpointRepository {
     async fn list_by_instance(&self, _instance_id: Uuid, _limit: i64) -> anyhow::Result<Vec<Checkpoint>> {
         Ok(vec![])
     }
+
+    async fn get_messages(&self, _checkpoint_id: Uuid) -> anyhow::Result<Vec<checkpointer::r#trait::Message>> {
+        Ok(vec![])
+    }
 }
 
 struct MockEventRepository;

@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use checkpointer::r#trait::Message;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -74,7 +75,7 @@ pub async fn restore(
             )
         })?;
 
-    let instance = services
+    let (instance, _messages) = services
         .recovery
         .restore_from_checkpoint(id)
         .await
@@ -103,4 +104,28 @@ pub async fn restore(
     };
 
     Ok(Json(result))
+}
+
+pub async fn get_messages(
+    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CheckpointMessagesResponse>, (StatusCode, Json<ErrorBody>)> {
+    let messages = services.recovery.get_checkpoint_messages(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "DB_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    })?;
+    Ok(Json(CheckpointMessagesResponse { checkpoint_id: id, messages }))
+}
+
+#[derive(serde::Serialize)]
+pub struct CheckpointMessagesResponse {
+    pub checkpoint_id: Uuid,
+    pub messages: Vec<Message>,
 }

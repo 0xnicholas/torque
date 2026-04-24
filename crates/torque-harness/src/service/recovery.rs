@@ -10,6 +10,7 @@ use crate::repository::{
     TeamMemberRepository, TeamTaskRepository,
 };
 use crate::service::event_replay::EventReplayRegistry;
+use checkpointer::r#trait;
 use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -128,6 +129,13 @@ impl RecoveryService {
         self
     }
 
+    pub async fn get_checkpoint_messages(
+        &self,
+        checkpoint_id: Uuid,
+    ) -> anyhow::Result<Vec<r#trait::Message>> {
+        self.checkpoint_repo.get_messages(checkpoint_id).await
+    }
+
     /// Assess recovery for a checkpoint without applying it.
     ///
     /// This provides a synchronous-style assessment using persistence data
@@ -209,13 +217,13 @@ impl RecoveryService {
     /// 2. Validate recovery plan (fetch events, check consistency)
     /// 3. Apply recovery atomically
     /// 4. Replay tail events to reconcile state
-    /// 5. Return updated instance
+    /// 5. Return updated instance and messages
     ///
     /// Note: In production, this should use a database transaction.
     pub async fn restore_from_checkpoint(
         &self,
         checkpoint_id: Uuid,
-    ) -> anyhow::Result<AgentInstance> {
+    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>)> {
         // 1. Load checkpoint
         let checkpoint = self
             .checkpoint_repo
@@ -224,6 +232,11 @@ impl RecoveryService {
             .ok_or_else(|| anyhow::anyhow!("Checkpoint not found: {}", checkpoint_id))?;
 
         let instance_id = checkpoint.agent_instance_id;
+
+        // Extract messages from checkpoint state
+        let state: r#trait::CheckpointState =
+            serde_json::from_value(checkpoint.snapshot.clone())?;
+        let messages = state.messages;
 
         // 2. Validate instance exists
         let _instance = self
@@ -288,7 +301,7 @@ impl RecoveryService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Agent instance disappeared during recovery"))?;
 
-        Ok(instance)
+        Ok((instance, messages))
     }
 
     async fn reconcile_state(
@@ -412,7 +425,8 @@ impl RecoveryService {
             .await?;
 
         if let Some(checkpoint) = checkpoints.into_iter().next() {
-            self.restore_from_checkpoint(checkpoint.id).await
+            let (instance, _messages) = self.restore_from_checkpoint(checkpoint.id).await?;
+            Ok(instance)
         } else {
             // No checkpoint found, just return current instance state
             let instance = self

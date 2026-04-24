@@ -292,7 +292,7 @@ use torque_harness::repository::PostgresEventRepositoryExt;
 
     assert!(result.is_ok(), "RecoveryService should read checkpoint format correctly: {:?}", result.err());
 
-    let restored = result.unwrap();
+    let (restored, _messages) = result.unwrap();
     assert_eq!(restored.status, AgentInstanceStatus::Ready, "Instance should be restored to Ready status");
 }
 
@@ -359,7 +359,7 @@ async fn test_reconciliation_resolves_child_failure() {
 
     assert!(result.is_ok(), "Restore should succeed: {:?}", result.err());
 
-    let restored = result.unwrap();
+    let (restored, _messages) = result.unwrap();
     assert!(
         matches!(restored.status, AgentInstanceStatus::Ready),
         "Parent should be set to Ready after detecting child failure, got {:?}",
@@ -495,7 +495,7 @@ async fn test_full_recovery_flow_restore_and_resume() {
         event_repo.clone(),
     );
 
-    let restored = recovery.restore_from_checkpoint(checkpoint_id.0).await.unwrap();
+    let (restored, _messages) = recovery.restore_from_checkpoint(checkpoint_id.0).await.unwrap();
 
     assert!(
         matches!(restored.status, AgentInstanceStatus::Ready | AgentInstanceStatus::WaitingTool),

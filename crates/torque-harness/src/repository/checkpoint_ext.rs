@@ -1,6 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::checkpoint::{Checkpoint, CheckpointRow};
 use async_trait::async_trait;
+use checkpointer::r#trait::Message;
 use uuid::Uuid;
 
 #[async_trait]
@@ -12,6 +13,7 @@ pub trait CheckpointRepositoryExt: Send + Sync {
         limit: i64,
     ) -> anyhow::Result<Vec<Checkpoint>>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Checkpoint>>;
+    async fn get_messages(&self, checkpoint_id: Uuid) -> anyhow::Result<Vec<Message>>;
 }
 
 pub struct PostgresCheckpointRepositoryExt {
@@ -59,5 +61,17 @@ impl CheckpointRepositoryExt for PostgresCheckpointRepositoryExt {
         .fetch_optional(self.db.pool())
         .await?;
         Ok(row.map(Into::into))
+    }
+
+    async fn get_messages(&self, checkpoint_id: Uuid) -> anyhow::Result<Vec<Message>> {
+        let checkpoint = self.get(checkpoint_id).await?;
+        match checkpoint {
+            Some(cp) => {
+                let state: checkpointer::CheckpointState =
+                    serde_json::from_value(cp.snapshot)?;
+                Ok(state.messages)
+            }
+            None => Ok(Vec::new()),
+        }
     }
 }
