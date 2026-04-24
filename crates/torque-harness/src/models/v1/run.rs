@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::fmt::Display;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -39,10 +40,29 @@ pub enum RunStatus {
     Cancelled,
 }
 
+impl Display for RunStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunStatus::Queued => write!(f, "queued"),
+            RunStatus::Running => write!(f, "running"),
+            RunStatus::Completed => write!(f, "completed"),
+            RunStatus::Failed => write!(f, "failed"),
+            RunStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Run {
     pub id: Uuid,
+    pub tenant_id: Uuid,
+    pub status: RunStatus,
+    pub instruction: String,
+    pub failure_policy: Option<String>,
     pub webhook_url: Option<String>,
     pub async_execution: bool,
-    pub status: RunStatus,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub error: Option<String>,
 }

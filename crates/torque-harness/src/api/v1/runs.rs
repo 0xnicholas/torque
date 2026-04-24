@@ -9,6 +9,7 @@ use axum::{
     response::sse::{Event, Sse},
     Json,
 };
+use chrono::Utc;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -25,9 +26,16 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<RunResponse>), (StatusCode, Json<ErrorBody>)> {
     let run = Run {
         id: Uuid::new_v4(),
+        tenant_id: Uuid::new_v4(),
+        status: RunStatus::Queued,
+        instruction: req.instructions.clone().unwrap_or_default(),
+        failure_policy: None,
         webhook_url: req.webhook_url.clone(),
         async_execution: req.async_execution,
-        status: RunStatus::Queued,
+        created_at: Utc::now(),
+        started_at: None,
+        completed_at: None,
+        error: None,
     };
 
     services

@@ -26,14 +26,16 @@ impl RunRepository for PostgresRunRepository {
     async fn create(&self, run: &Run) -> anyhow::Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO runs (id, webhook_url, async_execution, status)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO runs (id, tenant_id, status, instruction, failure_policy, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(run.id)
-        .bind(&run.webhook_url)
-        .bind(run.async_execution)
-        .bind(&run.status)
+        .bind(run.tenant_id)
+        .bind(run.status.to_string())
+        .bind(&run.instruction)
+        .bind(&run.failure_policy)
+        .bind(run.created_at)
         .execute(self.db.pool())
         .await?;
         Ok(())
@@ -41,7 +43,7 @@ impl RunRepository for PostgresRunRepository {
 
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Run>> {
         let row = sqlx::query_as::<_, Run>(
-            "SELECT id, webhook_url, async_execution, status FROM runs WHERE id = $1",
+            "SELECT id, tenant_id, status, instruction, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error FROM runs WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(self.db.pool())
@@ -60,9 +62,9 @@ impl RunRepository for PostgresRunRepository {
 
     async fn get_by_status(&self, status: RunStatus, limit: i64) -> anyhow::Result<Vec<Run>> {
         let rows = sqlx::query_as::<_, Run>(
-            "SELECT id, webhook_url, async_execution, status FROM runs WHERE status = $1 LIMIT $2",
+            "SELECT id, tenant_id, status, instruction, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error FROM runs WHERE status = $1 LIMIT $2",
         )
-        .bind(status)
+        .bind(status.to_string())
         .bind(limit)
         .fetch_all(self.db.pool())
         .await?;
