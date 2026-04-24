@@ -304,7 +304,7 @@
 
 ---
 
-## Current Test Suite (111 tests passing)
+## Current Test Suite (182 tests passing)
 
 | Test File | Count | Status |
 |-----------|-------|--------|
@@ -336,7 +336,7 @@
 | v1_team_supervisor_tools_tests | 16 | ✅ |
 | dedup_thresholds_tests | 5 | ✅ |
 | merge_strategy_tests | 4 | ✅ |
-| **TOTAL** | **111** | ✅ |
+| **TOTAL** | **~182** | ✅ |
 
 ---
 
