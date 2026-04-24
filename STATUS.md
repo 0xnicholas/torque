@@ -354,6 +354,34 @@
 
 ---
 
+## P5: Operator Escalation Endpoints (COMPLETED)
+
+### Escalation API Endpoints
+- `GET /v1/escalations` - List unresolved escalations with pagination
+- `GET /v1/escalations/{id}` - Get escalation details with recovery context
+- `POST /v1/escalations/{id}/resolve` - Resolve an escalation with action taken
+
+### EscalationService
+- `create_escalation()` - Creates escalation from reconciliation result
+- `list_unresolved()` - Lists unresolved escalations for an instance
+- `resolve_escalation()` - Marks escalation as resolved with action taken
+- `get_recovery_context()` - Provides full recovery context for an escalation
+
+### Recovery Integration
+- Escalations created automatically from team recovery dispositions
+- `NonRecoverable` escalations surfaced to operator immediately
+- Recovery context includes team state, child instances, and assessment
+
+### Escalation Model
+- `EscalationStatus` enum: Unresolved, Resolved
+- `EscalationLevel` enum: Operator, Supervisor, System
+- `RecoveryAction` enum: ReissueDelegation, AcceptCompletedOutput, FailTeamTask, ManualIntervention
+
+**Implementation:** `crates/torque-harness/src/models/v1/escalation.rs`, `service/escalation.rs`, `repository/escalation.rs`, `api/v1/escalations.rs`
+**Tests:** `escalation_service_tests` (5 tests)
+
+---
+
 ## P3: Advanced Features (COMPLETED)
 
 ### Proper Memory Compaction with Summarization
@@ -418,7 +446,7 @@
 
 ## Known Limitations (Post-MVP)
 
-1. **Operator escalation endpoints** - For high-severity reconciliation issues
+1. ~~**Operator escalation endpoints**~~ - **RESOLVED** - P5 implementation complete
 2. **Async execution mode** - Returns SSE same as sync; true async with webhooks is future work
 3. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
 
@@ -469,6 +497,5 @@ a533a54 Add GET /v1/memory/decisions endpoint for decision log query
 ## Next Steps
 
 ### Future
-- Operator escalation endpoints
 - Advanced tool governance
 - True async execution with webhooks
