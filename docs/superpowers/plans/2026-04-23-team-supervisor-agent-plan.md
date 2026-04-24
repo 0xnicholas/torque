@@ -32,15 +32,16 @@
 | Component | File | Status | Notes |
 |----------|------|--------|-------|
 | 14 Supervisor Tools | `supervisor_tools.rs` | ✅ Done | Mock implementations, need real repo integration |
-| SupervisorAgent | `supervisor_agent.rs` | ✅ Done | Framework exists, needs full integration |
-| Mode Handlers | `modes.rs` | ✅ Done | Basic implementation exists |
-| Triage Logic | `supervisor.rs` | ⚠️ Partial | Uses length heuristic, needs LLM-driven |
+| SupervisorAgent | `supervisor_agent.rs` | ✅ Done | Integrated in triage with fallback |
+| Mode Handlers | `modes.rs` | ✅ Done | Includes wait_for_delegation_completion |
+| Triage Logic | `supervisor.rs` | ⚠️ Partial | LLM-driven with heuristic fallback (Task 15 removes fallback) |
 | SelectorResolver | `selector.rs` | ✅ Done | |
 | SharedStateManager | `shared_state.rs` | ✅ Done | |
 | TeamEventEmitter | `events.rs` | ✅ Done | |
+| EventListener | `event_listener.rs` | ✅ Done | Used for delegation completion waiting |
 
-**Completed Tasks:** Tasks 1-7 (tools skeleton, individual tools, registry, SupervisorAgent wrapper)
-**Pending Tasks:** Tasks 8-16 (integration, LLM triage, wait_for_delegation_completion)
+**Completed Tasks:** Tasks 1-7, 16 (tools skeleton, individual tools, registry, SupervisorAgent wrapper, wait_for_delegation_completion)
+**Pending Tasks:** Tasks 8, 10, 12, 15 (integration, LLM triage without fallback)
 
 ---
 
