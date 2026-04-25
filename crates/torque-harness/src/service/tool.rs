@@ -1,5 +1,6 @@
 use crate::infra::tool_registry::ToolRegistry;
 use crate::service::ArtifactService;
+use crate::service::vfs::RoutedVfs;
 use crate::tools::builtin::create_builtin_tools;
 use futures::executor::block_on;
 use std::sync::Arc;
@@ -16,7 +17,8 @@ impl ToolService {
 
     pub fn new_with_builtins(artifact_service: Arc<ArtifactService>) -> Self {
         let service = Self::new();
-        for tool in create_builtin_tools(artifact_service) {
+        let vfs = Arc::new(RoutedVfs::for_current_workspace());
+        for tool in create_builtin_tools(artifact_service, vfs) {
             block_on(service.registry.register(tool));
         }
         service

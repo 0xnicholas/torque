@@ -23,6 +23,7 @@ pub mod session;
 pub mod task;
 pub mod team;
 pub mod tool;
+pub mod vfs;
 pub mod webhook_manager;
 
 pub use agent_definition::AgentDefinitionService;
@@ -51,6 +52,7 @@ pub use session::SessionService;
 pub use task::TaskService;
 pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
+pub use vfs::RoutedVfs;
 pub use webhook_manager::WebhookManager;
 
 pub struct ServiceContainer {

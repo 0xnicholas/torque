@@ -6,7 +6,7 @@ use torque_harness::infra::tool_registry::ToolExecutionContext;
 use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::repository::ArtifactRepository;
 use torque_harness::service::artifact::TODO_DOCUMENT_KIND;
-use torque_harness::service::ArtifactService;
+use torque_harness::service::{ArtifactService, RoutedVfs};
 use torque_harness::tools::registry::register_builtin_tools;
 use torque_harness::tools::{ToolRegistry, ToolResult};
 use uuid::Uuid;
@@ -175,7 +175,12 @@ async fn setup_registry() -> (
     let repo = Arc::new(InMemoryArtifactRepository::default());
     let artifact_service = Arc::new(ArtifactService::new(repo.clone()));
     let registry = ToolRegistry::new();
-    register_builtin_tools(&registry, artifact_service.clone()).await;
+    register_builtin_tools(
+        &registry,
+        artifact_service.clone(),
+        Arc::new(RoutedVfs::for_current_workspace()),
+    )
+    .await;
     (registry, artifact_service, repo)
 }
 

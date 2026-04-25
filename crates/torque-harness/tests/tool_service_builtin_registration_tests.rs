@@ -108,4 +108,19 @@ async fn tool_service_bootstraps_todo_tools_without_manual_registration() {
         names.contains(&"update_todo".to_string()),
         "update_todo should be preloaded"
     );
+    assert!(names.contains(&"ls".to_string()), "ls should be preloaded");
+    assert!(
+        names.contains(&"read_file".to_string()),
+        "read_file should be preloaded"
+    );
+    assert!(
+        names.contains(&"write_file".to_string()),
+        "write_file should be preloaded"
+    );
+    assert!(
+        names.contains(&"edit_file".to_string()),
+        "edit_file should be preloaded"
+    );
+    assert!(names.contains(&"glob".to_string()), "glob should be preloaded");
+    assert!(names.contains(&"grep".to_string()), "grep should be preloaded");
 }
