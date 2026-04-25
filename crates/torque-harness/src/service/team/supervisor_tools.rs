@@ -1,5 +1,6 @@
 use crate::models::v1::team::{MemberSelector, PublishScope, TeamTaskStatus};
 use crate::repository::{DelegationRepository, TeamMemberRepository, TeamTaskRepository};
+use crate::service::build_delegation_packet;
 use crate::service::team::selector::SelectorResolver;
 use crate::service::team::shared_state::SharedTaskStateManager;
 use crate::tools::{Tool, ToolArc, ToolResult};
@@ -92,12 +93,22 @@ impl Tool for DelegateTaskTool {
         let selected_member = &candidates[0];
 
         let task_id = Uuid::new_v4();
+        let delegation_packet = build_delegation_packet(
+            goal,
+            _instructions,
+            vec![],
+            vec![],
+            vec![],
+            None,
+            vec![],
+        );
+
         let delegation = self
             .delegation_repo
             .create(
                 task_id,
                 selected_member.agent_instance_id,
-                member_selector.clone(),
+                delegation_packet,
             )
             .await?;
 
