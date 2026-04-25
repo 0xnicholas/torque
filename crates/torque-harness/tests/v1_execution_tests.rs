@@ -17,6 +17,8 @@ use torque_harness::repository::{
     PostgresAgentInstanceRepository, PostgresCheckpointRepository, PostgresEventRepository,
     PostgresMemoryRepositoryV1, PostgresTaskRepository, TaskRepository,
 };
+use torque_harness::models::v1::tool_policy::{ToolGovernanceConfig, ToolRiskLevel};
+use torque_harness::policy::ToolGovernanceService;
 use torque_harness::service::candidate_generator::NoOpCandidateGenerator;
 use torque_harness::service::gating::MemoryGatingService;
 use torque_harness::service::memory_pipeline::MemoryPipelineService;
@@ -54,6 +56,14 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         Some(notification_service),
     ));
 
+    let tool_governance = Arc::new(ToolGovernanceService::new(ToolGovernanceConfig {
+        default_risk_level: ToolRiskLevel::Medium,
+        approval_required_above: ToolRiskLevel::High,
+        blocked_tools: vec![],
+        privileged_tools: vec![],
+        side_effect_tracking: false,
+    }));
+
     // Setup RunService
     let run_service = RunService::new(
         def_repo.clone(),
@@ -64,6 +74,7 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         checkpointer,
         llm,
         tools,
+        tool_governance.clone(),
         candidate_gen,
         gating,
         memory_pipeline,
@@ -203,6 +214,14 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         Some(notification_service),
     ));
 
+    let tool_governance = Arc::new(ToolGovernanceService::new(ToolGovernanceConfig {
+        default_risk_level: ToolRiskLevel::Medium,
+        approval_required_above: ToolRiskLevel::High,
+        blocked_tools: vec![],
+        privileged_tools: vec![],
+        side_effect_tracking: false,
+    }));
+
     let run_service = RunService::new(
         def_repo,
         inst_repo,
@@ -212,6 +231,7 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         checkpointer,
         llm,
         tools,
+        tool_governance,
         candidate_gen,
         gating,
         memory_pipeline,
@@ -278,6 +298,14 @@ async fn test_run_task_status_transitions() {
         Some(notification_service),
     ));
 
+    let tool_governance = Arc::new(ToolGovernanceService::new(ToolGovernanceConfig {
+        default_risk_level: ToolRiskLevel::Medium,
+        approval_required_above: ToolRiskLevel::High,
+        blocked_tools: vec![],
+        privileged_tools: vec![],
+        side_effect_tracking: false,
+    }));
+
     let run_service = RunService::new(
         def_repo.clone(),
         inst_repo.clone(),
@@ -287,6 +315,7 @@ async fn test_run_task_status_transitions() {
         checkpointer,
         llm,
         tools,
+        tool_governance,
         candidate_gen,
         gating,
         memory_pipeline,
