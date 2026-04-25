@@ -1,3 +1,4 @@
+// Transitional compatibility surface while runtime code moves under crate::runtime.
 pub mod checkpointer;
 pub mod events;
 pub mod mapping;
