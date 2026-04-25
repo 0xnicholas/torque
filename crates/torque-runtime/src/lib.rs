@@ -4,6 +4,7 @@ pub mod environment;
 pub mod events;
 pub mod host;
 pub mod tools;
+pub mod vfs;
 
 #[cfg(test)]
 mod tests {

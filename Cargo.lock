@@ -2823,6 +2823,7 @@ dependencies = [
  "tokio-stream",
  "tokio-test",
  "torque-kernel",
+ "torque-runtime",
  "tower",
  "tower-http 0.5.2",
  "tracing",
@@ -2838,6 +2839,23 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "torque-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "checkpointer",
+ "chrono",
+ "llm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "torque-kernel",
+ "tracing",
  "uuid",
 ]
 
