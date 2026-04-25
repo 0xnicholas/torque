@@ -1,4 +1,4 @@
-use crate::infra::tool_registry::ToolRegistry;
+use crate::infra::tool_registry::{ToolExecutionContext, ToolRegistry};
 use crate::policy::PolicyEvaluator;
 use crate::policy::PolicyInput;
 use crate::policy::PolicySources;
@@ -27,6 +27,17 @@ impl GovernedToolRegistry {
         name: &str,
         args: Value,
         policy_sources: Option<&PolicySources>,
+    ) -> anyhow::Result<ToolResult> {
+        self.execute_with_context(name, args, policy_sources, ToolExecutionContext::default())
+            .await
+    }
+
+    pub async fn execute_with_context(
+        &self,
+        name: &str,
+        args: Value,
+        policy_sources: Option<&PolicySources>,
+        context: ToolExecutionContext,
     ) -> anyhow::Result<ToolResult> {
         if let Some(reason) = self.governance.should_block(name).await {
             return Ok(ToolResult {
@@ -67,7 +78,7 @@ impl GovernedToolRegistry {
             }
         }
 
-        self.inner.execute(name, args).await
+        self.inner.execute_with_context(name, args, context).await
     }
 
     pub async fn get(&self, name: &str) -> Option<ToolArc> {

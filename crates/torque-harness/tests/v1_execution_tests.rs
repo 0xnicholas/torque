@@ -12,18 +12,19 @@ use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInstanceStatus};
 use torque_harness::models::v1::run::RunRequest;
 use torque_harness::models::v1::task::TaskStatus;
-use torque_harness::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository, PostgresAgentDefinitionRepository,
-    PostgresAgentInstanceRepository, PostgresCheckpointRepository, PostgresEventRepository,
-    PostgresMemoryRepositoryV1, PostgresTaskRepository, TaskRepository,
-};
 use torque_harness::models::v1::tool_policy::{ToolGovernanceConfig, ToolRiskLevel};
 use torque_harness::policy::ToolGovernanceService;
+use torque_harness::repository::{
+    AgentDefinitionRepository, AgentInstanceRepository, PostgresAgentDefinitionRepository,
+    PostgresAgentInstanceRepository, PostgresArtifactRepository, PostgresCheckpointRepository,
+    PostgresEventRepository, PostgresMemoryRepositoryV1, PostgresTaskRepository, TaskRepository,
+};
+use torque_harness::service::artifact::TODO_DOCUMENT_KIND;
 use torque_harness::service::candidate_generator::NoOpCandidateGenerator;
 use torque_harness::service::gating::MemoryGatingService;
 use torque_harness::service::memory_pipeline::MemoryPipelineService;
 use torque_harness::service::notification::NotificationService;
-use torque_harness::service::{RunService, ToolService};
+use torque_harness::service::{ArtifactService, RunService, ToolService};
 
 #[tokio::test]
 #[serial]
@@ -270,6 +271,197 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         has_error,
         "Should receive Error event for nonexistent instance"
     );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_run_kernel_path_isolates_private_todos_by_instance() {
+    let Some(db) = setup_test_db_or_skip().await else {
+        return;
+    };
+
+    let def_repo = Arc::new(PostgresAgentDefinitionRepository::new(db.clone()));
+    let inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
+    let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
+    let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
+    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let artifact_repo = Arc::new(PostgresArtifactRepository::new(db.clone()));
+    let artifact_service = Arc::new(ArtifactService::new(artifact_repo.clone()));
+    let tools = Arc::new(ToolService::new_with_builtins(artifact_service.clone()));
+
+    let memory_repo = Arc::new(PostgresMemoryRepositoryV1::new(db.clone()));
+    let candidate_gen = Arc::new(NoOpCandidateGenerator);
+    let gating = Arc::new(MemoryGatingService::new(memory_repo.clone(), None, None));
+    let notification_service = Arc::new(NotificationService::new());
+    let memory_pipeline = Arc::new(MemoryPipelineService::new(
+        gating.clone(),
+        Some(notification_service),
+    ));
+    let tool_governance = Arc::new(ToolGovernanceService::new(ToolGovernanceConfig {
+        default_risk_level: ToolRiskLevel::Medium,
+        approval_required_above: ToolRiskLevel::High,
+        blocked_tools: vec![],
+        privileged_tools: vec![],
+        side_effect_tracking: false,
+    }));
+
+    let definition = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "Todo Isolation Agent".into(),
+            description: None,
+            system_prompt: Some("Use tools to execute tasks.".into()),
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .expect("create definition");
+
+    let instance_a = inst_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: definition.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .expect("create instance A");
+    let instance_b = inst_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: definition.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .expect("create instance B");
+
+    let llm_a: Arc<dyn llm::LlmClient> = Arc::new(FakeLlm::tool_call_then_text(
+        "write_todos",
+        serde_json::json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-a", "content": "A task", "status": "pending" }
+            ]
+        }),
+        "done A",
+    ));
+    let run_service_a = RunService::new(
+        def_repo.clone(),
+        inst_repo.clone(),
+        task_repo.clone(),
+        event_repo.clone(),
+        checkpoint_repo.clone(),
+        checkpointer.clone(),
+        llm_a,
+        tools.clone(),
+        tool_governance.clone(),
+        candidate_gen.clone(),
+        gating.clone(),
+        memory_pipeline.clone(),
+        None,
+    );
+
+    let llm_b: Arc<dyn llm::LlmClient> = Arc::new(FakeLlm::tool_call_then_text(
+        "write_todos",
+        serde_json::json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-b", "content": "B task", "status": "in_progress" }
+            ]
+        }),
+        "done B",
+    ));
+    let run_service_b = RunService::new(
+        def_repo.clone(),
+        inst_repo.clone(),
+        task_repo.clone(),
+        event_repo.clone(),
+        checkpoint_repo.clone(),
+        checkpointer.clone(),
+        llm_b,
+        tools.clone(),
+        tool_governance.clone(),
+        candidate_gen.clone(),
+        gating.clone(),
+        memory_pipeline.clone(),
+        None,
+    );
+
+    let run_request_a = RunRequest {
+        goal: "write todos".into(),
+        instructions: None,
+        input_artifacts: vec![],
+        external_context_refs: vec![],
+        constraints: serde_json::json!({}),
+        execution_mode: "sync".into(),
+        expected_outputs: vec![],
+        idempotency_key: None,
+        webhook_url: None,
+        async_execution: false,
+    };
+    let run_request_b = RunRequest {
+        goal: "write todos".into(),
+        instructions: None,
+        input_artifacts: vec![],
+        external_context_refs: vec![],
+        constraints: serde_json::json!({}),
+        execution_mode: "sync".into(),
+        expected_outputs: vec![],
+        idempotency_key: None,
+        webhook_url: None,
+        async_execution: false,
+    };
+
+    let (event_tx_a, _event_rx_a) = mpsc::channel::<StreamEvent>(32);
+    run_service_a
+        .execute(instance_a.id, run_request_a, event_tx_a)
+        .await
+        .expect("run A should succeed");
+
+    let (event_tx_b, _event_rx_b) = mpsc::channel::<StreamEvent>(32);
+    run_service_b
+        .execute(instance_b.id, run_request_b, event_tx_b)
+        .await
+        .expect("run B should succeed");
+
+    let todos_a: Vec<_> = artifact_service
+        .list_by_instance(instance_a.id, 20)
+        .await
+        .expect("list artifacts for A")
+        .into_iter()
+        .filter(|a| a.kind == TODO_DOCUMENT_KIND)
+        .collect();
+    let todos_b: Vec<_> = artifact_service
+        .list_by_instance(instance_b.id, 20)
+        .await
+        .expect("list artifacts for B")
+        .into_iter()
+        .filter(|a| a.kind == TODO_DOCUMENT_KIND)
+        .collect();
+
+    assert_eq!(todos_a.len(), 1, "instance A should have one todo document");
+    assert_eq!(todos_b.len(), 1, "instance B should have one todo document");
+    assert_eq!(todos_a[0].source_instance_id, Some(instance_a.id));
+    assert_eq!(todos_b[0].source_instance_id, Some(instance_b.id));
+    assert_eq!(todos_a[0].content["scope_key"], "private");
+    assert_eq!(todos_b[0].content["scope_key"], "private");
+    assert_eq!(todos_a[0].content["items"][0]["id"], "todo-a");
+    assert_eq!(todos_b[0].content["items"][0]["id"], "todo-b");
+
+    inst_repo
+        .delete(instance_a.id)
+        .await
+        .expect("delete instance A");
+    inst_repo
+        .delete(instance_b.id)
+        .await
+        .expect("delete instance B");
+    def_repo
+        .delete(definition.id)
+        .await
+        .expect("delete definition");
 }
 
 #[tokio::test]

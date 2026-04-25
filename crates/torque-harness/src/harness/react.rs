@@ -1,6 +1,6 @@
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::{Chunk, LlmClient, LlmMessage, ToolCall};
-use crate::infra::tool_registry::ToolRegistry;
+use crate::infra::tool_registry::{ToolExecutionContext, ToolRegistry};
 use crate::models::v1::team::{ProcessingPath, TaskComplexity, TeamMode, TriageResult};
 use crate::service::governed_tool::GovernedToolRegistry;
 use crate::tools::{ToolArc, ToolResult};
@@ -20,9 +20,19 @@ pub enum ToolExecution {
 
 impl ToolExecution {
     pub async fn execute(&self, name: &str, args: Value) -> anyhow::Result<ToolResult> {
+        self.execute_with_context(name, args, ToolExecutionContext::default())
+            .await
+    }
+
+    pub async fn execute_with_context(
+        &self,
+        name: &str,
+        args: Value,
+        context: ToolExecutionContext,
+    ) -> anyhow::Result<ToolResult> {
         match self {
-            ToolExecution::Registry(r) => r.execute(name, args).await,
-            ToolExecution::Governed(g) => g.execute(name, args, None).await,
+            ToolExecution::Registry(r) => r.execute_with_context(name, args, context).await,
+            ToolExecution::Governed(g) => g.execute_with_context(name, args, None, context).await,
         }
     }
 
@@ -64,6 +74,7 @@ pub struct ReActHarness {
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolExecution>,
     step_history: Vec<ReActStep>,
+    execution_context: ToolExecutionContext,
 }
 
 impl ReActHarness {
@@ -72,7 +83,12 @@ impl ReActHarness {
             llm,
             tools,
             step_history: Vec::new(),
+            execution_context: ToolExecutionContext::default(),
         }
+    }
+
+    pub fn set_execution_context(&mut self, execution_context: ToolExecutionContext) {
+        self.execution_context = execution_context;
     }
 
     pub async fn run(
@@ -361,7 +377,11 @@ If you need approval for something, output approve with description.
 
         let result = self
             .tools
-            .execute(&tool_call.name, tool_call.arguments.clone())
+            .execute_with_context(
+                &tool_call.name,
+                tool_call.arguments.clone(),
+                self.execution_context.clone(),
+            )
             .await
             .unwrap_or_else(|e| ToolResult {
                 success: false,
@@ -425,9 +445,11 @@ Mode guidelines:
             vec![Message::user(triage_prompt)],
         );
 
-        let response = self.llm.chat(request).await.map_err(|e| {
-            ReActHarnessError::LlmError(format!("triage failed: {}", e))
-        })?;
+        let response = self
+            .llm
+            .chat(request)
+            .await
+            .map_err(|e| ReActHarnessError::LlmError(format!("triage failed: {}", e)))?;
 
         let content = response.message.content.trim();
 
@@ -437,7 +459,10 @@ Mode guidelines:
         if let (Some(start), Some(end)) = (json_start, json_end) {
             let json_str = &content[start..=end];
             let parsed: Value = serde_json::from_str(json_str).map_err(|e| {
-                ReActHarnessError::LlmError(format!("failed to parse triage JSON: {} - input: {}", e, json_str))
+                ReActHarnessError::LlmError(format!(
+                    "failed to parse triage JSON: {} - input: {}",
+                    e, json_str
+                ))
             })?;
 
             let complexity = match parsed.get("complexity").and_then(|v| v.as_str()) {
@@ -481,9 +506,10 @@ Mode guidelines:
             });
         }
 
-        Err(ReActHarnessError::LlmError(
-            format!("no JSON found in triage response: {}", content)
-        ))
+        Err(ReActHarnessError::LlmError(format!(
+            "no JSON found in triage response: {}",
+            content
+        )))
     }
 }
 

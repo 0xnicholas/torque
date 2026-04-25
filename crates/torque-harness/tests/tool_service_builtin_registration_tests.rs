@@ -17,11 +17,23 @@ impl ArtifactRepository for NoopArtifactRepository {
         mime_type: &str,
         content: serde_json::Value,
     ) -> anyhow::Result<Artifact> {
+        self.create_with_source_instance(kind, scope, mime_type, content, None)
+            .await
+    }
+
+    async fn create_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        mime_type: &str,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact> {
         Ok(Artifact {
             id: Uuid::new_v4(),
             kind: kind.to_string(),
             scope,
-            source_instance_id: None,
+            source_instance_id,
             published_to_team_instance_id: None,
             mime_type: mime_type.to_string(),
             size_bytes: serde_json::to_string(&content)?.len() as i64,
@@ -61,6 +73,17 @@ impl ArtifactRepository for NoopArtifactRepository {
         _scope: ArtifactScope,
         _content_key: &str,
         _content_value: &str,
+    ) -> anyhow::Result<Option<Artifact>> {
+        Ok(None)
+    }
+
+    async fn find_latest_by_kind_scope_and_content_string_with_source_instance(
+        &self,
+        _kind: &str,
+        _scope: ArtifactScope,
+        _content_key: &str,
+        _content_value: &str,
+        _source_instance_id: Option<Uuid>,
     ) -> anyhow::Result<Option<Artifact>> {
         Ok(None)
     }

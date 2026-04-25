@@ -386,6 +386,7 @@ impl RunService {
             self.tool_governance.clone(),
             self.reflexion.clone(),
         );
+        planning_executor.set_instance_id(instance_id);
 
         let system_prompt = definition.system_prompt.as_deref();
 
@@ -484,7 +485,7 @@ impl RunService {
             .map_err(|e| anyhow::anyhow!("Kernel execution failed: {}", e))
     }
 
-// TODO: Re-implement when resume flow supports execution with message history.
-// The resume endpoint should call execute_with_messages to resume execution
-// with stored message history instead of starting fresh.
+    // TODO: Re-implement when resume flow supports execution with message history.
+    // The resume endpoint should call execute_with_messages to resume execution
+    // with stored message history instead of starting fresh.
 }

@@ -28,6 +28,22 @@ pub trait ArtifactRepository: Send + Sync {
         content_key: &str,
         content_value: &str,
     ) -> anyhow::Result<Option<Artifact>>;
+    async fn create_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        mime_type: &str,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact>;
+    async fn find_latest_by_kind_scope_and_content_string_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Option<Artifact>>;
 }
 
 pub struct PostgresArtifactRepository {
@@ -120,11 +136,53 @@ impl ArtifactRepository for PostgresArtifactRepository {
         content_key: &str,
         content_value: &str,
     ) -> anyhow::Result<Option<Artifact>> {
+        self.find_latest_by_kind_scope_and_content_string_with_source_instance(
+            kind,
+            scope,
+            content_key,
+            content_value,
+            None,
+        )
+        .await
+    }
+
+    async fn create_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        mime_type: &str,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact> {
+        let size_bytes = serde_json::to_string(&content)?.len() as i64;
+        let row = sqlx::query_as::<_, Artifact>(
+            "INSERT INTO v1_artifacts (kind, scope, mime_type, size_bytes, content, source_instance_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        )
+        .bind(kind)
+        .bind(scope)
+        .bind(mime_type)
+        .bind(size_bytes)
+        .bind(content)
+        .bind(source_instance_id)
+        .fetch_one(self.db.pool())
+        .await?;
+        Ok(row)
+    }
+
+    async fn find_latest_by_kind_scope_and_content_string_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Option<Artifact>> {
         let row = sqlx::query_as::<_, Artifact>(
             "SELECT * FROM v1_artifacts
              WHERE kind = $1
                AND scope = $2
                AND content ->> $3 = $4
+               AND source_instance_id IS NOT DISTINCT FROM $5
              ORDER BY created_at DESC
              LIMIT 1",
         )
@@ -132,6 +190,7 @@ impl ArtifactRepository for PostgresArtifactRepository {
         .bind(scope)
         .bind(content_key)
         .bind(content_value)
+        .bind(source_instance_id)
         .fetch_optional(self.db.pool())
         .await?;
         Ok(row)

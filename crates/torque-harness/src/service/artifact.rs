@@ -58,6 +58,18 @@ impl ArtifactService {
         self.create(kind, scope, JSON_MIME_TYPE, content).await
     }
 
+    pub async fn create_json_document_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact> {
+        self.repo
+            .create_with_source_instance(kind, scope, JSON_MIME_TYPE, content, source_instance_id)
+            .await
+    }
+
     pub async fn find_latest_by_kind_scope_and_content_string(
         &self,
         kind: &str,
@@ -67,6 +79,25 @@ impl ArtifactService {
     ) -> anyhow::Result<Option<Artifact>> {
         self.repo
             .find_latest_by_kind_scope_and_content_string(kind, scope, content_key, content_value)
+            .await
+    }
+
+    pub async fn find_latest_by_kind_scope_and_content_string_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Option<Artifact>> {
+        self.repo
+            .find_latest_by_kind_scope_and_content_string_with_source_instance(
+                kind,
+                scope,
+                content_key,
+                content_value,
+                source_instance_id,
+            )
             .await
     }
 }

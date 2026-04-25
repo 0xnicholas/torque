@@ -1,4 +1,5 @@
 use super::{Tool, ToolArc, ToolResult};
+use crate::infra::tool_registry::current_tool_execution_context;
 use crate::models::v1::artifact::ArtifactScope;
 use crate::service::artifact::{ArtifactService, TODO_DOCUMENT_KIND};
 use anyhow::Context;
@@ -73,6 +74,7 @@ struct UpdateTodoArgs {
 struct TodoScope {
     key: String,
     artifact_scope: ArtifactScope,
+    source_instance_id: Option<uuid::Uuid>,
 }
 
 pub struct WriteTodosTool {
@@ -120,7 +122,8 @@ impl Tool for WriteTodosTool {
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let parsed: WriteTodosArgs = serde_json::from_value(args).context("invalid write_todos args")?;
+        let parsed: WriteTodosArgs =
+            serde_json::from_value(args).context("invalid write_todos args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
         let mut document = read_document(&self.artifacts, &scope).await?;
 
@@ -167,7 +170,8 @@ impl Tool for ReadTodosTool {
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let parsed: ReadTodosArgs = serde_json::from_value(args).context("invalid read_todos args")?;
+        let parsed: ReadTodosArgs =
+            serde_json::from_value(args).context("invalid read_todos args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
         let document = read_document(&self.artifacts, &scope).await?;
         success_result(document)
@@ -208,7 +212,8 @@ impl Tool for UpdateTodoTool {
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let parsed: UpdateTodoArgs = serde_json::from_value(args).context("invalid update_todo args")?;
+        let parsed: UpdateTodoArgs =
+            serde_json::from_value(args).context("invalid update_todo args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
 
         let mut document = read_document(&self.artifacts, &scope).await?;
@@ -233,11 +238,12 @@ async fn read_document(
     scope: &TodoScope,
 ) -> anyhow::Result<TodoDocument> {
     if let Some(artifact) = artifact_service
-        .find_latest_by_kind_scope_and_content_string(
+        .find_latest_by_kind_scope_and_content_string_with_source_instance(
             TODO_DOCUMENT_KIND,
             copy_scope(&scope.artifact_scope),
             "scope_key",
             &scope.key,
+            scope.source_instance_id,
         )
         .await?
     {
@@ -262,10 +268,11 @@ async fn persist_document(
     let mut payload = document.clone();
     payload.scope_key = scope.key.clone();
     artifact_service
-        .create_json_document(
+        .create_json_document_with_source_instance(
             TODO_DOCUMENT_KIND,
             copy_scope(&scope.artifact_scope),
             serde_json::to_value(payload).context("serialize TodoDocument")?,
+            scope.source_instance_id,
         )
         .await?;
     Ok(())
@@ -283,16 +290,21 @@ fn parse_scope(scope: Option<&str>) -> anyhow::Result<TodoScope> {
         "external_published" | "externalpublished" => ArtifactScope::ExternalPublished,
         _ => ArtifactScope::Private,
     };
+    let source_instance_id = match artifact_scope {
+        ArtifactScope::Private => {
+            current_tool_execution_context().and_then(|context| context.source_instance_id)
+        }
+        _ => None,
+    };
 
     Ok(TodoScope {
         key: normalized,
         artifact_scope,
+        source_instance_id,
     })
 }
 
-fn deserialize_notes_update<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<String>>, D::Error>
+fn deserialize_notes_update<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
 where
     D: Deserializer<'de>,
 {

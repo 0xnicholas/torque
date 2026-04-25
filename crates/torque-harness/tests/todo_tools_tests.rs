@@ -2,10 +2,11 @@ use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
+use torque_harness::infra::tool_registry::ToolExecutionContext;
 use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::repository::ArtifactRepository;
-use torque_harness::service::ArtifactService;
 use torque_harness::service::artifact::TODO_DOCUMENT_KIND;
+use torque_harness::service::ArtifactService;
 use torque_harness::tools::registry::register_builtin_tools;
 use torque_harness::tools::{ToolRegistry, ToolResult};
 use uuid::Uuid;
@@ -47,11 +48,23 @@ impl ArtifactRepository for InMemoryArtifactRepository {
         mime_type: &str,
         content: serde_json::Value,
     ) -> anyhow::Result<Artifact> {
+        self.create_with_source_instance(kind, scope, mime_type, content, None)
+            .await
+    }
+
+    async fn create_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        mime_type: &str,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact> {
         let artifact = Artifact {
             id: Uuid::new_v4(),
             kind: kind.to_string(),
             scope,
-            source_instance_id: None,
+            source_instance_id,
             published_to_team_instance_id: None,
             mime_type: mime_type.to_string(),
             size_bytes: serde_json::to_string(&content)?.len() as i64,
@@ -76,7 +89,11 @@ impl ArtifactRepository for InMemoryArtifactRepository {
             .collect())
     }
 
-    async fn list_by_instance(&self, _instance_id: Uuid, _limit: i64) -> anyhow::Result<Vec<Artifact>> {
+    async fn list_by_instance(
+        &self,
+        _instance_id: Uuid,
+        _limit: i64,
+    ) -> anyhow::Result<Vec<Artifact>> {
         Ok(vec![])
     }
 
@@ -108,6 +125,24 @@ impl ArtifactRepository for InMemoryArtifactRepository {
         content_key: &str,
         content_value: &str,
     ) -> anyhow::Result<Option<Artifact>> {
+        self.find_latest_by_kind_scope_and_content_string_with_source_instance(
+            kind,
+            scope,
+            content_key,
+            content_value,
+            None,
+        )
+        .await
+    }
+
+    async fn find_latest_by_kind_scope_and_content_string_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Option<Artifact>> {
         let artifacts = self.artifacts.lock().expect("lock poisoned");
         let scope_match = |left: &ArtifactScope, right: &ArtifactScope| match (left, right) {
             (ArtifactScope::Private, ArtifactScope::Private) => true,
@@ -121,6 +156,7 @@ impl ArtifactRepository for InMemoryArtifactRepository {
             .find(|artifact| {
                 artifact.kind == kind
                     && scope_match(&artifact.scope, &scope)
+                    && artifact.source_instance_id == source_instance_id
                     && artifact
                         .content
                         .get(content_key)
@@ -131,7 +167,11 @@ impl ArtifactRepository for InMemoryArtifactRepository {
     }
 }
 
-async fn setup_registry() -> (ToolRegistry, Arc<ArtifactService>, Arc<InMemoryArtifactRepository>) {
+async fn setup_registry() -> (
+    ToolRegistry,
+    Arc<ArtifactService>,
+    Arc<InMemoryArtifactRepository>,
+) {
     let repo = Arc::new(InMemoryArtifactRepository::default());
     let artifact_service = Arc::new(ArtifactService::new(repo.clone()));
     let registry = ToolRegistry::new();
@@ -144,7 +184,35 @@ async fn execute_ok(registry: &ToolRegistry, name: &str, args: serde_json::Value
         .execute(name, args)
         .await
         .expect("tool execution should succeed");
-    assert!(result.success, "tool should report success: {:?}", result.error);
+    assert!(
+        result.success,
+        "tool should report success: {:?}",
+        result.error
+    );
+    result
+}
+
+async fn execute_ok_with_instance(
+    registry: &ToolRegistry,
+    instance_id: Uuid,
+    name: &str,
+    args: serde_json::Value,
+) -> ToolResult {
+    let result = registry
+        .execute_with_context(
+            name,
+            args,
+            ToolExecutionContext {
+                source_instance_id: Some(instance_id),
+            },
+        )
+        .await
+        .expect("tool execution should succeed");
+    assert!(
+        result.success,
+        "tool should report success: {:?}",
+        result.error
+    );
     result
 }
 
@@ -491,4 +559,62 @@ async fn todo_tools_tests_scope_external_published_maps_to_external_published_ar
         .expect("external_published todo artifact should exist");
 
     assert!(matches!(artifact.scope, ArtifactScope::ExternalPublished));
+}
+
+#[tokio::test]
+async fn todo_tools_tests_private_scope_is_isolated_by_source_instance() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+    let instance_a = Uuid::new_v4();
+    let instance_b = Uuid::new_v4();
+
+    let _ = execute_ok_with_instance(
+        &registry,
+        instance_a,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "a-1", "content": "A only", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let _ = execute_ok_with_instance(
+        &registry,
+        instance_b,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "b-1", "content": "B only", "status": "in_progress" }
+            ]
+        }),
+    )
+    .await;
+
+    let read_a = execute_ok_with_instance(
+        &registry,
+        instance_a,
+        "read_todos",
+        json!({ "scope": "private" }),
+    )
+    .await;
+    let read_b = execute_ok_with_instance(
+        &registry,
+        instance_b,
+        "read_todos",
+        json!({ "scope": "private" }),
+    )
+    .await;
+
+    let a_payload: serde_json::Value =
+        serde_json::from_str(&read_a.content).expect("read_todos returns JSON");
+    let b_payload: serde_json::Value =
+        serde_json::from_str(&read_b.content).expect("read_todos returns JSON");
+
+    assert_eq!(a_payload["items"][0]["id"], "a-1");
+    assert_eq!(b_payload["items"][0]["id"], "b-1");
 }

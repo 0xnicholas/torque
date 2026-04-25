@@ -1,7 +1,7 @@
 use crate::agent::stream::StreamEvent;
 use crate::harness::planner::{NodeStatus, Planner, SubTask};
 use crate::infra::llm::LlmClient;
-use crate::infra::tool_registry::ToolRegistry;
+use crate::infra::tool_registry::{ToolExecutionContext, ToolRegistry};
 use crate::policy::ToolGovernanceService;
 use crate::service::governed_tool::GovernedToolRegistry;
 use crate::service::reflexion::ReflexionService;
@@ -47,7 +47,12 @@ impl PlanExecutor {
     ) -> Self {
         let governed_registry = Arc::new(GovernedToolRegistry::new(tools, tool_governance));
         Self {
-            react: crate::harness::ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Governed(governed_registry))),
+            react: crate::harness::ReActHarness::new(
+                llm,
+                Arc::new(crate::harness::react::ToolExecution::Governed(
+                    governed_registry,
+                )),
+            ),
             reflexion,
             max_concurrency: 3,
         }
@@ -56,6 +61,12 @@ impl PlanExecutor {
     pub fn with_max_concurrency(mut self, max: usize) -> Self {
         self.max_concurrency = max;
         self
+    }
+
+    pub fn set_instance_id(&mut self, instance_id: Uuid) {
+        self.react.set_execution_context(ToolExecutionContext {
+            source_instance_id: Some(instance_id),
+        });
     }
 
     pub async fn execute(
@@ -291,5 +302,9 @@ impl PlanningExecutor {
             .await;
 
         self.executor.execute(&mut graph, event_sink).await
+    }
+
+    pub fn set_instance_id(&mut self, instance_id: Uuid) {
+        self.executor.set_instance_id(instance_id);
     }
 }

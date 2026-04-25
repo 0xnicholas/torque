@@ -1,7 +1,7 @@
 use crate::agent::stream::StreamEvent;
 use crate::config::checkpoint::CheckpointConfig;
 use crate::infra::llm::{Chunk, LlmClient, LlmMessage};
-use crate::infra::tool_registry::ToolRegistry;
+use crate::infra::tool_registry::{ToolExecutionContext, ToolRegistry};
 use crate::kernel_bridge::events::EventRecorder;
 use crate::repository::{CheckpointRepository, EventRepository, SessionRepository};
 use checkpointer::Checkpointer;
@@ -204,7 +204,13 @@ impl KernelRuntimeHandle {
                             .await;
 
                         let result = tools
-                            .execute(&tool_call.name, tool_call.arguments.clone())
+                            .execute_with_context(
+                                &tool_call.name,
+                                tool_call.arguments.clone(),
+                                ToolExecutionContext {
+                                    source_instance_id: Some(instance_id.as_uuid()),
+                                },
+                            )
                             .await;
 
                         let result = match result {
