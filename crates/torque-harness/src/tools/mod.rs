@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 pub mod builtin;
 pub mod registry;
+pub mod todos;
 
 pub use registry::ToolRegistry;
 

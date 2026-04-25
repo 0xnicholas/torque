@@ -332,3 +332,163 @@ async fn todo_tools_tests_write_todos_merges_and_upserts_when_replace_false() {
     assert_eq!(items[0]["notes"], "started");
     assert_eq!(items[1]["id"], "todo-2");
 }
+
+#[tokio::test]
+async fn todo_tools_tests_update_todo_notes_omitted_preserves_existing_notes() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Task A", "status": "pending", "notes": "seed" }
+            ]
+        }),
+    )
+    .await;
+
+    let _ = execute_ok(
+        &registry,
+        "update_todo",
+        json!({
+            "scope": "private",
+            "id": "todo-1",
+            "status": "in_progress"
+        }),
+    )
+    .await;
+
+    let result = execute_ok(&registry, "read_todos", json!({ "scope": "private" })).await;
+    let payload: serde_json::Value =
+        serde_json::from_str(&result.content).expect("read_todos returns JSON");
+
+    assert_eq!(payload["items"][0]["notes"], "seed");
+}
+
+#[tokio::test]
+async fn todo_tools_tests_update_todo_notes_null_clears_existing_notes() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Task A", "status": "pending", "notes": "seed" }
+            ]
+        }),
+    )
+    .await;
+
+    let _ = execute_ok(
+        &registry,
+        "update_todo",
+        json!({
+            "scope": "private",
+            "id": "todo-1",
+            "status": "in_progress",
+            "notes": null
+        }),
+    )
+    .await;
+
+    let result = execute_ok(&registry, "read_todos", json!({ "scope": "private" })).await;
+    let payload: serde_json::Value =
+        serde_json::from_str(&result.content).expect("read_todos returns JSON");
+
+    assert_eq!(payload["items"][0]["notes"], serde_json::Value::Null);
+}
+
+#[tokio::test]
+async fn todo_tools_tests_update_todo_notes_wrong_type_is_rejected() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Task A", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let err = registry
+        .execute(
+            "update_todo",
+            json!({
+                "scope": "private",
+                "id": "todo-1",
+                "status": "completed",
+                "notes": 123
+            }),
+        )
+        .await
+        .expect_err("invalid notes type must be rejected");
+
+    assert!(err.to_string().contains("invalid update_todo args"));
+}
+
+#[tokio::test]
+async fn todo_tools_tests_scope_team_shared_maps_to_team_shared_artifact_scope() {
+    let (registry, _artifact_service, repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "team_shared",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Shared task", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let artifact = repo
+        .list(10)
+        .await
+        .expect("artifacts should list")
+        .into_iter()
+        .find(|a| a.kind == TODO_DOCUMENT_KIND && a.content["scope_key"] == "team_shared")
+        .expect("team_shared todo artifact should exist");
+
+    assert!(matches!(artifact.scope, ArtifactScope::TeamShared));
+}
+
+#[tokio::test]
+async fn todo_tools_tests_scope_external_published_maps_to_external_published_artifact_scope() {
+    let (registry, _artifact_service, repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "external_published",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Published task", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let artifact = repo
+        .list(10)
+        .await
+        .expect("artifacts should list")
+        .into_iter()
+        .find(|a| a.kind == TODO_DOCUMENT_KIND && a.content["scope_key"] == "external_published")
+        .expect("external_published todo artifact should exist");
+
+    assert!(matches!(artifact.scope, ArtifactScope::ExternalPublished));
+}

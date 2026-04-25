@@ -3,6 +3,7 @@ use crate::models::v1::artifact::ArtifactScope;
 use crate::service::artifact::{ArtifactService, TODO_DOCUMENT_KIND};
 use anyhow::Context;
 use async_trait::async_trait;
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -64,6 +65,8 @@ struct UpdateTodoArgs {
     scope: Option<String>,
     id: String,
     status: TodoStatus,
+    #[serde(default, deserialize_with = "deserialize_notes_update")]
+    notes: Option<Option<String>>,
 }
 
 #[derive(Debug)]
@@ -198,17 +201,15 @@ impl Tool for UpdateTodoTool {
                 "scope": { "type": "string", "description": "Logical todo scope key (e.g. private, sprint_42, team_shared)" },
                 "id": { "type": "string" },
                 "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "blocked"] },
-                "notes": { "type": "string" }
+                "notes": { "type": ["string", "null"] }
             },
             "required": ["id", "status"]
         })
     }
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
-        let parsed: UpdateTodoArgs =
-            serde_json::from_value(args.clone()).context("invalid update_todo args")?;
+        let parsed: UpdateTodoArgs = serde_json::from_value(args).context("invalid update_todo args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
-        let notes_update = extract_notes_update(&args);
 
         let mut document = read_document(&self.artifacts, &scope).await?;
         let todo = document
@@ -218,7 +219,7 @@ impl Tool for UpdateTodoTool {
             .ok_or_else(|| anyhow::anyhow!("todo item '{}' not found", parsed.id))?;
 
         todo.status = parsed.status;
-        if let Some(notes) = notes_update {
+        if let Some(notes) = parsed.notes {
             todo.notes = notes;
         }
 
@@ -289,6 +290,23 @@ fn parse_scope(scope: Option<&str>) -> anyhow::Result<TodoScope> {
     })
 }
 
+fn deserialize_notes_update<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Null => Ok(Some(None)),
+        serde_json::Value::String(notes) => Ok(Some(Some(notes))),
+        other => Err(de::Error::custom(format!(
+            "notes must be string or null, got {}",
+            other
+        ))),
+    }
+}
+
 fn upsert_item(items: &mut Vec<TodoItem>, item: TodoItem) {
     if let Some(existing) = items.iter_mut().find(|existing| existing.id == item.id) {
         *existing = item;
@@ -303,16 +321,6 @@ fn success_result(document: TodoDocument) -> anyhow::Result<ToolResult> {
         content: serde_json::to_string(&document)?,
         error: None,
     })
-}
-
-fn extract_notes_update(args: &Value) -> Option<Option<String>> {
-    if !args.as_object().is_some_and(|obj| obj.contains_key("notes")) {
-        return None;
-    }
-    Some(
-        args.get("notes")
-            .and_then(|value| value.as_str().map(ToString::to_string)),
-    )
 }
 
 fn copy_scope(scope: &ArtifactScope) -> ArtifactScope {

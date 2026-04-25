@@ -1,12 +1,10 @@
 use super::{Tool, ToolArc, ToolResult};
 use crate::service::ArtifactService;
+use crate::tools::todos::create_todo_tools;
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;
-
-#[path = "todos.rs"]
-mod todos;
-pub use todos::{TodoDocument, TodoItem, TodoStatus};
+pub use crate::tools::todos::{TodoDocument, TodoItem, TodoStatus};
 
 pub struct WebSearchTool;
 
@@ -50,6 +48,6 @@ pub fn create_demo_builtin_tools() -> Vec<Box<dyn Tool>> {
 
 pub fn create_builtin_tools(artifact_service: Arc<ArtifactService>) -> Vec<ToolArc> {
     let mut tools: Vec<ToolArc> = create_demo_builtin_tools().into_iter().map(Arc::from).collect();
-    tools.extend(todos::create_todo_tools(artifact_service));
+    tools.extend(create_todo_tools(artifact_service));
     tools
 }
