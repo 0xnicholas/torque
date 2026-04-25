@@ -19,6 +19,8 @@ use torque_harness::repository::{
     TeamDefinitionRepository, TeamEventRepository, TeamInstanceRepository, TeamMemberRepository,
     TeamTaskRepository,
 };
+use torque_harness::models::v1::tool_policy::{ToolGovernanceConfig, ToolRiskLevel};
+use torque_harness::policy::ToolGovernanceService;
 use torque_harness::service::team::{
     SelectorResolver, SharedTaskStateManager, TeamEventEmitter, TeamSupervisor,
 };
@@ -336,6 +338,13 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
     );
     let shared_state_manager = SharedTaskStateManager::new(shared_state_repo.clone());
     let event_emitter = TeamEventEmitter::new(team_event_repo.clone());
+    let tool_governance = Arc::new(ToolGovernanceService::new(ToolGovernanceConfig {
+        default_risk_level: ToolRiskLevel::Medium,
+        approval_required_above: ToolRiskLevel::High,
+        blocked_tools: vec![],
+        privileged_tools: vec![],
+        side_effect_tracking: false,
+    }));
 
     let supervisor = TeamSupervisor::new(
         team_task_repo.clone(),
@@ -343,6 +352,7 @@ async fn test_supervisor_poll_and_execute_with_route_mode() {
         Arc::new(selector_resolver),
         Arc::new(shared_state_manager),
         Arc::new(event_emitter),
+        tool_governance,
     );
 
     let supervisor_def = def_repo
