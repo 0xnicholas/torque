@@ -3,30 +3,6 @@
 version = 4
 
 [[package]]
-name = "agent-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "checkpointer",
- "chrono",
- "context-store",
- "db",
- "futures",
- "llm",
- "serde",
- "serde_json",
- "sqlx 0.7.4",
- "thiserror 1.0.69",
- "tokio",
- "tool-executor",
- "tracing",
- "types",
- "uuid",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -280,7 +256,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "db",
  "redis",
  "serde",
  "serde_json",
@@ -288,7 +263,6 @@ dependencies = [
  "sqlx 0.7.4",
  "thiserror 1.0.69",
  "tracing",
- "types",
  "uuid",
 ]
 
@@ -343,22 +317,6 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
-
-[[package]]
-name = "context-store"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "redis",
- "serde",
- "serde_json",
- "sqlx 0.7.4",
- "thiserror 1.0.69",
- "tokio",
- "types",
- "uuid",
-]
 
 [[package]]
 name = "core-foundation"
@@ -433,29 +391,6 @@ checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "dag"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "types",
- "uuid",
-]
-
-[[package]]
-name = "db"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "sqlx 0.7.4",
- "thiserror 1.0.69",
- "tokio",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -564,27 +499,6 @@ dependencies = [
  "concurrent-queue",
  "parking",
  "pin-project-lite",
-]
-
-[[package]]
-name = "executor"
-version = "0.1.0"
-dependencies = [
- "agent-runtime",
- "checkpointer",
- "chrono",
- "context-store",
- "db",
- "llm",
- "queue",
- "redis",
- "thiserror 1.0.69",
- "tokio",
- "tool-executor",
- "tracing",
- "tracing-subscriber",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -1724,19 +1638,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "queue"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "db",
- "sqlx 0.7.4",
- "thiserror 1.0.69",
- "tokio",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -2897,21 +2798,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tool-executor"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "db",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "types",
- "uuid",
-]
-
-[[package]]
 name = "torque-harness"
 version = "0.1.0"
 dependencies = [
@@ -3062,16 +2948,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
 version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3081,15 +2957,12 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]
@@ -3103,17 +2976,6 @@ name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
-
-[[package]]
-name = "types"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "uuid",
-]
 
 [[package]]
 name = "unicode-bidi"

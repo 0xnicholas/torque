@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS v1_tool_policies;

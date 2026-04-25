@@ -1,15 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/types",
-    "crates/dag",
-    "crates/db",
     "crates/llm",
-    "crates/queue",
-    "crates/context-store",
-    "crates/tool-executor",
-    "crates/agent-runtime",
-    "crates/executor",
     "crates/checkpointer",
     "crates/torque-kernel",
     "crates/torque-harness",
@@ -34,8 +26,5 @@ futures = "0.3"
 tokio-stream = "0.1"
 tower = "0.5"
 tower-http = "0.5"
-subtle = "2"
-reqwest = { version = "0.12", features = ["json"] }
-pgvector = { version = "0.4", features = ["sqlx"] }
 axum = "0.7"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
