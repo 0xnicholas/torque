@@ -80,6 +80,7 @@ pub struct ServiceContainer {
     pub memory_pipeline: std::sync::Arc<memory_pipeline::MemoryPipelineService>,
     pub notification_service: std::sync::Arc<notification::NotificationService>,
     pub tool_governance: std::sync::Arc<crate::policy::ToolGovernanceService>,
+    pub tool_policy: std::sync::Arc<dyn crate::repository::ToolPolicyRepository>,
 }
 
 impl ServiceContainer {
@@ -214,6 +215,7 @@ impl ServiceContainer {
             )
             .with_escalation_service(escalation_service.clone()),
         );
+        let tool_policy = repos.tool_policy.clone();
 
         Self {
             session,
@@ -242,6 +244,7 @@ impl ServiceContainer {
             memory_pipeline,
             notification_service,
             tool_governance,
+            tool_policy,
         }
     }
 }

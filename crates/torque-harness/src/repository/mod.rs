@@ -20,8 +20,10 @@ pub mod run;
 pub mod session;
 pub mod task;
 pub mod team;
+pub mod tool_policy;
 
 pub use agent_definition::{AgentDefinitionRepository, PostgresAgentDefinitionRepository};
+pub use tool_policy::{ToolPolicyRepository, PostgresToolPolicyRepository};
 pub use agent_instance::{AgentInstanceRepository, PostgresAgentInstanceRepository};
 pub use approval::{ApprovalRepository, PostgresApprovalRepository};
 pub use artifact::{ArtifactRepository, PostgresArtifactRepository};
@@ -76,4 +78,5 @@ pub struct RepositoryContainer {
     pub rule: Arc<dyn RuleRepository>,
     pub escalation: Arc<dyn EscalationRepository>,
     pub run: Arc<dyn RunRepository>,
+    pub tool_policy: Arc<dyn ToolPolicyRepository>,
 }

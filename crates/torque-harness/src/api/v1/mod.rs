@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::service::ServiceContainer;
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use llm::OpenAiClient;
@@ -20,6 +20,7 @@ pub mod memory;
 pub mod runs;
 pub mod tasks;
 pub mod teams;
+pub mod tool_policy;
 
 pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> {
     Router::new()
@@ -187,4 +188,8 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/escalations", get(escalations::list))
         .route("/v1/escalations/:id", get(escalations::get))
         .route("/v1/escalations/:id/resolve", post(escalations::resolve))
+        .route("/v1/tool-policies", get(tool_policy::list))
+        .route("/v1/tool-policies/:tool_name", get(tool_policy::get))
+        .route("/v1/tool-policies/:tool_name", post(tool_policy::upsert))
+        .route("/v1/tool-policies/:tool_name", delete(tool_policy::delete))
 }

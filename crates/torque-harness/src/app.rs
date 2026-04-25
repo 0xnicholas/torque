@@ -75,6 +75,9 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
             db.clone(),
         )),
         run: Arc::new(crate::repository::PostgresRunRepository::new(db.clone())),
+        tool_policy: Arc::new(crate::repository::PostgresToolPolicyRepository::new(
+            db.clone(),
+        )),
     };
 
     let memory_v1 = Arc::new(crate::repository::PostgresMemoryRepositoryV1::new(
