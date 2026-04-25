@@ -1,6 +1,7 @@
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::{LlmClient, LlmMessage};
-use crate::kernel_bridge::{session_to_execution_request, KernelRuntimeHandle};
+use crate::runtime::host::KernelRuntimeHandle;
+use crate::runtime::mapping::session_to_execution_request;
 use crate::repository::{
     CheckpointRepository, EventRepository, MessageRepository, SessionRepository,
 };

@@ -1,9 +1,8 @@
 use crate::agent::stream::StreamEvent;
 use crate::config;
 use crate::infra::llm::LlmClient;
-use crate::kernel_bridge::{
-    run_request_to_execution_request, v1_agent_definition_to_kernel, KernelRuntimeHandle,
-};
+use crate::kernel_bridge::v1_mapping::{run_request_to_execution_request, v1_agent_definition_to_kernel};
+use crate::runtime::host::KernelRuntimeHandle;
 use crate::models::v1::agent_instance::AgentInstanceStatus;
 use crate::models::v1::gating::ExecutionSummary;
 use crate::models::v1::run::RunRequest;

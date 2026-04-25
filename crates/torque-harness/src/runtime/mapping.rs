@@ -1,1 +1,74 @@
-pub use crate::kernel_bridge::mapping::*;
+use crate::models::Session;
+use crate::models::v1::agent_definition::AgentDefinition as V1AgentDefinition;
+use crate::models::v1::run::RunRequest;
+use torque_kernel::{
+    AgentDefinition, AgentDefinition as KernelAgentDefinition, ExecutionMode, ExecutionRequest,
+    KernelError,
+};
+
+pub fn session_to_execution_request(
+    session: &Session,
+    user_message: &str,
+) -> Result<ExecutionRequest, KernelError> {
+    let agent_def_id = session
+        .agent_definition_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| session.id.to_string());
+    let agent_def = AgentDefinition::new(&agent_def_id, "MVP session adapter");
+
+    Ok(ExecutionRequest::new(
+        agent_def.id,
+        user_message.to_string(),
+        vec![format!("Session {}", session.id)],
+    )
+    .with_execution_mode(ExecutionMode::Sync))
+}
+
+pub fn v1_agent_definition_to_kernel(def: &V1AgentDefinition) -> KernelAgentDefinition {
+    let system_prompt = def.system_prompt.clone().unwrap_or_default();
+
+    let mut kernel_def = KernelAgentDefinition::new(def.name.clone(), system_prompt);
+
+    if !def.tool_policy.is_null() && def.tool_policy != serde_json::json!({}) {
+        kernel_def.tool_policy_ref = Some(def.tool_policy.to_string());
+    }
+    if !def.memory_policy.is_null() && def.memory_policy != serde_json::json!({}) {
+        kernel_def.memory_policy_ref = Some(def.memory_policy.to_string());
+    }
+    if !def.delegation_policy.is_null() && def.delegation_policy != serde_json::json!({}) {
+        kernel_def.delegation_policy_ref = Some(def.delegation_policy.to_string());
+    }
+    if !def.default_model_policy.is_null() && def.default_model_policy != serde_json::json!({}) {
+        kernel_def.default_model_policy_ref = Some(def.default_model_policy.to_string());
+    }
+
+    kernel_def
+}
+
+pub fn run_request_to_execution_request(
+    agent_definition: &KernelAgentDefinition,
+    run_request: &RunRequest,
+    instance_id: Option<uuid::Uuid>,
+) -> ExecutionRequest {
+    let mode = match run_request.execution_mode.as_str() {
+        "async" => ExecutionMode::Async,
+        _ => ExecutionMode::Sync,
+    };
+
+    let instructions = run_request.instructions.clone().unwrap_or_default();
+
+    let mut request = ExecutionRequest::new(
+        agent_definition.id,
+        run_request.goal.clone(),
+        vec![instructions],
+    )
+    .with_execution_mode(mode);
+
+    if let Some(_id) = instance_id {
+        use torque_kernel::ids::AgentInstanceId;
+        let kernel_id = AgentInstanceId::new();
+        request = request.with_instance_id(kernel_id);
+    }
+
+    request
+}
