@@ -30,6 +30,8 @@ pub struct TodoItem {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct TodoDocument {
     #[serde(default)]
+    pub scope_key: String,
+    #[serde(default)]
     pub items: Vec<TodoItem>,
 }
 
@@ -64,6 +66,12 @@ struct UpdateTodoArgs {
     status: TodoStatus,
 }
 
+#[derive(Debug)]
+struct TodoScope {
+    key: String,
+    artifact_scope: ArtifactScope,
+}
+
 pub struct WriteTodosTool {
     artifacts: Arc<ArtifactService>,
 }
@@ -88,7 +96,7 @@ impl Tool for WriteTodosTool {
         json!({
             "type": "object",
             "properties": {
-                "scope": { "type": "string", "description": "Artifact scope (private, team_shared, external_published)" },
+                "scope": { "type": "string", "description": "Logical todo scope key (e.g. private, sprint_42, team_shared)" },
                 "replace": { "type": "boolean", "description": "When true, replace all existing todos for the scope" },
                 "items": {
                     "type": "array",
@@ -111,7 +119,7 @@ impl Tool for WriteTodosTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let parsed: WriteTodosArgs = serde_json::from_value(args).context("invalid write_todos args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
-        let mut document = read_document(&self.artifacts, copy_scope(&scope)).await?;
+        let mut document = read_document(&self.artifacts, &scope).await?;
 
         if parsed.replace {
             document.items = parsed.items;
@@ -121,7 +129,7 @@ impl Tool for WriteTodosTool {
             }
         }
 
-        persist_document(&self.artifacts, scope, &document).await?;
+        persist_document(&self.artifacts, &scope, &document).await?;
         Ok(success_result(document)?)
     }
 }
@@ -150,7 +158,7 @@ impl Tool for ReadTodosTool {
         json!({
             "type": "object",
             "properties": {
-                "scope": { "type": "string", "description": "Artifact scope (private, team_shared, external_published)" }
+                "scope": { "type": "string", "description": "Logical todo scope key (e.g. private, sprint_42, team_shared)" }
             }
         })
     }
@@ -158,7 +166,7 @@ impl Tool for ReadTodosTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let parsed: ReadTodosArgs = serde_json::from_value(args).context("invalid read_todos args")?;
         let scope = parse_scope(parsed.scope.as_deref())?;
-        let document = read_document(&self.artifacts, scope).await?;
+        let document = read_document(&self.artifacts, &scope).await?;
         success_result(document)
     }
 }
@@ -187,7 +195,7 @@ impl Tool for UpdateTodoTool {
         json!({
             "type": "object",
             "properties": {
-                "scope": { "type": "string", "description": "Artifact scope (private, team_shared, external_published)" },
+                "scope": { "type": "string", "description": "Logical todo scope key (e.g. private, sprint_42, team_shared)" },
                 "id": { "type": "string" },
                 "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "blocked"] },
                 "notes": { "type": "string" }
@@ -202,7 +210,7 @@ impl Tool for UpdateTodoTool {
         let scope = parse_scope(parsed.scope.as_deref())?;
         let notes_update = extract_notes_update(&args);
 
-        let mut document = read_document(&self.artifacts, copy_scope(&scope)).await?;
+        let mut document = read_document(&self.artifacts, &scope).await?;
         let todo = document
             .items
             .iter_mut()
@@ -214,48 +222,71 @@ impl Tool for UpdateTodoTool {
             todo.notes = notes;
         }
 
-        persist_document(&self.artifacts, scope, &document).await?;
+        persist_document(&self.artifacts, &scope, &document).await?;
         success_result(document)
     }
 }
 
 async fn read_document(
     artifact_service: &ArtifactService,
-    scope: ArtifactScope,
+    scope: &TodoScope,
 ) -> anyhow::Result<TodoDocument> {
     if let Some(artifact) = artifact_service
-        .latest_by_kind_and_scope(TODO_DOCUMENT_KIND, scope)
+        .find_latest_by_kind_scope_and_content_string(
+            TODO_DOCUMENT_KIND,
+            copy_scope(&scope.artifact_scope),
+            "scope_key",
+            &scope.key,
+        )
         .await?
     {
-        return serde_json::from_value(artifact.content)
-            .context("stored todo_document is not valid TodoDocument");
+        let mut document: TodoDocument = serde_json::from_value(artifact.content)
+            .context("stored todo_document is not valid TodoDocument")?;
+        if document.scope_key.is_empty() {
+            document.scope_key = scope.key.clone();
+        }
+        return Ok(document);
     }
-    Ok(TodoDocument::default())
+    Ok(TodoDocument {
+        scope_key: scope.key.clone(),
+        items: vec![],
+    })
 }
 
 async fn persist_document(
     artifact_service: &ArtifactService,
-    scope: ArtifactScope,
+    scope: &TodoScope,
     document: &TodoDocument,
 ) -> anyhow::Result<()> {
+    let mut payload = document.clone();
+    payload.scope_key = scope.key.clone();
     artifact_service
         .create_json_document(
             TODO_DOCUMENT_KIND,
-            scope,
-            serde_json::to_value(document).context("serialize TodoDocument")?,
+            copy_scope(&scope.artifact_scope),
+            serde_json::to_value(payload).context("serialize TodoDocument")?,
         )
         .await?;
     Ok(())
 }
 
-fn parse_scope(scope: Option<&str>) -> anyhow::Result<ArtifactScope> {
-    let normalized = scope.unwrap_or("private").to_ascii_lowercase();
-    match normalized.as_str() {
-        "private" => Ok(ArtifactScope::Private),
-        "team_shared" | "teamshared" => Ok(ArtifactScope::TeamShared),
-        "external_published" | "externalpublished" => Ok(ArtifactScope::ExternalPublished),
-        _ => Err(anyhow::anyhow!("invalid scope '{}'", normalized)),
+fn parse_scope(scope: Option<&str>) -> anyhow::Result<TodoScope> {
+    let raw = scope.unwrap_or("private").trim();
+    if raw.is_empty() {
+        return Err(anyhow::anyhow!("scope must not be empty"));
     }
+
+    let normalized = raw.to_ascii_lowercase();
+    let artifact_scope = match normalized.as_str() {
+        "team_shared" | "teamshared" => ArtifactScope::TeamShared,
+        "external_published" | "externalpublished" => ArtifactScope::ExternalPublished,
+        _ => ArtifactScope::Private,
+    };
+
+    Ok(TodoScope {
+        key: normalized,
+        artifact_scope,
+    })
 }
 
 fn upsert_item(items: &mut Vec<TodoItem>, item: TodoItem) {

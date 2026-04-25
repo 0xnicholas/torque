@@ -100,6 +100,35 @@ impl ArtifactRepository for InMemoryArtifactRepository {
         }
         Ok(false)
     }
+
+    async fn find_latest_by_kind_scope_and_content_string(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+    ) -> anyhow::Result<Option<Artifact>> {
+        let artifacts = self.artifacts.lock().expect("lock poisoned");
+        let scope_match = |left: &ArtifactScope, right: &ArtifactScope| match (left, right) {
+            (ArtifactScope::Private, ArtifactScope::Private) => true,
+            (ArtifactScope::TeamShared, ArtifactScope::TeamShared) => true,
+            (ArtifactScope::ExternalPublished, ArtifactScope::ExternalPublished) => true,
+            _ => false,
+        };
+
+        Ok(artifacts
+            .iter()
+            .find(|artifact| {
+                artifact.kind == kind
+                    && scope_match(&artifact.scope, &scope)
+                    && artifact
+                        .content
+                        .get(content_key)
+                        .and_then(|value| value.as_str())
+                        .is_some_and(|value| value == content_value)
+            })
+            .map(copy_artifact))
+    }
 }
 
 async fn setup_registry() -> (ToolRegistry, Arc<ArtifactService>, Arc<InMemoryArtifactRepository>) {
@@ -143,6 +172,7 @@ async fn todo_tools_tests_write_todos_creates_todo_document_artifact_for_scope()
         .expect("todo_document artifact should exist");
 
     assert!(matches!(&todo_artifact.scope, ArtifactScope::Private));
+    assert_eq!(todo_artifact.content["scope_key"], "private");
     assert_eq!(todo_artifact.content["items"][0]["id"], "todo-1");
 }
 
@@ -213,4 +243,92 @@ async fn todo_tools_tests_update_todo_status_updates_single_item_without_replaci
     assert_eq!(items[0]["notes"], "done");
     assert_eq!(items[1]["id"], "todo-2");
     assert_eq!(items[1]["status"], "pending");
+}
+
+#[tokio::test]
+async fn todo_tools_tests_read_todos_is_isolated_by_logical_scope_key() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "feature_alpha",
+            "replace": true,
+            "items": [
+                { "id": "a-1", "content": "Alpha", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "feature_beta",
+            "replace": true,
+            "items": [
+                { "id": "b-1", "content": "Beta", "status": "in_progress" }
+            ]
+        }),
+    )
+    .await;
+
+    let alpha = execute_ok(&registry, "read_todos", json!({ "scope": "feature_alpha" })).await;
+    let beta = execute_ok(&registry, "read_todos", json!({ "scope": "feature_beta" })).await;
+
+    let alpha_payload: serde_json::Value =
+        serde_json::from_str(&alpha.content).expect("read_todos returns JSON");
+    let beta_payload: serde_json::Value =
+        serde_json::from_str(&beta.content).expect("read_todos returns JSON");
+
+    assert_eq!(alpha_payload["scope_key"], "feature_alpha");
+    assert_eq!(alpha_payload["items"][0]["id"], "a-1");
+    assert_eq!(beta_payload["scope_key"], "feature_beta");
+    assert_eq!(beta_payload["items"][0]["id"], "b-1");
+}
+
+#[tokio::test]
+async fn todo_tools_tests_write_todos_merges_and_upserts_when_replace_false() {
+    let (registry, _artifact_service, _repo) = setup_registry().await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": true,
+            "items": [
+                { "id": "todo-1", "content": "Task A", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let _ = execute_ok(
+        &registry,
+        "write_todos",
+        json!({
+            "scope": "private",
+            "replace": false,
+            "items": [
+                { "id": "todo-1", "content": "Task A updated", "status": "in_progress", "notes": "started" },
+                { "id": "todo-2", "content": "Task B", "status": "pending" }
+            ]
+        }),
+    )
+    .await;
+
+    let result = execute_ok(&registry, "read_todos", json!({ "scope": "private" })).await;
+    let payload: serde_json::Value =
+        serde_json::from_str(&result.content).expect("read_todos returns JSON");
+    let items = payload["items"].as_array().expect("items array");
+
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["id"], "todo-1");
+    assert_eq!(items[0]["content"], "Task A updated");
+    assert_eq!(items[0]["status"], "in_progress");
+    assert_eq!(items[0]["notes"], "started");
+    assert_eq!(items[1]["id"], "todo-2");
 }

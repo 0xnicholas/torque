@@ -21,6 +21,13 @@ pub trait ArtifactRepository: Send + Sync {
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Artifact>>;
     async fn delete(&self, id: Uuid) -> anyhow::Result<bool>;
     async fn update_scope(&self, id: Uuid, scope: ArtifactScope) -> anyhow::Result<bool>;
+    async fn find_latest_by_kind_scope_and_content_string(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+    ) -> anyhow::Result<Option<Artifact>>;
 }
 
 pub struct PostgresArtifactRepository {
@@ -104,5 +111,29 @@ impl ArtifactRepository for PostgresArtifactRepository {
             .execute(self.db.pool())
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    async fn find_latest_by_kind_scope_and_content_string(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
+    ) -> anyhow::Result<Option<Artifact>> {
+        let row = sqlx::query_as::<_, Artifact>(
+            "SELECT * FROM v1_artifacts
+             WHERE kind = $1
+               AND scope = $2
+               AND content ->> $3 = $4
+             ORDER BY created_at DESC
+             LIMIT 1",
+        )
+        .bind(kind)
+        .bind(scope)
+        .bind(content_key)
+        .bind(content_value)
+        .fetch_optional(self.db.pool())
+        .await?;
+        Ok(row)
     }
 }

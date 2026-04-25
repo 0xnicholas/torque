@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 pub const TODO_DOCUMENT_KIND: &str = "todo_document";
 const JSON_MIME_TYPE: &str = "application/json";
-const DEFAULT_KIND_LOOKUP_LIMIT: i64 = 200;
 
 pub struct ArtifactService {
     repo: Arc<dyn ArtifactRepository>,
@@ -59,18 +58,15 @@ impl ArtifactService {
         self.create(kind, scope, JSON_MIME_TYPE, content).await
     }
 
-    pub async fn latest_by_kind_and_scope(
+    pub async fn find_latest_by_kind_scope_and_content_string(
         &self,
         kind: &str,
         scope: ArtifactScope,
+        content_key: &str,
+        content_value: &str,
     ) -> anyhow::Result<Option<Artifact>> {
-        let artifacts = self.repo.list(DEFAULT_KIND_LOOKUP_LIMIT).await?;
-        Ok(artifacts
-            .into_iter()
-            .find(|artifact| artifact.kind == kind && same_scope(&artifact.scope, &scope)))
+        self.repo
+            .find_latest_by_kind_scope_and_content_string(kind, scope, content_key, content_value)
+            .await
     }
-}
-
-fn same_scope(left: &ArtifactScope, right: &ArtifactScope) -> bool {
-    std::mem::discriminant(left) == std::mem::discriminant(right)
 }

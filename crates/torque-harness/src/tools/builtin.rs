@@ -44,12 +44,12 @@ impl Tool for WebSearchTool {
     }
 }
 
-pub fn create_builtin_tools() -> Vec<Box<dyn Tool>> {
+pub fn create_demo_builtin_tools() -> Vec<Box<dyn Tool>> {
     vec![Box::new(WebSearchTool)]
 }
 
-pub fn create_builtin_tools_with_todos(artifact_service: Arc<ArtifactService>) -> Vec<ToolArc> {
-    let mut tools: Vec<ToolArc> = create_builtin_tools().into_iter().map(Arc::from).collect();
+pub fn create_builtin_tools(artifact_service: Arc<ArtifactService>) -> Vec<ToolArc> {
+    let mut tools: Vec<ToolArc> = create_demo_builtin_tools().into_iter().map(Arc::from).collect();
     tools.extend(todos::create_todo_tools(artifact_service));
     tools
 }

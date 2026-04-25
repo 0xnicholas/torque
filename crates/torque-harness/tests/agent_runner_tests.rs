@@ -13,7 +13,7 @@ use torque_harness::repository::{
     PostgresMessageRepository, PostgresSessionRepository,
 };
 use torque_harness::service::{MemoryService, SessionService, ToolService};
-use torque_harness::tools::builtin::create_builtin_tools;
+use torque_harness::tools::builtin::create_demo_builtin_tools;
 
 async fn build_session_service(
     db: torque_harness::db::Database,
@@ -113,7 +113,7 @@ async fn chat_handles_tool_call_and_records_tool_log() {
         .await
         .expect("session should be created");
 
-    for tool in create_builtin_tools() {
+    for tool in create_demo_builtin_tools() {
         svc.tools().registry().register(Arc::from(tool)).await;
     }
 
