@@ -1,7 +1,8 @@
 use crate::agent::stream::StreamEvent;
 use crate::config::checkpoint::CheckpointConfig;
 use crate::infra::llm::{Chunk, LlmClient, LlmMessage};
-use crate::infra::tool_registry::{ToolExecutionContext, ToolRegistry};
+use crate::service::ToolService;
+use crate::infra::tool_registry::ToolExecutionContext;
 use crate::kernel_bridge::events::EventRecorder;
 use crate::repository::{CheckpointRepository, EventRepository, SessionRepository};
 use checkpointer::Checkpointer;
@@ -69,7 +70,7 @@ impl KernelRuntimeHandle {
         &mut self,
         request: ExecutionRequest,
         llm: Arc<dyn LlmClient>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<ToolService>,
         event_sink: mpsc::Sender<StreamEvent>,
         initial_messages: Vec<LlmMessage>,
     ) -> Result<ExecutionResult, KernelBridgeError> {
@@ -124,7 +125,7 @@ impl KernelRuntimeHandle {
         &mut self,
         request: ExecutionRequest,
         llm: Arc<dyn LlmClient>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<ToolService>,
         event_sink: mpsc::Sender<StreamEvent>,
         llm_messages: Vec<LlmMessage>,
     ) -> Result<ExecutionResult, KernelBridgeError> {
@@ -136,11 +137,12 @@ impl KernelRuntimeHandle {
         &mut self,
         instance_id: AgentInstanceId,
         llm: Arc<dyn LlmClient>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<ToolService>,
         event_sink: mpsc::Sender<StreamEvent>,
         mut messages: Vec<LlmMessage>,
     ) -> Result<String, KernelBridgeError> {
-        let tool_defs = tools.to_llm_tools().await;
+        let tool_defs = tools.registry().to_llm_tools().await;
+        let offload = tools.tool_offload_service();
         let mut tool_call_count = 0;
         let mut consecutive_failures = 0;
 
@@ -204,6 +206,7 @@ impl KernelRuntimeHandle {
                             .await;
 
                         let result = tools
+                            .registry()
                             .execute_with_context(
                                 &tool_call.name,
                                 tool_call.arguments.clone(),
@@ -221,6 +224,11 @@ impl KernelRuntimeHandle {
                                 error: Some(e.to_string()),
                             },
                         };
+
+                        let result = offload
+                            .offload(&tool_call.name, result, Some(instance_id.as_uuid()))
+                            .await
+                            .map_err(|e| KernelBridgeError::Db(anyhow::anyhow!("tool offload error: {e}")))?;
 
                         let _ = event_sink
                             .send(StreamEvent::ToolResult {
@@ -356,11 +364,11 @@ impl KernelRuntimeHandle {
         &mut self,
         _initial_request: Option<ExecutionRequest>,
         llm: Arc<dyn LlmClient>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<ToolService>,
         event_sink: mpsc::Sender<StreamEvent>,
         messages: Vec<LlmMessage>,
     ) -> Result<(ExecutionState, Vec<LlmMessage>), KernelBridgeError> {
-        let tool_defs = tools.to_llm_tools().await;
+        let tool_defs = tools.registry().to_llm_tools().await;
 
         let request = ChatRequest::new(llm.model().to_string(), messages.clone())
             .with_tools(tool_defs.clone());
@@ -474,7 +482,7 @@ impl KernelRuntimeHandle {
         &mut self,
         signal: ResumeSignal,
         llm: Arc<dyn LlmClient>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<ToolService>,
         event_sink: mpsc::Sender<StreamEvent>,
         messages: Vec<LlmMessage>,
     ) -> Result<(ExecutionState, Vec<LlmMessage>), KernelBridgeError> {

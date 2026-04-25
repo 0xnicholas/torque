@@ -58,6 +58,19 @@ impl ArtifactService {
         self.create(kind, scope, JSON_MIME_TYPE, content).await
     }
 
+    pub async fn create_with_source_instance(
+        &self,
+        kind: &str,
+        scope: ArtifactScope,
+        mime_type: &str,
+        content: serde_json::Value,
+        source_instance_id: Option<Uuid>,
+    ) -> anyhow::Result<Artifact> {
+        self.repo
+            .create_with_source_instance(kind, scope, mime_type, content, source_instance_id)
+            .await
+    }
+
     pub async fn create_json_document_with_source_instance(
         &self,
         kind: &str,

@@ -474,7 +474,7 @@ impl RunService {
             .execute_v1(
                 request,
                 self.llm.clone(),
-                self.tools.registry(),
+                self.tools.clone(),
                 event_sink,
                 vec![], // Start with empty messages for v1
             )

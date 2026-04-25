@@ -192,7 +192,7 @@ impl SessionService {
             .execute_chat(
                 request,
                 self.llm.clone(),
-                self.tools.registry().clone(),
+                self.tools.clone(),
                 event_sink.clone(),
                 llm_messages,
             )
