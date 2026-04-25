@@ -1,4 +1,7 @@
 use super::{Tool, ToolArc, ToolResult};
+use crate::policy::{
+    evaluate_filesystem_rules, FilesystemDecision, FilesystemPermissionRule, FsAction, RuleEffect,
+};
 use crate::service::vfs::RoutedVfs;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -32,13 +35,20 @@ struct GlobArgs {
 }
 
 pub fn create_vfs_tools(vfs: Arc<RoutedVfs>) -> Vec<ToolArc> {
+    create_vfs_tools_with_rules(vfs, default_filesystem_rules())
+}
+
+pub fn create_vfs_tools_with_rules(
+    vfs: Arc<RoutedVfs>,
+    rules: Vec<FilesystemPermissionRule>,
+) -> Vec<ToolArc> {
     vec![
-        Arc::new(LsTool::new(vfs.clone())) as ToolArc,
-        Arc::new(ReadFileTool::new(vfs.clone())) as ToolArc,
-        Arc::new(WriteFileTool::new(vfs.clone())) as ToolArc,
-        Arc::new(EditFileTool::new(vfs.clone())) as ToolArc,
-        Arc::new(GlobTool::new(vfs.clone())) as ToolArc,
-        Arc::new(GrepTool::new(vfs)) as ToolArc,
+        Arc::new(LsTool::new(vfs.clone(), rules.clone())) as ToolArc,
+        Arc::new(ReadFileTool::new(vfs.clone(), rules.clone())) as ToolArc,
+        Arc::new(WriteFileTool::new(vfs.clone(), rules.clone())) as ToolArc,
+        Arc::new(EditFileTool::new(vfs.clone(), rules.clone())) as ToolArc,
+        Arc::new(GlobTool::new(vfs.clone(), rules.clone())) as ToolArc,
+        Arc::new(GrepTool::new(vfs, rules)) as ToolArc,
     ]
 }
 
@@ -46,11 +56,12 @@ macro_rules! tool_struct {
     ($name:ident) => {
         pub struct $name {
             vfs: Arc<RoutedVfs>,
+            rules: Vec<FilesystemPermissionRule>,
         }
 
         impl $name {
-            fn new(vfs: Arc<RoutedVfs>) -> Self {
-                Self { vfs }
+            fn new(vfs: Arc<RoutedVfs>, rules: Vec<FilesystemPermissionRule>) -> Self {
+                Self { vfs, rules }
             }
         }
     };
@@ -85,6 +96,9 @@ impl Tool for LsTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: PathArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::List, &args.path) {
+            return Ok(decision);
+        }
         respond(self.vfs.ls(&args.path).await)
     }
 }
@@ -111,6 +125,9 @@ impl Tool for ReadFileTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: PathArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::Read, &args.path) {
+            return Ok(decision);
+        }
         match self.vfs.read(&args.path).await {
             Ok(content) => Ok(ToolResult {
                 success: true,
@@ -149,6 +166,9 @@ impl Tool for WriteFileTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: WriteFileArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::Write, &args.path) {
+            return Ok(decision);
+        }
         match self.vfs.write(&args.path, &args.content).await {
             Ok(()) => Ok(ToolResult {
                 success: true,
@@ -189,6 +209,9 @@ impl Tool for EditFileTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: EditFileArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::Edit, &args.path) {
+            return Ok(decision);
+        }
         respond(self.vfs.edit(&args.path, &args.old_string, &args.new_string, args.replace_all).await)
     }
 }
@@ -216,6 +239,9 @@ impl Tool for GlobTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: GlobArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::Glob, &args.path) {
+            return Ok(decision);
+        }
         respond(self.vfs.glob(&args.path, &args.pattern).await)
     }
 }
@@ -243,7 +269,49 @@ impl Tool for GrepTool {
 
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args: GlobArgs = serde_json::from_value(args)?;
+        if let Some(decision) = gate(&self.rules, FsAction::Grep, &args.path) {
+            return Ok(decision);
+        }
         respond(self.vfs.grep(&args.path, &args.pattern).await)
+    }
+}
+
+fn default_filesystem_rules() -> Vec<FilesystemPermissionRule> {
+    vec![
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Read, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::List, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Glob, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Grep, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Write, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Edit, "/workspace/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Read, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::List, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Glob, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Grep, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Write, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Allow, FsAction::Edit, "/scratch/**"),
+        FilesystemPermissionRule::new(RuleEffect::Deny, FsAction::Write, "/workspace/.git/**"),
+        FilesystemPermissionRule::new(RuleEffect::Deny, FsAction::Edit, "/workspace/.git/**"),
+    ]
+}
+
+fn gate(
+    rules: &[FilesystemPermissionRule],
+    action: FsAction,
+    path: &str,
+) -> Option<ToolResult> {
+    match evaluate_filesystem_rules(rules, action, path) {
+        FilesystemDecision::Allow => None,
+        FilesystemDecision::Deny(reason) => Some(ToolResult {
+            success: false,
+            content: String::new(),
+            error: Some(reason),
+        }),
+        FilesystemDecision::RequireApproval(reason) => Some(ToolResult {
+            success: false,
+            content: String::new(),
+            error: Some(reason),
+        }),
     }
 }
 
