@@ -93,7 +93,8 @@ impl ServiceContainer {
         idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,
         run_gate: std::sync::Arc<crate::v1_guards::RunGate>,
     ) -> Self {
-        let tool = std::sync::Arc::new(ToolService::new());
+        let artifact = std::sync::Arc::new(ArtifactService::new(repos.artifact.clone()));
+        let tool = std::sync::Arc::new(ToolService::new_with_builtins(artifact.clone()));
         let memory = std::sync::Arc::new(memory::MemoryService::new(
             repos.memory.clone(),
             memory_v1.clone(),
@@ -115,7 +116,6 @@ impl ServiceContainer {
         let agent_definition =
             std::sync::Arc::new(AgentDefinitionService::new(repos.agent_definition.clone()));
         let task = std::sync::Arc::new(TaskService::new(repos.task.clone()));
-        let artifact = std::sync::Arc::new(ArtifactService::new(repos.artifact.clone()));
         let capability = std::sync::Arc::new(CapabilityService::new(
             repos.capability_profile.clone(),
             repos.capability_binding.clone(),
