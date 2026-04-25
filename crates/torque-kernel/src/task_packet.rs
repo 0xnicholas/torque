@@ -6,6 +6,8 @@ pub struct TaskPacket {
     pub instructions: Vec<String>,
     pub constraints: Vec<String>,
     pub expected_outputs: Vec<String>,
+    pub compact_summary: Option<String>,
+    pub key_facts: Vec<String>,
     pub input_refs: Vec<TaskInputRef>,
     pub input_artifact_ids: Vec<ArtifactId>,
     pub external_context_refs: Vec<ExternalContextRef>,
@@ -46,9 +48,21 @@ impl TaskPacket {
             instructions: task.instructions().to_vec(),
             constraints,
             expected_outputs,
+            compact_summary: None,
+            key_facts: Vec::new(),
             input_refs,
             input_artifact_ids: request.input_artifact_ids().to_vec(),
             external_context_refs: request.external_context_refs().to_vec(),
         }
+    }
+
+    pub fn with_compact_summary(
+        mut self,
+        compact_summary: impl Into<String>,
+        key_facts: Vec<String>,
+    ) -> Self {
+        self.compact_summary = Some(compact_summary.into());
+        self.key_facts = key_facts;
+        self
     }
 }

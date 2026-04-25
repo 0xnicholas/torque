@@ -4,7 +4,7 @@ use crate::kernel_bridge::{session_to_execution_request, KernelRuntimeHandle};
 use crate::repository::{
     CheckpointRepository, EventRepository, MessageRepository, SessionRepository,
 };
-use crate::service::{MemoryService, ToolService};
+use crate::service::{ContextCompactionService, MemoryService, ToolService};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -186,6 +186,20 @@ impl SessionService {
                 crate::models::MessageRole::Assistant => LlmMessage::assistant(content),
                 _ => LlmMessage::user(content),
             });
+        }
+
+        if llm_messages.len() > 1 {
+            let mut compacted_messages = vec![llm_messages[0].clone()];
+            let remaining_messages = llm_messages[1..].to_vec();
+            if let Some(summary) = ContextCompactionService::default().compact(&remaining_messages) {
+                compacted_messages.push(LlmMessage::system(format!(
+                    "{}\nKey facts:\n- {}",
+                    summary.compact_summary,
+                    summary.key_facts.join("\n- ")
+                )));
+                compacted_messages.extend(summary.preserved_tail);
+                llm_messages = compacted_messages;
+            }
         }
 
         let result = kernel

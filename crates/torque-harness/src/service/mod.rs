@@ -6,6 +6,7 @@ pub mod async_runner;
 pub mod candidate_generator;
 pub mod capability;
 pub mod checkpoint;
+pub mod context_compaction;
 pub mod delegation;
 pub mod escalation;
 pub mod event;
@@ -37,6 +38,7 @@ pub use candidate_generator::{
 };
 pub use capability::CapabilityService;
 pub use checkpoint::CheckpointService;
+pub use context_compaction::{CompactSummary, ContextCompactionPolicy, ContextCompactionService};
 pub use delegation::DelegationService;
 pub use escalation::EscalationService;
 pub use event::EventService;

@@ -269,6 +269,8 @@ fn task_packet_derives_narrow_execution_view_from_request_and_task() {
         packet.expected_outputs,
         vec!["return a structured execution result".to_string()]
     );
+    assert!(packet.compact_summary.is_none());
+    assert!(packet.key_facts.is_empty());
     assert_eq!(
         packet.input_refs,
         vec![
@@ -280,6 +282,32 @@ fn task_packet_derives_narrow_execution_view_from_request_and_task() {
     );
     assert_eq!(packet.input_artifact_ids, vec![artifact_id]);
     assert_eq!(packet.external_context_refs, vec![context_ref]);
+}
+
+#[test]
+fn task_packet_can_carry_compact_summary_as_derived_context() {
+    let request = ExecutionRequest::new(
+        AgentDefinitionId::new(),
+        "Continue work",
+        vec!["keep the packet derived".into()],
+    );
+    let mut task = Task::new("Continue work".into(), vec!["close the loop".into()], vec![]);
+    task.start().expect("task should start");
+
+    let packet = TaskPacket::from_request_and_task(&request, &task).with_compact_summary(
+        "Compacted 8 earlier messages into a derived execution summary.",
+        vec![
+            "User wants a concise answer".to_string(),
+            "Scratch file contains the expanded output".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        packet.compact_summary.as_deref(),
+        Some("Compacted 8 earlier messages into a derived execution summary.")
+    );
+    assert_eq!(packet.key_facts.len(), 2);
+    assert_eq!(packet.goal, "Continue work");
 }
 
 #[test]
