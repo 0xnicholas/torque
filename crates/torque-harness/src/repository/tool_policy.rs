@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait ToolPolicyRepository: Send + Sync {
-    async fn upsert(&self, policy: &ToolPolicy) -> anyhow::Result<()>;
+    async fn upsert(&self, policy: &ToolPolicy) -> anyhow::Result<bool>;
     async fn get(&self, tool_name: &str) -> anyhow::Result<Option<ToolPolicy>>;
     async fn list(&self) -> anyhow::Result<Vec<ToolPolicy>>;
     async fn delete(&self, tool_name: &str) -> anyhow::Result<()>;
@@ -22,7 +22,10 @@ impl PostgresToolPolicyRepository {
 
 #[async_trait]
 impl ToolPolicyRepository for PostgresToolPolicyRepository {
-    async fn upsert(&self, policy: &ToolPolicy) -> anyhow::Result<()> {
+    async fn upsert(&self, policy: &ToolPolicy) -> anyhow::Result<bool> {
+        let existing = self.get(&policy.tool_name).await?;
+        let is_insert = existing.is_none();
+
         sqlx::query(
             r#"
             INSERT INTO v1_tool_policies (id, tool_name, risk_level, side_effects, requires_approval, blocked, blocked_reason)
@@ -39,13 +42,13 @@ impl ToolPolicyRepository for PostgresToolPolicyRepository {
         .bind(Uuid::new_v4())
         .bind(&policy.tool_name)
         .bind(format!("{:?}", policy.risk_level).to_lowercase())
-        .bind(&policy.side_effects.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>())
+        .bind(&policy.side_effects.iter().map(|s| serde_json::to_string(s).unwrap()).collect::<Vec<_>>())
         .bind(policy.requires_approval)
         .bind(policy.blocked)
         .bind(&policy.blocked_reason)
         .execute(self.db.pool())
         .await?;
-        Ok(())
+        Ok(is_insert)
     }
 
     async fn get(&self, tool_name: &str) -> anyhow::Result<Option<ToolPolicy>> {

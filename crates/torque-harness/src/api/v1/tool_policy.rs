@@ -38,12 +38,19 @@ pub async fn upsert(
     Path(tool_name): Path<String>,
     Json(policy): Json<ToolPolicy>,
 ) -> Result<StatusCode, StatusCode> {
-    services
+    if policy.tool_name != tool_name {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let is_insert = services
         .tool_policy
         .upsert(&policy)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(StatusCode::CREATED)
+    Ok(if is_insert {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    })
 }
 
 pub async fn delete(
