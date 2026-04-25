@@ -31,10 +31,7 @@ impl MockEventListener {
     }
 
     pub async fn get_delegation_events(&self) -> Vec<DelegationEvent> {
-        self.delegation_events
-            .lock()
-            .await
-            .clone()
+        self.delegation_events.lock().await.clone()
     }
 }
 

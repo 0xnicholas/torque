@@ -1,6 +1,6 @@
 use crate::models::v1::agent_instance::{AgentInstance, AgentInstanceStatus};
 use crate::models::v1::checkpoint::{Checkpoint, ContextAnchorType};
-use crate::models::v1::escalation::{Escalation, EscalationType, EscalationSeverity};
+use crate::models::v1::escalation::{Escalation, EscalationSeverity, EscalationType};
 use crate::models::v1::event::Event;
 use crate::models::v1::team::{
     TeamRecoveryAction, TeamRecoveryAssessment, TeamRecoveryDisposition, TeamTaskRecoveryResult,
@@ -203,7 +203,9 @@ impl RecoveryService {
                 RecoveryDisposition::ResumeCurrent => RecoveryAction::ResumeExecution,
                 RecoveryDisposition::AwaitingApproval => RecoveryAction::AwaitApprovalDecision,
                 RecoveryDisposition::AwaitingTool => RecoveryAction::AwaitToolCompletion,
-                RecoveryDisposition::AwaitingDelegation => RecoveryAction::AwaitDelegationCompletion,
+                RecoveryDisposition::AwaitingDelegation => {
+                    RecoveryAction::AwaitDelegationCompletion
+                }
                 RecoveryDisposition::Suspended => RecoveryAction::StaySuspended,
                 RecoveryDisposition::Completed => RecoveryAction::AcceptCompletedState,
                 RecoveryDisposition::Failed => RecoveryAction::EscalateFailure,
@@ -249,8 +251,7 @@ impl RecoveryService {
         let instance_id = checkpoint.agent_instance_id;
 
         // Extract messages from checkpoint state
-        let state: r#trait::CheckpointState =
-            serde_json::from_value(checkpoint.snapshot.clone())?;
+        let state: r#trait::CheckpointState = serde_json::from_value(checkpoint.snapshot.clone())?;
         let messages = state.messages;
 
         // 2. Validate instance exists
@@ -317,10 +318,13 @@ impl RecoveryService {
             .ok_or_else(|| anyhow::anyhow!("Agent instance disappeared during recovery"))?;
 
         // 6. Rebuild state from events if checkpoint has event_anchor
-        let rebuilt_state = if let Some(event_anchor) = checkpoint.context_anchors.iter().find(|a| {
-            matches!(a.anchor_type, ContextAnchorType::EventAnchor)
-        }) {
-            self.rebuild_state_from_events(instance_id, event_anchor.reference_id).await?
+        let rebuilt_state = if let Some(event_anchor) = checkpoint
+            .context_anchors
+            .iter()
+            .find(|a| matches!(a.anchor_type, ContextAnchorType::EventAnchor))
+        {
+            self.rebuild_state_from_events(instance_id, event_anchor.reference_id)
+                .await?
         } else {
             RebuiltState::default()
         };
@@ -389,7 +393,9 @@ impl RecoveryService {
                     for deleg_id in delegations {
                         if let Some(id_str) = deleg_id.as_str() {
                             if let Ok(child_id) = uuid::Uuid::parse_str(id_str) {
-                                if let Ok(Some(child)) = self.agent_instance_repo.get(child_id).await {
+                                if let Ok(Some(child)) =
+                                    self.agent_instance_repo.get(child_id).await
+                                {
                                     match child.status {
                                         AgentInstanceStatus::Failed => {
                                             tracing::warn!(
@@ -398,7 +404,10 @@ impl RecoveryService {
                                                 instance_id
                                             );
                                             self.agent_instance_repo
-                                                .update_status(instance_id, AgentInstanceStatus::Ready)
+                                                .update_status(
+                                                    instance_id,
+                                                    AgentInstanceStatus::Ready,
+                                                )
                                                 .await?;
                                         }
                                         AgentInstanceStatus::Completed => {
@@ -460,8 +469,15 @@ impl RecoveryService {
                             task_id: task_id.to_string(),
                             storage: storage.to_string(),
                             location: location.to_string(),
-                            size_bytes: artifact.get("size_bytes").and_then(|v| v.as_i64()).unwrap_or(0),
-                            content_type: artifact.get("content_type").and_then(|v| v.as_str()).unwrap_or("application/octet-stream").to_string(),
+                            size_bytes: artifact
+                                .get("size_bytes")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(0),
+                            content_type: artifact
+                                .get("content_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("application/octet-stream")
+                                .to_string(),
                         });
                     }
                 }
@@ -497,7 +513,8 @@ impl RecoveryService {
             .await?;
 
         if let Some(checkpoint) = checkpoints.into_iter().next() {
-            let (instance, messages, rebuilt_state) = self.restore_from_checkpoint(checkpoint.id).await?;
+            let (instance, messages, rebuilt_state) =
+                self.restore_from_checkpoint(checkpoint.id).await?;
             Ok((instance, messages, rebuilt_state))
         } else {
             let instance = self
@@ -631,7 +648,11 @@ impl RecoveryService {
             for anchor in &anchors {
                 match anchor.anchor_type {
                     ContextAnchorType::MemoryEntry => {
-                        if repo_v1.get_entry_by_id(anchor.reference_id).await?.is_some() {
+                        if repo_v1
+                            .get_entry_by_id(anchor.reference_id)
+                            .await?
+                            .is_some()
+                        {
                             restored_anchors += 1;
                         }
                     }
@@ -661,10 +682,9 @@ impl RecoveryService {
             }
         }
 
-        let event_anchor = anchors.iter().find(|a| matches!(
-            a.anchor_type,
-            ContextAnchorType::EventAnchor
-        ));
+        let event_anchor = anchors
+            .iter()
+            .find(|a| matches!(a.anchor_type, ContextAnchorType::EventAnchor));
         let mut events_replayed = 0;
 
         if let Some(anchor) = event_anchor {
@@ -783,9 +803,10 @@ impl RecoveryService {
         &self,
         team_instance_id: Uuid,
     ) -> anyhow::Result<TeamRecoveryAssessment> {
-        let member_repo = self.team_member_repo.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Team member repository not configured")
-        })?;
+        let member_repo = self
+            .team_member_repo
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Team member repository not configured"))?;
 
         let members = member_repo.list_by_team(team_instance_id, 100).await?;
 
@@ -839,13 +860,11 @@ impl RecoveryService {
         })
     }
 
-    pub async fn recover_team_task(
-        &self,
-        task_id: Uuid,
-    ) -> anyhow::Result<TeamTaskRecoveryResult> {
-        let task_repo = self.team_task_repo.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("Team task repository not configured")
-        })?;
+    pub async fn recover_team_task(&self, task_id: Uuid) -> anyhow::Result<TeamTaskRecoveryResult> {
+        let task_repo = self
+            .team_task_repo
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Team task repository not configured"))?;
 
         let task = task_repo
             .get(task_id)
@@ -857,8 +876,12 @@ impl RecoveryService {
         let (action_taken, new_status) = if task.status == TeamTaskStatus::Failed {
             if current_retry_count < 3 {
                 let new_retry_count = current_retry_count + 1;
-                task_repo.update_retry_count(task_id, new_retry_count).await?;
-                task_repo.update_status(task_id, TeamTaskStatus::Open).await?;
+                task_repo
+                    .update_retry_count(task_id, new_retry_count)
+                    .await?;
+                task_repo
+                    .update_status(task_id, TeamTaskStatus::Open)
+                    .await?;
                 (TeamRecoveryAction::Retry, TeamTaskStatus::Open)
             } else {
                 (TeamRecoveryAction::EscalateToSupervisor, task.status)

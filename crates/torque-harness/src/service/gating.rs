@@ -1,16 +1,16 @@
 use crate::config;
 use crate::embedding::EmbeddingGenerator;
-use anyhow::Context;
 use crate::models::v1::gating::{
     CandidateGenerationConfig, ConflictResult, ConflictType, DecisionFactors, DedupAction,
     DedupResult, DedupThresholds, EquivalenceCheckInput, EquivalenceResult, ExecutionSummary,
-    GateDecision, GateDecisionType, GatingConfig, MergeStrategy, QualityScore, RiskAssessment,
-    RiskLevel, ReviewPriority, SimilarMemoryResult, WriteMode,
+    GateDecision, GateDecisionType, GatingConfig, MergeStrategy, QualityScore, ReviewPriority,
+    RiskAssessment, RiskLevel, SimilarMemoryResult, WriteMode,
 };
 use crate::models::v1::memory::{
     MemoryCategory, MemoryContent, MemoryWriteCandidate, MemoryWriteCandidateStatus,
 };
 use crate::repository::MemoryRepositoryV1;
+use anyhow::Context;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -301,7 +301,12 @@ impl MemoryGatingService {
     }
 
     fn content_to_text(content: &MemoryContent) -> String {
-        format!("{}: {} - {}", content.category.to_env_suffix(), content.key, content.value)
+        format!(
+            "{}: {} - {}",
+            content.category.to_env_suffix(),
+            content.key,
+            content.value
+        )
     }
 
     fn make_conflict_decision(conflict: ConflictResult) -> GateDecision {
@@ -319,76 +324,73 @@ impl MemoryGatingService {
         dedup_result: &DedupResult,
         equivalence_result: Option<&EquivalenceResult>,
     ) -> anyhow::Result<GateDecision> {
-        let equiv = equivalence_result.cloned().unwrap_or(EquivalenceResult::Distinct);
+        let equiv = equivalence_result
+            .cloned()
+            .unwrap_or(EquivalenceResult::Distinct);
 
         match (&dedup_result.action, &equiv) {
-            (DedupAction::Duplicate, EquivalenceResult::Distinct) if dedup_result.similarity < 0.98 => {
-                let llm_result = self.check_equivalence_via_llm_with_fallback(dedup_result).await?;
+            (DedupAction::Duplicate, EquivalenceResult::Distinct)
+                if dedup_result.similarity < 0.98 =>
+            {
+                let llm_result = self
+                    .check_equivalence_via_llm_with_fallback(dedup_result)
+                    .await?;
                 Ok(self.llm_result_to_decision(llm_result, dedup_result)?)
             }
-            (DedupAction::Duplicate, EquivalenceResult::Mergeable) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Merge,
-                    write_mode: Some(WriteMode::Merge {
-                        target_id: dedup_result.similar_entry_id.unwrap(),
-                        strategy: MergeStrategy::Summarize,
-                    }),
-                    reason: "Duplicate content but semantically mergeable".to_string(),
-                    target_entry_id: None,
-                    priority: None,
-                })
-            }
-            (DedupAction::Mergeable, EquivalenceResult::Equivalent) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Merge,
-                    write_mode: Some(WriteMode::Merge {
-                        target_id: dedup_result.similar_entry_id.unwrap(),
-                        strategy: MergeStrategy::WithProvenance,
-                    }),
-                    reason: "Semantically equivalent entries".to_string(),
-                    target_entry_id: None,
-                    priority: None,
-                })
-            }
-            (DedupAction::Mergeable, EquivalenceResult::Conflict) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Review,
-                    priority: Some(ReviewPriority::High),
-                    reason: "Mergeable but semantic conflict detected".to_string(),
-                    target_entry_id: None,
-                    write_mode: None,
-                })
-            }
-            (DedupAction::New, EquivalenceResult::Mergeable) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Merge,
-                    write_mode: Some(WriteMode::Merge {
-                        target_id: dedup_result.similar_entry_id.unwrap(),
-                        strategy: MergeStrategy::Append,
-                    }),
-                    reason: "New entry but similar to existing - appending".to_string(),
-                    target_entry_id: None,
-                    priority: None,
-                })
-            }
-            (DedupAction::New, EquivalenceResult::Distinct) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Approve,
-                    write_mode: Some(WriteMode::Insert),
-                    reason: "New distinct entry".to_string(),
-                    target_entry_id: None,
-                    priority: None,
-                })
-            }
-            _ => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Review,
-                    priority: Some(ReviewPriority::Low),
-                    reason: format!("Default review: dedup={:?}, equiv={:?}", dedup_result.action, equiv),
-                    target_entry_id: None,
-                    write_mode: None,
-                })
-            }
+            (DedupAction::Duplicate, EquivalenceResult::Mergeable) => Ok(GateDecision {
+                decision: GateDecisionType::Merge,
+                write_mode: Some(WriteMode::Merge {
+                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    strategy: MergeStrategy::Summarize,
+                }),
+                reason: "Duplicate content but semantically mergeable".to_string(),
+                target_entry_id: None,
+                priority: None,
+            }),
+            (DedupAction::Mergeable, EquivalenceResult::Equivalent) => Ok(GateDecision {
+                decision: GateDecisionType::Merge,
+                write_mode: Some(WriteMode::Merge {
+                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    strategy: MergeStrategy::WithProvenance,
+                }),
+                reason: "Semantically equivalent entries".to_string(),
+                target_entry_id: None,
+                priority: None,
+            }),
+            (DedupAction::Mergeable, EquivalenceResult::Conflict) => Ok(GateDecision {
+                decision: GateDecisionType::Review,
+                priority: Some(ReviewPriority::High),
+                reason: "Mergeable but semantic conflict detected".to_string(),
+                target_entry_id: None,
+                write_mode: None,
+            }),
+            (DedupAction::New, EquivalenceResult::Mergeable) => Ok(GateDecision {
+                decision: GateDecisionType::Merge,
+                write_mode: Some(WriteMode::Merge {
+                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    strategy: MergeStrategy::Append,
+                }),
+                reason: "New entry but similar to existing - appending".to_string(),
+                target_entry_id: None,
+                priority: None,
+            }),
+            (DedupAction::New, EquivalenceResult::Distinct) => Ok(GateDecision {
+                decision: GateDecisionType::Approve,
+                write_mode: Some(WriteMode::Insert),
+                reason: "New distinct entry".to_string(),
+                target_entry_id: None,
+                priority: None,
+            }),
+            _ => Ok(GateDecision {
+                decision: GateDecisionType::Review,
+                priority: Some(ReviewPriority::Low),
+                reason: format!(
+                    "Default review: dedup={:?}, equiv={:?}",
+                    dedup_result.action, equiv
+                ),
+                target_entry_id: None,
+                write_mode: None,
+            }),
         }
     }
 
@@ -432,24 +434,20 @@ impl MemoryGatingService {
                     priority: None,
                 })
             }
-            Some(EquivalenceResult::Conflict) => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Review,
-                    priority: Some(ReviewPriority::High),
-                    reason: "LLM detected conflict".to_string(),
-                    target_entry_id: None,
-                    write_mode: None,
-                })
-            }
-            _ => {
-                Ok(GateDecision {
-                    decision: GateDecisionType::Review,
-                    priority: Some(ReviewPriority::Medium),
-                    reason: "Ambiguous dedup result - LLM fallback inconclusive".to_string(),
-                    target_entry_id: None,
-                    write_mode: None,
-                })
-            }
+            Some(EquivalenceResult::Conflict) => Ok(GateDecision {
+                decision: GateDecisionType::Review,
+                priority: Some(ReviewPriority::High),
+                reason: "LLM detected conflict".to_string(),
+                target_entry_id: None,
+                write_mode: None,
+            }),
+            _ => Ok(GateDecision {
+                decision: GateDecisionType::Review,
+                priority: Some(ReviewPriority::Medium),
+                reason: "Ambiguous dedup result - LLM fallback inconclusive".to_string(),
+                target_entry_id: None,
+                write_mode: None,
+            }),
         }
     }
 
@@ -583,7 +581,11 @@ impl MemoryGatingService {
         }
 
         // All retries failed - fallback to Distinct with warning
-        tracing::warn!("LLM equivalence check failed after {} retries: {:?}", max_retries, last_error);
+        tracing::warn!(
+            "LLM equivalence check failed after {} retries: {:?}",
+            max_retries,
+            last_error
+        );
         Ok(EquivalenceResult::Distinct)
     }
 
@@ -724,7 +726,8 @@ impl MemoryGatingService {
         };
 
         let equivalence_result = if embedding.is_some() {
-            self.check_equivalence_for_candidate(&dedup_result, &content.category, &content).await?
+            self.check_equivalence_for_candidate(&dedup_result, &content.category, &content)
+                .await?
         } else {
             None
         };
@@ -735,15 +738,28 @@ impl MemoryGatingService {
             None
         };
 
-        let decision = if conflict_result.as_ref().map(|c| c.has_conflict).unwrap_or(false) {
+        let decision = if conflict_result
+            .as_ref()
+            .map(|c| c.has_conflict)
+            .unwrap_or(false)
+        {
             Self::make_conflict_decision(conflict_result.unwrap())
         } else if embedding.is_some() {
-            self.resolve_with_rules(&dedup_result, equivalence_result.as_ref()).await?
+            self.resolve_with_rules(&dedup_result, equivalence_result.as_ref())
+                .await?
         } else {
-            self.make_decision(candidate, &quality, &risk, &dedup_result, embedding.as_deref()).await?
+            self.make_decision(
+                candidate,
+                &quality,
+                &risk,
+                &dedup_result,
+                embedding.as_deref(),
+            )
+            .await?
         };
 
-        self.log_decision(candidate, &quality, &risk, &dedup_result, &decision).await?;
+        self.log_decision(candidate, &quality, &risk, &dedup_result, &decision)
+            .await?;
 
         Ok(decision)
     }

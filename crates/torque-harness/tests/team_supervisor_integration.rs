@@ -2,8 +2,8 @@ mod common;
 
 use chrono::Utc;
 use torque_harness::models::v1::team::{
-    Blocker, Decision, DelegationStatusEntry, PublishedFact, TeamDefinitionCreate,
-    TeamEvent, TeamEventType, TeamInstanceCreate, TeamTaskStatus,
+    Blocker, Decision, DelegationStatusEntry, PublishedFact, TeamDefinitionCreate, TeamEvent,
+    TeamEventType, TeamInstanceCreate, TeamTaskStatus,
 };
 use torque_harness::repository::{
     PostgresSharedTaskStateRepository, PostgresTeamDefinitionRepository,
@@ -13,17 +13,15 @@ use torque_harness::repository::{
 };
 use uuid::Uuid;
 
-async fn setup_test_db() -> Option<
-    (
-        torque_harness::db::Database,
-        PostgresTeamDefinitionRepository,
-        PostgresTeamInstanceRepository,
-        PostgresTeamMemberRepository,
-        PostgresTeamTaskRepository,
-        PostgresSharedTaskStateRepository,
-        PostgresTeamEventRepository,
-    ),
-> {
+async fn setup_test_db() -> Option<(
+    torque_harness::db::Database,
+    PostgresTeamDefinitionRepository,
+    PostgresTeamInstanceRepository,
+    PostgresTeamMemberRepository,
+    PostgresTeamTaskRepository,
+    PostgresSharedTaskStateRepository,
+    PostgresTeamEventRepository,
+)> {
     let db = common::setup_test_db_or_skip().await?;
     let team_def_repo = PostgresTeamDefinitionRepository::new(db.clone());
     let team_instance_repo = PostgresTeamInstanceRepository::new(db.clone());
@@ -136,11 +134,17 @@ async fn test_delegation_flow() {
     assert!(fetched_task.is_some());
     assert_eq!(fetched_task.unwrap().goal, "Implement feature X");
 
-    let tasks = team_task_repo.list_by_team(team_instance.id, 10).await.unwrap();
+    let tasks = team_task_repo
+        .list_by_team(team_instance.id, 10)
+        .await
+        .unwrap();
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].status, TeamTaskStatus::Open);
 
-    let open_tasks = team_task_repo.list_open(team_instance.id, 10).await.unwrap();
+    let open_tasks = team_task_repo
+        .list_open(team_instance.id, 10)
+        .await
+        .unwrap();
     assert_eq!(open_tasks.len(), 1);
 }
 
@@ -157,13 +161,15 @@ async fn test_task_completion_flow() {
         sub_agents: vec![],
         policy: serde_json::json!({}),
     };
-    let team_def_repo = PostgresTeamDefinitionRepository::new(common::setup_test_db_or_skip().await.unwrap());
+    let team_def_repo =
+        PostgresTeamDefinitionRepository::new(common::setup_test_db_or_skip().await.unwrap());
     let team_def = team_def_repo.create(&def_create).await.unwrap();
 
     let instance_create = TeamInstanceCreate {
         team_definition_id: team_def.id,
     };
-    let team_instance_repo = PostgresTeamInstanceRepository::new(common::setup_test_db_or_skip().await.unwrap());
+    let team_instance_repo =
+        PostgresTeamInstanceRepository::new(common::setup_test_db_or_skip().await.unwrap());
     let team_instance = team_instance_repo.create(&instance_create).await.unwrap();
 
     let task = team_task_repo
@@ -217,7 +223,10 @@ async fn test_shared_state_flow() {
     };
     let team_instance = team_instance_repo.create(&instance_create).await.unwrap();
 
-    let shared_state = shared_state_repo.get_or_create(team_instance.id).await.unwrap();
+    let shared_state = shared_state_repo
+        .get_or_create(team_instance.id)
+        .await
+        .unwrap();
     assert_eq!(shared_state.team_instance_id, team_instance.id);
     assert!(shared_state.accepted_artifact_refs.is_empty());
     assert!(shared_state.published_facts.is_empty());
@@ -257,7 +266,11 @@ async fn test_shared_state_flow() {
         .unwrap();
     assert!(delegation_updated);
 
-    let updated_state = shared_state_repo.get(team_instance.id).await.unwrap().unwrap();
+    let updated_state = shared_state_repo
+        .get(team_instance.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(updated_state.accepted_artifact_refs.len(), 1);
     assert_eq!(updated_state.published_facts.len(), 1);
     assert_eq!(updated_state.delegation_status.len(), 1);
@@ -297,7 +310,10 @@ async fn test_blocker_flow() {
     };
     let team_instance = team_instance_repo.create(&instance_create).await.unwrap();
 
-    let _shared_state = shared_state_repo.get_or_create(team_instance.id).await.unwrap();
+    let _shared_state = shared_state_repo
+        .get_or_create(team_instance.id)
+        .await
+        .unwrap();
 
     let blocker_id = Uuid::new_v4();
     let blocker = Blocker {
@@ -312,7 +328,11 @@ async fn test_blocker_flow() {
         .unwrap();
     assert!(added);
 
-    let state_with_blocker = shared_state_repo.get(team_instance.id).await.unwrap().unwrap();
+    let state_with_blocker = shared_state_repo
+        .get(team_instance.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(state_with_blocker.open_blockers.len(), 1);
     assert_eq!(state_with_blocker.open_blockers[0].blocker_id, blocker_id);
 
@@ -322,7 +342,11 @@ async fn test_blocker_flow() {
         .unwrap();
     assert!(resolved);
 
-    let state_without_blocker = shared_state_repo.get(team_instance.id).await.unwrap().unwrap();
+    let state_without_blocker = shared_state_repo
+        .get(team_instance.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(state_without_blocker.open_blockers.is_empty());
 
     let event = TeamEvent {
@@ -369,7 +393,10 @@ async fn test_update_with_lock() {
     };
     let team_instance = team_instance_repo.create(&instance_create).await.unwrap();
 
-    let _ = shared_state_repo.get_or_create(team_instance.id).await.unwrap();
+    let _ = shared_state_repo
+        .get_or_create(team_instance.id)
+        .await
+        .unwrap();
 
     use torque_harness::repository::team::SharedTaskStateUpdate;
 

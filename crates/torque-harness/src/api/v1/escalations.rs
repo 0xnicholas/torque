@@ -2,7 +2,11 @@ use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListResponse, Pagination};
 use crate::models::v1::escalation::Escalation;
 use crate::service::ServiceContainer;
-use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -22,7 +26,17 @@ pub async fn list(
         .escalation_service
         .list_pending_escalations(limit + 1)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?;
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
 
     let has_more = escalations.len() > limit as usize;
     if has_more {
@@ -32,7 +46,11 @@ pub async fn list(
 
     Ok(Json(ListResponse {
         data: escalations,
-        pagination: Pagination { next_cursor, prev_cursor: None, has_more },
+        pagination: Pagination {
+            next_cursor,
+            prev_cursor: None,
+            has_more,
+        },
     }))
 }
 
@@ -40,9 +58,30 @@ pub async fn get(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
-    let escalation = services.escalation_service.get_escalation(id).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?
-        .ok_or((StatusCode::NOT_FOUND, Json(ErrorBody { code: "NOT_FOUND".into(), message: "Escalation not found".into(), details: None, request_id: None })))?;
+    let escalation = services
+        .escalation_service
+        .get_escalation(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
+                code: "NOT_FOUND".into(),
+                message: "Escalation not found".into(),
+                details: None,
+                request_id: None,
+            }),
+        ))?;
 
     Ok(Json(escalation))
 }
@@ -58,12 +97,48 @@ pub async fn resolve(
     Path(id): Path<Uuid>,
     Json(req): Json<EscalationResolveRequest>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
-    let _existing = services.escalation_service.get_escalation(id).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(ErrorBody { code: "NOT_FOUND".into(), message: "Escalation not found".into(), details: None, request_id: None })));
+    let _existing = services
+        .escalation_service
+        .get_escalation(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    code: "NOT_FOUND".into(),
+                    message: "Escalation not found".into(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        });
 
-    let escalation = services.escalation_service.resolve_escalation(id, &req.resolution, req.resolved_by).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { code: "DB_ERROR".into(), message: e.to_string(), details: None, request_id: None })))?;
+    let escalation = services
+        .escalation_service
+        .resolve_escalation(id, &req.resolution, req.resolved_by)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
 
     Ok(Json(escalation))
 }

@@ -23,7 +23,6 @@ pub mod team;
 pub mod tool_policy;
 
 pub use agent_definition::{AgentDefinitionRepository, PostgresAgentDefinitionRepository};
-pub use tool_policy::{ToolPolicyRepository, PostgresToolPolicyRepository};
 pub use agent_instance::{AgentInstanceRepository, PostgresAgentInstanceRepository};
 pub use approval::{ApprovalRepository, PostgresApprovalRepository};
 pub use artifact::{ArtifactRepository, PostgresArtifactRepository};
@@ -51,6 +50,7 @@ pub use team::{
     PostgresTeamTaskRepository, SharedTaskStateRepository, TeamDefinitionRepository,
     TeamEventRepository, TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
 };
+pub use tool_policy::{PostgresToolPolicyRepository, ToolPolicyRepository};
 
 pub struct RepositoryContainer {
     pub session: Arc<dyn SessionRepository>,

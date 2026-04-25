@@ -29,14 +29,20 @@ impl ToolGovernanceService {
             config.default_risk_level
         };
 
-        self.risk_cache.write().await.insert(tool_name.to_string(), risk);
+        self.risk_cache
+            .write()
+            .await
+            .insert(tool_name.to_string(), risk);
         risk
     }
 
     pub async fn should_block(&self, tool_name: &str) -> Option<String> {
         let config = self.config.read().await;
         if config.blocked_tools.contains(&tool_name.to_string()) {
-            Some(format!("Tool '{}' is blocked by governance policy", tool_name))
+            Some(format!(
+                "Tool '{}' is blocked by governance policy",
+                tool_name
+            ))
         } else {
             None
         }

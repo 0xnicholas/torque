@@ -34,11 +34,18 @@ impl AsyncRunner {
 
         if let Some(run) = self.run_repo.get(run_id).await? {
             if let Some(webhook_url) = &run.webhook_url {
-                let status = if result.is_ok() { "completed" } else { "failed" };
+                let status = if result.is_ok() {
+                    "completed"
+                } else {
+                    "failed"
+                };
                 let error = result.as_ref().err().map(|e| e.to_string());
                 let payload = WebhookPayload::new(run_id, status, error);
 
-                let webhook_result = self.webhook_manager.send_with_retry(webhook_url, &payload).await;
+                let webhook_result = self
+                    .webhook_manager
+                    .send_with_retry(webhook_url, &payload)
+                    .await;
                 let webhook_attempts = self.webhook_manager.attempts();
 
                 self.run_repo

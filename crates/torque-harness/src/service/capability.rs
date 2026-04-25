@@ -1,7 +1,7 @@
 use crate::models::v1::capability::{
     CapabilityProfile, CapabilityProfileCreate, CapabilityRegistryBinding,
-    CapabilityRegistryBindingCreate, CapabilityResolveByRefRequest, CapabilityResolveRequest,
-    CapabilityResolution, ResolvedCandidate,
+    CapabilityRegistryBindingCreate, CapabilityResolution, CapabilityResolveByRefRequest,
+    CapabilityResolveRequest, ResolvedCandidate,
 };
 use crate::repository::{CapabilityProfileRepository, CapabilityRegistryBindingRepository};
 use std::sync::Arc;
@@ -87,13 +87,20 @@ impl CapabilityService {
         capability_ref: &str,
         _constraints: Option<serde_json::Value>,
     ) -> anyhow::Result<CapabilityResolution> {
-        let profile = self.profile_repo.get_by_name(capability_ref).await?
+        let profile = self
+            .profile_repo
+            .get_by_name(capability_ref)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Capability profile not found: {}", capability_ref))?;
 
-        let bindings = self.binding_repo.list_by_profile(profile.id, self.resolve_options.max_candidates).await?;
+        let bindings = self
+            .binding_repo
+            .list_by_profile(profile.id, self.resolve_options.max_candidates)
+            .await?;
 
-        let candidates: Vec<ResolvedCandidate> = bindings.into_iter().map(|b| {
-            ResolvedCandidate {
+        let candidates: Vec<ResolvedCandidate> = bindings
+            .into_iter()
+            .map(|b| ResolvedCandidate {
                 capability_profile_id: b.capability_profile_id,
                 agent_definition_id: b.agent_definition_id,
                 match_rationale: "Direct binding match".to_string(),
@@ -102,8 +109,8 @@ impl CapabilityService {
                 quality_tier: b.quality_tier,
                 compatibility_score: b.compatibility_score,
                 cost_or_latency_estimate: None,
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(CapabilityResolution {
             capability_ref: capability_ref.to_string(),
@@ -117,7 +124,8 @@ impl CapabilityService {
         &self,
         req: CapabilityResolveRequest,
     ) -> anyhow::Result<CapabilityResolution> {
-        let capability_ref = req.constraints
+        let capability_ref = req
+            .constraints
             .as_ref()
             .and_then(|c| c.get("capability_ref"))
             .and_then(|v| v.as_str())

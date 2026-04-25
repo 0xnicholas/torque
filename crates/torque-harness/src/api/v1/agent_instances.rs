@@ -114,17 +114,18 @@ pub async fn resume(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ResumeResponse>, (StatusCode, Json<ErrorBody>)> {
-    let (instance, messages, _rebuilt_state) = services.recovery.resume_instance(id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                code: "RESUME_ERROR".into(),
-                message: e.to_string(),
-                details: None,
-                request_id: None,
-            }),
-        )
-    })?;
+    let (instance, messages, _rebuilt_state) =
+        services.recovery.resume_instance(id).await.map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "RESUME_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
     Ok(Json(ResumeResponse { instance, messages }))
 }
 

@@ -1,4 +1,9 @@
-use torque_harness::models::v1::agent_instance::{AgentInstance, AgentInstanceCreate, AgentInstanceStatus};
+use async_trait::async_trait;
+use chrono::Utc;
+use std::sync::{Arc, Mutex};
+use torque_harness::models::v1::agent_instance::{
+    AgentInstance, AgentInstanceCreate, AgentInstanceStatus,
+};
 use torque_harness::models::v1::checkpoint::Checkpoint;
 use torque_harness::models::v1::event::Event;
 use torque_harness::models::v1::team::{
@@ -9,9 +14,6 @@ use torque_harness::repository::{
     TeamTaskRepository,
 };
 use torque_harness::service::recovery::RecoveryService;
-use async_trait::async_trait;
-use chrono::Utc;
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 struct MockAgentInstanceRepository;
@@ -57,11 +59,7 @@ impl AgentInstanceRepository for MockAgentInstanceRepository {
         Ok(true)
     }
 
-    async fn update_current_task(
-        &self,
-        _id: Uuid,
-        _task_id: Option<Uuid>,
-    ) -> anyhow::Result<bool> {
+    async fn update_current_task(&self, _id: Uuid, _task_id: Option<Uuid>) -> anyhow::Result<bool> {
         Ok(true)
     }
 }
@@ -84,11 +82,18 @@ impl CheckpointRepositoryExt for MockCheckpointRepository {
         Ok(None)
     }
 
-    async fn list_by_instance(&self, _instance_id: Uuid, _limit: i64) -> anyhow::Result<Vec<Checkpoint>> {
+    async fn list_by_instance(
+        &self,
+        _instance_id: Uuid,
+        _limit: i64,
+    ) -> anyhow::Result<Vec<Checkpoint>> {
         Ok(vec![])
     }
 
-    async fn get_messages(&self, _checkpoint_id: Uuid) -> anyhow::Result<Vec<checkpointer::r#trait::Message>> {
+    async fn get_messages(
+        &self,
+        _checkpoint_id: Uuid,
+    ) -> anyhow::Result<Vec<checkpointer::r#trait::Message>> {
         Ok(vec![])
     }
 }

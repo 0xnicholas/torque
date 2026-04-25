@@ -1,5 +1,5 @@
-use checkpointer::Checkpointer;
 use checkpointer::r#trait::Message;
+use checkpointer::Checkpointer;
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -7,13 +7,13 @@ use torque_harness::db::Database;
 use torque_harness::kernel_bridge::PostgresCheckpointer;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInstanceStatus};
+use torque_harness::repository::PostgresEventRepositoryExt;
 use torque_harness::repository::{
     AgentDefinitionRepository, AgentInstanceRepository, CheckpointRepositoryExt,
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
     PostgresCheckpointRepositoryExt,
 };
 use torque_harness::service::RecoveryService;
-use torque_harness::repository::PostgresEventRepositoryExt;
 use uuid::Uuid;
 
 async fn setup_test_db() -> Option<Database> {
@@ -94,11 +94,7 @@ async fn test_get_checkpoint_messages_returns_messages() {
         .await
         .expect("should save checkpoint");
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let messages = recovery
         .get_checkpoint_messages(checkpoint_id.0)
@@ -166,11 +162,7 @@ async fn test_get_checkpoint_messages_empty_for_checkpoint_without_messages() {
         .await
         .expect("should save checkpoint");
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let messages = recovery
         .get_checkpoint_messages(checkpoint_id.0)
@@ -193,11 +185,7 @@ async fn test_get_checkpoint_messages_nonexistent_checkpoint() {
     let checkpoint_repo = Arc::new(PostgresCheckpointRepositoryExt::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let fake_id = Uuid::new_v4();
     let messages = recovery
@@ -274,11 +262,7 @@ async fn test_restore_from_checkpoint_returns_messages() {
         .await
         .expect("should save checkpoint");
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let (restored_instance, messages, _rebuilt_state) = recovery
         .restore_from_checkpoint(checkpoint_id.0)
@@ -330,12 +314,10 @@ async fn test_checkpoint_repository_get_messages() {
         .expect("should create agent instance");
 
     let state = checkpointer::CheckpointState {
-        messages: vec![
-            Message {
-                role: "assistant".to_string(),
-                content: "This is a test message.".to_string(),
-            },
-        ],
+        messages: vec![Message {
+            role: "assistant".to_string(),
+            content: "This is a test message.".to_string(),
+        }],
         tool_call_count: 1,
         intermediate_results: vec![],
         custom_state: Some(serde_json::json!({
@@ -421,11 +403,7 @@ async fn test_resume_instance_returns_messages() {
         .await
         .expect("should save checkpoint");
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let (restored_instance, messages, _rebuilt_state) = recovery
         .resume_instance(instance.id)

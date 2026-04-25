@@ -7,11 +7,11 @@ pub mod candidate_generator;
 pub mod capability;
 pub mod checkpoint;
 pub mod delegation;
-pub mod governed_tool;
 pub mod escalation;
 pub mod event;
 pub mod event_replay;
 pub mod gating;
+pub mod governed_tool;
 pub mod memory;
 pub mod memory_pipeline;
 pub mod merge_strategy;
@@ -206,7 +206,8 @@ impl ServiceContainer {
         ));
         let run_repo = repos.run.clone();
         let async_runner = std::sync::Arc::new(AsyncRunner::new(repos.run.clone()));
-        let escalation_service = std::sync::Arc::new(EscalationService::new(repos.escalation.clone()));
+        let escalation_service =
+            std::sync::Arc::new(EscalationService::new(repos.escalation.clone()));
         let recovery = std::sync::Arc::new(
             RecoveryService::new(
                 repos.agent_instance.clone(),

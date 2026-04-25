@@ -46,17 +46,15 @@ impl WebhookManager {
     }
 
     async fn send(&self, url: &str, payload: &WebhookPayload) -> Result<()> {
-        let response = self
-            .http_client
-            .post(url)
-            .json(payload)
-            .send()
-            .await?;
+        let response = self.http_client.post(url).json(payload).send().await?;
 
         if response.status().is_success() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Webhook failed with status: {}", response.status()))
+            Err(anyhow::anyhow!(
+                "Webhook failed with status: {}",
+                response.status()
+            ))
         }
     }
 }

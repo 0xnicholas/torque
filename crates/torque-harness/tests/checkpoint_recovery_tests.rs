@@ -1,5 +1,5 @@
-use checkpointer::Checkpointer;
 use checkpointer::r#trait::Message;
+use checkpointer::Checkpointer;
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -237,8 +237,8 @@ async fn test_checkpoint_state_format() {
 #[tokio::test]
 #[serial]
 async fn test_recovery_service_reads_checkpoint_format() {
-use torque_harness::service::RecoveryService;
-use torque_harness::repository::PostgresEventRepositoryExt;
+    use torque_harness::repository::PostgresEventRepositoryExt;
+    use torque_harness::service::RecoveryService;
 
     let Some(db) = setup_test_db().await else {
         return;
@@ -250,23 +250,32 @@ use torque_harness::repository::PostgresEventRepositoryExt;
     let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
 
-    let def = def_repo.create(&AgentDefinitionCreate {
-        name: "test".to_string(),
-        description: None,
-        system_prompt: None,
-        tool_policy: serde_json::json!({}),
-        memory_policy: serde_json::json!({}),
-        delegation_policy: serde_json::json!({}),
-        limits: serde_json::json!({}),
-        default_model_policy: serde_json::json!({}),
-    }).await.unwrap();
+    let def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "test".to_string(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .unwrap();
 
-    let instance = instance_repo.create(&AgentInstanceCreate {
-        agent_definition_id: def.id,
-        external_context_refs: vec![],
-    }).await.unwrap();
+    let instance = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .unwrap();
 
-    instance_repo.update_status(instance.id, AgentInstanceStatus::Running).await.unwrap();
+    instance_repo
+        .update_status(instance.id, AgentInstanceStatus::Running)
+        .await
+        .unwrap();
 
     let state = checkpointer::CheckpointState {
         messages: vec![],
@@ -281,26 +290,33 @@ use torque_harness::repository::PostgresEventRepositoryExt;
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer.save(instance.id, instance.id, state).await.unwrap();
+    let checkpoint_id = checkpointer
+        .save(instance.id, instance.id, state)
+        .await
+        .unwrap();
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
     let result = recovery.restore_from_checkpoint(checkpoint_id.0).await;
 
-    assert!(result.is_ok(), "RecoveryService should read checkpoint format correctly: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "RecoveryService should read checkpoint format correctly: {:?}",
+        result.err()
+    );
 
     let (restored, _messages, _rebuilt_state) = result.unwrap();
-    assert_eq!(restored.status, AgentInstanceStatus::Ready, "Instance should be restored to Ready status");
+    assert_eq!(
+        restored.status,
+        AgentInstanceStatus::Ready,
+        "Instance should be restored to Ready status"
+    );
 }
 
 #[tokio::test]
 #[serial]
 async fn test_reconciliation_resolves_child_failure() {
-    use torque_harness::service::RecoveryService;
     use torque_harness::repository::PostgresEventRepositoryExt;
+    use torque_harness::service::RecoveryService;
 
     let Some(db) = setup_test_db().await else {
         return;
@@ -312,26 +328,35 @@ async fn test_reconciliation_resolves_child_failure() {
     let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
 
-    let def = def_repo.create(&AgentDefinitionCreate {
-        name: "test".to_string(),
-        description: None,
-        system_prompt: None,
-        tool_policy: serde_json::json!({}),
-        memory_policy: serde_json::json!({}),
-        delegation_policy: serde_json::json!({}),
-        limits: serde_json::json!({}),
-        default_model_policy: serde_json::json!({}),
-    }).await.unwrap();
+    let def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "test".to_string(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .unwrap();
 
-    let parent = instance_repo.create(&AgentInstanceCreate {
-        agent_definition_id: def.id,
-        external_context_refs: vec![],
-    }).await.unwrap();
+    let parent = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .unwrap();
 
-    let child = instance_repo.create(&AgentInstanceCreate {
-        agent_definition_id: def.id,
-        external_context_refs: vec![],
-    }).await.unwrap();
+    let child = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .unwrap();
 
     let state = checkpointer::CheckpointState {
         messages: vec![],
@@ -346,15 +371,17 @@ async fn test_reconciliation_resolves_child_failure() {
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer.save(parent.id, parent.id, state).await.unwrap();
+    let checkpoint_id = checkpointer
+        .save(parent.id, parent.id, state)
+        .await
+        .unwrap();
 
-    instance_repo.update_status(child.id, AgentInstanceStatus::Failed).await.unwrap();
+    instance_repo
+        .update_status(child.id, AgentInstanceStatus::Failed)
+        .await
+        .unwrap();
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
     let result = recovery.restore_from_checkpoint(checkpoint_id.0).await;
 
     assert!(result.is_ok(), "Restore should succeed: {:?}", result.err());
@@ -370,9 +397,9 @@ async fn test_reconciliation_resolves_child_failure() {
 #[tokio::test]
 #[serial]
 async fn test_recovery_assess_recovery() {
-    use torque_harness::service::RecoveryService;
-    use torque_harness::service::recovery::{RecoveryAction, RecoveryDisposition};
     use torque_harness::repository::PostgresEventRepositoryExt;
+    use torque_harness::service::recovery::{RecoveryAction, RecoveryDisposition};
+    use torque_harness::service::RecoveryService;
 
     let Some(db) = setup_test_db().await else {
         return;
@@ -384,21 +411,27 @@ async fn test_recovery_assess_recovery() {
     let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
 
-    let def = def_repo.create(&AgentDefinitionCreate {
-        name: "test".to_string(),
-        description: None,
-        system_prompt: None,
-        tool_policy: serde_json::json!({}),
-        memory_policy: serde_json::json!({}),
-        delegation_policy: serde_json::json!({}),
-        limits: serde_json::json!({}),
-        default_model_policy: serde_json::json!({}),
-    }).await.unwrap();
+    let def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "test".to_string(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .unwrap();
 
-    let instance = instance_repo.create(&AgentInstanceCreate {
-        agent_definition_id: def.id,
-        external_context_refs: vec![],
-    }).await.unwrap();
+    let instance = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .unwrap();
 
     let state = checkpointer::CheckpointState {
         messages: vec![],
@@ -413,29 +446,40 @@ async fn test_recovery_assess_recovery() {
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer.save(instance.id, instance.id, state).await.unwrap();
+    let checkpoint_id = checkpointer
+        .save(instance.id, instance.id, state)
+        .await
+        .unwrap();
 
-    let recovery = RecoveryService::new(
-        instance_repo.clone(),
-        checkpoint_repo.clone(),
-        event_repo,
-    );
+    let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let assessment = recovery.assess_recovery(checkpoint_id.0).await;
-    assert!(assessment.is_ok(), "assess_recovery should succeed: {:?}", assessment.err());
+    assert!(
+        assessment.is_ok(),
+        "assess_recovery should succeed: {:?}",
+        assessment.err()
+    );
 
     let a = assessment.unwrap();
     assert_eq!(a.instance_id, instance.id);
-    assert_eq!(a.disposition, RecoveryDisposition::AwaitingDelegation, "disposition was {:?}, expected AwaitingDelegation", a.disposition);
+    assert_eq!(
+        a.disposition,
+        RecoveryDisposition::AwaitingDelegation,
+        "disposition was {:?}, expected AwaitingDelegation",
+        a.disposition
+    );
     assert!(!a.terminal, "AwaitingDelegation should not be terminal");
-    assert!(matches!(a.recommended_action, RecoveryAction::AwaitDelegationCompletion));
+    assert!(matches!(
+        a.recommended_action,
+        RecoveryAction::AwaitDelegationCompletion
+    ));
 }
 
 #[tokio::test]
 #[serial]
 async fn test_full_recovery_flow_restore_and_resume() {
-    use torque_harness::service::RecoveryService;
     use torque_harness::repository::PostgresEventRepositoryExt;
+    use torque_harness::service::RecoveryService;
 
     let Some(db) = setup_test_db().await else {
         return;
@@ -447,21 +491,27 @@ async fn test_full_recovery_flow_restore_and_resume() {
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepositoryExt::new(db.clone()));
 
-    let def = def_repo.create(&AgentDefinitionCreate {
-        name: "test-agent".to_string(),
-        description: None,
-        system_prompt: None,
-        tool_policy: serde_json::json!({}),
-        memory_policy: serde_json::json!({}),
-        delegation_policy: serde_json::json!({}),
-        limits: serde_json::json!({}),
-        default_model_policy: serde_json::json!({}),
-    }).await.unwrap();
+    let def = def_repo
+        .create(&AgentDefinitionCreate {
+            name: "test-agent".to_string(),
+            description: None,
+            system_prompt: None,
+            tool_policy: serde_json::json!({}),
+            memory_policy: serde_json::json!({}),
+            delegation_policy: serde_json::json!({}),
+            limits: serde_json::json!({}),
+            default_model_policy: serde_json::json!({}),
+        })
+        .await
+        .unwrap();
 
-    let instance = instance_repo.create(&AgentInstanceCreate {
-        agent_definition_id: def.id,
-        external_context_refs: vec![],
-    }).await.unwrap();
+    let instance = instance_repo
+        .create(&AgentInstanceCreate {
+            agent_definition_id: def.id,
+            external_context_refs: vec![],
+        })
+        .await
+        .unwrap();
 
     let state = checkpointer::CheckpointState {
         messages: vec![
@@ -485,9 +535,15 @@ async fn test_full_recovery_flow_restore_and_resume() {
             "event_sequence": 10,
         })),
     };
-    let checkpoint_id = checkpointer.save(instance.id, instance.id, state).await.unwrap();
+    let checkpoint_id = checkpointer
+        .save(instance.id, instance.id, state)
+        .await
+        .unwrap();
 
-    instance_repo.update_status(instance.id, AgentInstanceStatus::Failed).await.unwrap();
+    instance_repo
+        .update_status(instance.id, AgentInstanceStatus::Failed)
+        .await
+        .unwrap();
 
     let recovery = RecoveryService::new(
         instance_repo.clone(),
@@ -495,10 +551,16 @@ async fn test_full_recovery_flow_restore_and_resume() {
         event_repo.clone(),
     );
 
-    let (restored, _messages, _rebuilt_state) = recovery.restore_from_checkpoint(checkpoint_id.0).await.unwrap();
+    let (restored, _messages, _rebuilt_state) = recovery
+        .restore_from_checkpoint(checkpoint_id.0)
+        .await
+        .unwrap();
 
     assert!(
-        matches!(restored.status, AgentInstanceStatus::Ready | AgentInstanceStatus::WaitingTool),
+        matches!(
+            restored.status,
+            AgentInstanceStatus::Ready | AgentInstanceStatus::WaitingTool
+        ),
         "Instance should be restored, got {:?}",
         restored.status
     );
@@ -508,5 +570,8 @@ async fn test_full_recovery_flow_restore_and_resume() {
     assert_eq!(loaded.tool_call_count, 1);
 
     let assessment = recovery.assess_recovery(checkpoint_id.0).await.unwrap();
-    assert!(!assessment.is_terminal(), "Assessment should not be terminal for WaitingTool");
+    assert!(
+        !assessment.is_terminal(),
+        "Assessment should not be terminal for WaitingTool"
+    );
 }

@@ -54,12 +54,11 @@ impl CheckpointRepositoryExt for PostgresCheckpointRepositoryExt {
     }
 
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Checkpoint>> {
-        let row: Option<CheckpointRow> = sqlx::query_as::<_, CheckpointRow>(
-            "SELECT * FROM v1_checkpoints WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_optional(self.db.pool())
-        .await?;
+        let row: Option<CheckpointRow> =
+            sqlx::query_as::<_, CheckpointRow>("SELECT * FROM v1_checkpoints WHERE id = $1")
+                .bind(id)
+                .fetch_optional(self.db.pool())
+                .await?;
         Ok(row.map(Into::into))
     }
 
@@ -67,8 +66,7 @@ impl CheckpointRepositoryExt for PostgresCheckpointRepositoryExt {
         let checkpoint = self.get(checkpoint_id).await?;
         match checkpoint {
             Some(cp) => {
-                let state: checkpointer::CheckpointState =
-                    serde_json::from_value(cp.snapshot)?;
+                let state: checkpointer::CheckpointState = serde_json::from_value(cp.snapshot)?;
                 Ok(state.messages)
             }
             None => Ok(Vec::new()),

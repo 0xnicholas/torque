@@ -3,9 +3,11 @@ mod common;
 use common::setup_test_db_or_skip;
 use serial_test::serial;
 use std::sync::Arc;
-use torque_harness::models::v1::memory::{CompactionStrategy, CompactionRecommendation, MemoryCategory, MemoryEntry};
-use torque_harness::repository::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
 use torque_harness::jobs::memory_compaction::MemoryCompactionJob;
+use torque_harness::models::v1::memory::{
+    CompactionRecommendation, CompactionStrategy, MemoryCategory, MemoryEntry,
+};
+use torque_harness::repository::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -49,11 +51,20 @@ async fn test_get_entries_by_ids() {
         updated_at: chrono::Utc::now(),
     };
 
-    let created1 = repo.create_entry(&entry1).await.expect("entry1 should be created");
-    let created2 = repo.create_entry(&entry2).await.expect("entry2 should be created");
+    let created1 = repo
+        .create_entry(&entry1)
+        .await
+        .expect("entry1 should be created");
+    let created2 = repo
+        .create_entry(&entry2)
+        .await
+        .expect("entry2 should be created");
 
     let ids = vec![created1.id, created2.id];
-    let fetched = repo.get_entries_by_ids(ids).await.expect("should fetch entries by ids");
+    let fetched = repo
+        .get_entries_by_ids(ids)
+        .await
+        .expect("should fetch entries by ids");
 
     assert_eq!(fetched.len(), 2);
     assert!(fetched.iter().any(|e| e.id == created1.id));
@@ -102,8 +113,12 @@ async fn test_compaction_job_processes_entries() {
         updated_at: old_date,
     };
 
-    repo.create_entry(&entry1).await.expect("entry1 should be created");
-    repo.create_entry(&entry2).await.expect("entry2 should be created");
+    repo.create_entry(&entry1)
+        .await
+        .expect("entry1 should be created");
+    repo.create_entry(&entry2)
+        .await
+        .expect("entry2 should be created");
 
     let job = MemoryCompactionJob::new(repo.clone(), None)
         .with_batch_size(10)

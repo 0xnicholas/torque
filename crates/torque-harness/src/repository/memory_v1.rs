@@ -235,8 +235,7 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             None => return Ok(vec![]),
         };
 
-        let refs: Vec<ExternalContextRef> = serde_json::from_value(refs_json)
-            .unwrap_or_default();
+        let refs: Vec<ExternalContextRef> = serde_json::from_value(refs_json).unwrap_or_default();
 
         Ok(refs)
     }
@@ -1224,17 +1223,32 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
             "#
         };
 
-        let start_filter = if start_date.is_some() { " AND mdl.created_at >= $2" } else { "" };
+        let start_filter = if start_date.is_some() {
+            " AND mdl.created_at >= $2"
+        } else {
+            ""
+        };
         let end_filter = if end_date.is_some() {
-            if start_date.is_some() { " AND mdl.created_at <= $3" } else { " AND mdl.created_at <= $2" }
-        } else { "" };
+            if start_date.is_some() {
+                " AND mdl.created_at <= $3"
+            } else {
+                " AND mdl.created_at <= $2"
+            }
+        } else {
+            ""
+        };
 
         let group_by = " GROUP BY mdl.decision_type";
 
         let (type_rows, rejection_rows): (Vec<(String, i64)>, Vec<(String, i64)>) =
-            if let (Some(agent_id), Some(start), Some(end)) = (agent_instance_id, start_date, end_date) {
+            if let (Some(agent_id), Some(start), Some(end)) =
+                (agent_instance_id, start_date, end_date)
+            {
                 let query = format!("{}{}{}{}", base_query, start_filter, end_filter, group_by);
-                let rejection_query = format!("{}{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, end_filter, group_by);
+                let rejection_query = format!(
+                    "{}{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, start_filter, end_filter, group_by
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(agent_id)
@@ -1253,7 +1267,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let (Some(agent_id), Some(start)) = (agent_instance_id, start_date) {
                 let query = format!("{}{}{}", base_query, start_filter, group_by);
-                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, group_by);
+                let rejection_query = format!(
+                    "{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, start_filter, group_by
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(agent_id)
@@ -1270,7 +1287,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let (Some(agent_id), Some(end)) = (agent_instance_id, end_date) {
                 let query = format!("{}{}{}", base_query, end_filter, group_by);
-                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, end_filter, group_by);
+                let rejection_query = format!(
+                    "{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, end_filter, group_by
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(agent_id)
@@ -1287,7 +1307,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let Some(agent_id) = agent_instance_id {
                 let query = format!("{}{}", base_query, group_by);
-                let rejection_query = format!("{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query);
+                let rejection_query = format!(
+                    "{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(agent_id)
@@ -1302,7 +1325,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let (Some(start), Some(end)) = (start_date, end_date) {
                 let query = format!("{}{}{}{}", base_query, start_filter, end_filter, group_by);
-                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, end_filter);
+                let rejection_query = format!(
+                    "{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, start_filter, end_filter
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(start)
@@ -1319,7 +1345,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let Some(start) = start_date {
                 let query = format!("{}{}{}", base_query, start_filter, group_by);
-                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, start_filter, group_by);
+                let rejection_query = format!(
+                    "{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, start_filter, group_by
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(start)
@@ -1334,7 +1363,10 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else if let Some(end) = end_date {
                 let query = format!("{}{}{}", base_query, end_filter, group_by);
-                let rejection_query = format!("{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query, end_filter, group_by);
+                let rejection_query = format!(
+                    "{}{}{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query, end_filter, group_by
+                );
 
                 let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
                     .bind(end)
@@ -1349,11 +1381,13 @@ impl MemoryRepositoryV1 for PostgresMemoryRepositoryV1 {
                 (type_rows, rejection_rows)
             } else {
                 let query = format!("{} {}", base_query, group_by);
-                let rejection_query = format!("{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason", base_query);
+                let rejection_query = format!(
+                    "{} AND mdl.decision_type = 'rejected' GROUP BY mdl.decision_reason",
+                    base_query
+                );
 
-                let type_rows: Vec<(String, i64)> = sqlx::query_as(&query)
-                    .fetch_all(self.db.pool())
-                    .await?;
+                let type_rows: Vec<(String, i64)> =
+                    sqlx::query_as(&query).fetch_all(self.db.pool()).await?;
 
                 let rejection_rows: Vec<(String, i64)> = sqlx::query_as(&rejection_query)
                     .fetch_all(self.db.pool())

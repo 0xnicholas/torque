@@ -1,7 +1,7 @@
-use async_trait::async_trait;
 use crate::models::v1::gating::MergeStrategy;
 use crate::models::v1::memory::{MemoryContent, MemoryEntry};
 use anyhow::Result;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,7 +118,10 @@ impl MergeStrategyHandler for WithProvenanceStrategy {
 
         let mut new_value = candidate.value.clone();
         if let serde_json::Value::Object(ref mut obj) = new_value {
-            obj.insert("_provenance".to_string(), serde_json::to_value(&provenance)?);
+            obj.insert(
+                "_provenance".to_string(),
+                serde_json::to_value(&provenance)?,
+            );
         }
 
         Ok(MergedMemoryEntry {
@@ -177,7 +180,8 @@ impl MergeStrategyHandler for SummarizeStrategy {
         });
 
         let url = format!("{}/chat/completions", self.api_base);
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -187,22 +191,32 @@ impl MergeStrategyHandler for SummarizeStrategy {
             .text()
             .await?;
 
-        let consolidated: serde_json::Value = serde_json::from_str(&response)
-            .unwrap_or_else(|_| serde_json::json!({
-                "key": candidate.key.clone(),
-                "value": {
-                    "original": existing.value,
-                    "new": candidate.value.clone(),
-                    "summary": response
-                }
-            }));
+        let consolidated: serde_json::Value =
+            serde_json::from_str(&response).unwrap_or_else(|_| {
+                serde_json::json!({
+                    "key": candidate.key.clone(),
+                    "value": {
+                        "original": existing.value,
+                        "new": candidate.value.clone(),
+                        "summary": response
+                    }
+                })
+            });
 
         Ok(MergedMemoryEntry {
             key: candidate.key.clone(),
             value: consolidated,
             provenance: vec![
-                ProvenanceEntry { source: existing.id.to_string(), method: "original".to_string(), timestamp: None },
-                ProvenanceEntry { source: candidate.key.clone(), method: "summarized".to_string(), timestamp: None },
+                ProvenanceEntry {
+                    source: existing.id.to_string(),
+                    method: "original".to_string(),
+                    timestamp: None,
+                },
+                ProvenanceEntry {
+                    source: candidate.key.clone(),
+                    method: "summarized".to_string(),
+                    timestamp: None,
+                },
             ],
         })
     }

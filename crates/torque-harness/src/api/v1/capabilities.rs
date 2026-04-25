@@ -1,8 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::capability::{
     CapabilityProfile, CapabilityProfileCreate, CapabilityRegistryBinding,
-    CapabilityRegistryBindingCreate, CapabilityResolveByRefRequest,
-    CapabilityResolution,
+    CapabilityRegistryBindingCreate, CapabilityResolution, CapabilityResolveByRefRequest,
 };
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::service::ServiceContainer;

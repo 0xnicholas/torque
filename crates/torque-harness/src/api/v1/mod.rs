@@ -14,8 +14,8 @@ pub mod artifacts;
 pub mod capabilities;
 pub mod checkpoints;
 pub mod delegations;
-pub mod events;
 pub mod escalations;
+pub mod events;
 pub mod memory;
 pub mod runs;
 pub mod tasks;
@@ -96,10 +96,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
             "/v1/capability-profiles/:id",
             get(capabilities::get_profile).delete(capabilities::delete_profile),
         )
-        .route(
-            "/v1/capabilities/resolve",
-            post(capabilities::resolve),
-        )
+        .route("/v1/capabilities/resolve", post(capabilities::resolve))
         .route(
             "/v1/capability-registry-bindings",
             post(capabilities::create_binding).get(capabilities::list_bindings),
@@ -149,7 +146,10 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/checkpoints", get(checkpoints::list))
         .route("/v1/checkpoints/:id", get(checkpoints::get))
         .route("/v1/checkpoints/:id/restore", post(checkpoints::restore))
-        .route("/v1/checkpoints/:id/messages", get(checkpoints::get_messages))
+        .route(
+            "/v1/checkpoints/:id/messages",
+            get(checkpoints::get_messages),
+        )
         .route(
             "/v1/memory-write-candidates",
             post(memory::create_candidate).get(memory::list_candidates),

@@ -9,6 +9,8 @@ use torque_harness::models::v1::task::{TaskStatus, TaskType};
 use torque_harness::models::v1::team::{
     TeamDefinitionCreate, TeamInstanceCreate, TeamTaskCreate, TeamTaskStatus,
 };
+use torque_harness::models::v1::tool_policy::{ToolGovernanceConfig, ToolRiskLevel};
+use torque_harness::policy::ToolGovernanceService;
 use torque_harness::repository::{
     AgentDefinitionRepository, AgentInstanceRepository, DelegationRepository,
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
@@ -19,8 +21,6 @@ use torque_harness::repository::{
     TeamDefinitionRepository, TeamEventRepository, TeamInstanceRepository, TeamMemberRepository,
     TeamTaskRepository,
 };
-use torque_harness::models::v1::tool_policy::{ToolGovernanceConfig, ToolRiskLevel};
-use torque_harness::policy::ToolGovernanceService;
 use torque_harness::service::team::{
     SelectorResolver, SharedTaskStateManager, TeamEventEmitter, TeamSupervisor,
 };

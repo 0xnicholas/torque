@@ -3,8 +3,8 @@ use crate::infra::llm::LlmClient;
 use crate::models::v1::team::TriageResult;
 use crate::policy::ToolGovernanceService;
 use crate::service::governed_tool::GovernedToolRegistry;
-use crate::tools::ToolRegistry;
 use crate::service::team::supervisor_tools::{create_supervisor_tools, SupervisorToolsConfig};
+use crate::tools::ToolRegistry;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use torque_kernel::StepDecision;
@@ -34,8 +34,14 @@ impl SupervisorAgent {
             registry.register(tool).await;
         }
 
-        let governed_registry = Arc::new(GovernedToolRegistry::new(registry.clone(), tool_governance));
-        let react = ReActHarness::new(llm, Arc::new(crate::harness::react::ToolExecution::Governed(governed_registry)));
+        let governed_registry =
+            Arc::new(GovernedToolRegistry::new(registry.clone(), tool_governance));
+        let react = ReActHarness::new(
+            llm,
+            Arc::new(crate::harness::react::ToolExecution::Governed(
+                governed_registry,
+            )),
+        );
 
         Self {
             react,

@@ -3,7 +3,9 @@ mod common;
 use chrono::{Duration, Utc};
 use common::setup_test_db_or_skip;
 use serial_test::serial;
-use torque_harness::models::v1::memory::{MemoryDecisionLog, MemoryWriteCandidate, MemoryWriteCandidateStatus};
+use torque_harness::models::v1::memory::{
+    MemoryDecisionLog, MemoryWriteCandidate, MemoryWriteCandidateStatus,
+};
 use torque_harness::repository::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
 use uuid::Uuid;
 
@@ -22,19 +24,18 @@ fn create_decision_log(
         "confidence": 0.95
     });
 
-    tokio::runtime::Handle::current()
-        .block_on(async {
-            repo.log_decision(
-                None,
-                None,
-                decision_type,
-                Some("test reason"),
-                factors,
-                processed_by,
-            )
-            .await
-            .expect("decision should be logged")
-        })
+    tokio::runtime::Handle::current().block_on(async {
+        repo.log_decision(
+            None,
+            None,
+            decision_type,
+            Some("test reason"),
+            factors,
+            processed_by,
+        )
+        .await
+        .expect("decision should be logged")
+    })
 }
 
 fn create_decision_log_with_candidate(
@@ -65,26 +66,25 @@ fn create_decision_log_with_candidate(
         updated_at: now,
     };
 
-    tokio::runtime::Handle::current()
-        .block_on(async {
-            repo.create_candidate(&candidate)
-                .await
-                .expect("candidate should be created");
+    tokio::runtime::Handle::current().block_on(async {
+        repo.create_candidate(&candidate)
+            .await
+            .expect("candidate should be created");
 
-            let decision = repo
-                .log_decision(
-                    Some(candidate_id),
-                    None,
-                    decision_type,
-                    Some("test reason"),
-                    factors,
-                    processed_by,
-                )
-                .await
-                .expect("decision should be logged");
+        let decision = repo
+            .log_decision(
+                Some(candidate_id),
+                None,
+                decision_type,
+                Some("test reason"),
+                factors,
+                processed_by,
+            )
+            .await
+            .expect("decision should be logged");
 
-            (decision, candidate_id)
-        })
+        (decision, candidate_id)
+    })
 }
 
 #[tokio::test]
@@ -256,7 +256,14 @@ async fn list_decisions_combines_multiple_filters() {
     };
 
     let decisions = repo
-        .list_decisions(None, Some("approval"), Some(yesterday), Some(tomorrow), 100, 0)
+        .list_decisions(
+            None,
+            Some("approval"),
+            Some(yesterday),
+            Some(tomorrow),
+            100,
+            0,
+        )
         .await
         .expect("list_decisions should succeed");
 
@@ -310,7 +317,10 @@ async fn list_decisions_filters_by_agent_instance_id() {
 
     assert!(!decisions_for_a.is_empty());
     for decision in &decisions_for_a {
-        assert_eq!(decision.candidate_id, Some(decision_a.candidate_id.unwrap()));
+        assert_eq!(
+            decision.candidate_id,
+            Some(decision_a.candidate_id.unwrap())
+        );
     }
 
     let decisions_for_b = repo

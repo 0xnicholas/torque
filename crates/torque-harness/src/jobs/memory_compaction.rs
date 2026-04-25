@@ -1,4 +1,7 @@
-use crate::models::v1::memory::{CompactionRecommendation, CompactionStrategy, MemoryCategory, MemoryEntry, MemoryWriteCandidate, MemoryWriteCandidateStatus};
+use crate::models::v1::memory::{
+    CompactionRecommendation, CompactionStrategy, MemoryCategory, MemoryEntry,
+    MemoryWriteCandidate, MemoryWriteCandidateStatus,
+};
 use crate::repository::MemoryRepositoryV1;
 use crate::service::MemoryService;
 use chrono::{DateTime, Utc};
@@ -86,10 +89,16 @@ impl MemoryCompactionJob {
             .collect())
     }
 
-    fn group_entries(&self, entries: Vec<MemoryEntry>) -> HashMap<MemoryCategory, Vec<MemoryEntry>> {
+    fn group_entries(
+        &self,
+        entries: Vec<MemoryEntry>,
+    ) -> HashMap<MemoryCategory, Vec<MemoryEntry>> {
         let mut groups: HashMap<MemoryCategory, Vec<MemoryEntry>> = HashMap::new();
         for entry in entries {
-            groups.entry(entry.category.clone()).or_default().push(entry);
+            groups
+                .entry(entry.category.clone())
+                .or_default()
+                .push(entry);
         }
         groups
     }
@@ -146,7 +155,9 @@ impl MemoryCompactionJob {
             .get_entries_by_ids(vec![recommendation.entry_id])
             .await?;
 
-        let entry = entries.first().ok_or_else(|| anyhow::anyhow!("Entry not found"))?;
+        let entry = entries
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("Entry not found"))?;
 
         let strategy_str = match recommendation.strategy {
             CompactionStrategy::Summarize => "summarize",
@@ -181,7 +192,12 @@ impl MemoryCompactionJob {
         self.memory_repo.create_candidate(&candidate).await?;
 
         if recommendation.strategy == CompactionStrategy::Summarize {
-            let summarized = self.memory_service.as_ref().expect("MemoryService required for Summarize strategy").summarize_entries(recommendation.entry_ids.clone()).await?;
+            let summarized = self
+                .memory_service
+                .as_ref()
+                .expect("MemoryService required for Summarize strategy")
+                .summarize_entries(recommendation.entry_ids.clone())
+                .await?;
             self.memory_repo
                 .update_entries_superseded_by(&recommendation.entry_ids, summarized.id)
                 .await?;

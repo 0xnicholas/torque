@@ -1,7 +1,5 @@
 use crate::models::v1::team::{MemberSelector, PublishScope, TeamTaskStatus};
-use crate::repository::{
-    DelegationRepository, TeamMemberRepository, TeamTaskRepository,
-};
+use crate::repository::{DelegationRepository, TeamMemberRepository, TeamTaskRepository};
 use crate::service::team::selector::SelectorResolver;
 use crate::service::team::shared_state::SharedTaskStateManager;
 use crate::tools::{Tool, ToolArc, ToolResult};
@@ -75,10 +73,8 @@ impl Tool for DelegateTaskTool {
             .ok_or_else(|| anyhow::anyhow!("goal required"))?;
         let _instructions = args.get("instructions").and_then(|v| v.as_str());
 
-        let selector: MemberSelector =
-            serde_json::from_value(member_selector.clone()).map_err(|e| {
-                anyhow::anyhow!("Invalid member_selector format: {}", e)
-            })?;
+        let selector: MemberSelector = serde_json::from_value(member_selector.clone())
+            .map_err(|e| anyhow::anyhow!("Invalid member_selector format: {}", e))?;
 
         let candidates = self
             .selector_resolver
@@ -98,7 +94,11 @@ impl Tool for DelegateTaskTool {
         let task_id = Uuid::new_v4();
         let delegation = self
             .delegation_repo
-            .create(task_id, selected_member.agent_instance_id, member_selector.clone())
+            .create(
+                task_id,
+                selected_member.agent_instance_id,
+                member_selector.clone(),
+            )
             .await?;
 
         Ok(ToolResult {
@@ -232,7 +232,10 @@ impl Tool for RejectResultTool {
         if updated {
             Ok(ToolResult {
                 success: true,
-                content: format!("Rejected delegation {}: reroute not implemented", delegation_id),
+                content: format!(
+                    "Rejected delegation {}: reroute not implemented",
+                    delegation_id
+                ),
                 error: None,
             })
         } else {
@@ -328,7 +331,10 @@ impl Tool for PublishToTeamTool {
         if published {
             Ok(ToolResult {
                 success: true,
-                content: format!("Published artifact {} to {} scope: {}", artifact_id, scope_str, summary),
+                content: format!(
+                    "Published artifact {} to {} scope: {}",
+                    artifact_id, scope_str, summary
+                ),
                 error: None,
             })
         } else {
@@ -499,8 +505,8 @@ impl Tool for ListTeamMembersTool {
             .team_member_repo
             .list_by_team(self.team_instance_id, 100)
             .await?;
-        let members_json =
-            serde_json::to_string(&members).map_err(|e| anyhow::anyhow!("Failed to serialize team members: {}", e))?;
+        let members_json = serde_json::to_string(&members)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize team members: {}", e))?;
         Ok(ToolResult {
             success: true,
             content: members_json,
@@ -688,7 +694,10 @@ impl Tool for AddBlockerTool {
             .get("description")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("description required"))?;
-        let source = args.get("source").and_then(|v| v.as_str()).unwrap_or("supervisor");
+        let source = args
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("supervisor");
 
         let added = self
             .shared_state
@@ -951,8 +960,8 @@ impl Tool for GetTaskDetailsTool {
 
         match task {
             Some(t) => {
-                let task_json =
-                    serde_json::to_string(&t).map_err(|e| anyhow::anyhow!("Failed to serialize task: {}", e))?;
+                let task_json = serde_json::to_string(&t)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize task: {}", e))?;
                 Ok(ToolResult {
                     success: true,
                     content: task_json,
@@ -994,9 +1003,7 @@ pub fn create_supervisor_tools(config: SupervisorToolsConfig) -> Vec<ToolArc> {
             config.shared_state.clone(),
             config.team_instance_id,
         )) as ToolArc,
-        Arc::new(CompleteTeamTaskTool::new(
-            config.team_task_repo.clone(),
-        )) as ToolArc,
+        Arc::new(CompleteTeamTaskTool::new(config.team_task_repo.clone())) as ToolArc,
         Arc::new(ListTeamMembersTool::new(
             config.team_member_repo.clone(),
             config.team_instance_id,
@@ -1014,9 +1021,7 @@ pub fn create_supervisor_tools(config: SupervisorToolsConfig) -> Vec<ToolArc> {
             config.shared_state.clone(),
             config.team_instance_id,
         )) as ToolArc,
-        Arc::new(FailTeamTaskTool::new(
-            config.team_task_repo.clone(),
-        )) as ToolArc,
+        Arc::new(FailTeamTaskTool::new(config.team_task_repo.clone())) as ToolArc,
         Arc::new(RequestApprovalTool::new()) as ToolArc,
         Arc::new(GetTaskDetailsTool::new(config.team_task_repo.clone())) as ToolArc,
     ]
@@ -1083,7 +1088,11 @@ mod tests {
             Ok(vec![])
         }
 
-        async fn list_by_task(&self, _task_id: Uuid, _limit: i64) -> anyhow::Result<Vec<Delegation>> {
+        async fn list_by_task(
+            &self,
+            _task_id: Uuid,
+            _limit: i64,
+        ) -> anyhow::Result<Vec<Delegation>> {
             Ok(vec![])
         }
 
@@ -1198,7 +1207,12 @@ mod tests {
         .unwrap();
 
         let updated_id = mock_repo.update_status_id.lock().unwrap().unwrap();
-        let updated_status = mock_repo.update_status_status.lock().unwrap().clone().unwrap();
+        let updated_status = mock_repo
+            .update_status_status
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap();
         assert_eq!(updated_id, delegation_id);
         assert_eq!(updated_status, "ACCEPTED");
     }
@@ -1223,9 +1237,11 @@ mod tests {
     async fn test_reject_result_missing_delegation_id() {
         let delegation_repo = Arc::new(MockDelegationRepository::new());
         let tool = RejectResultTool::new(delegation_repo);
-        let result = tool.execute(serde_json::json!({
-            "reason": "Not satisfied"
-        })).await;
+        let result = tool
+            .execute(serde_json::json!({
+                "reason": "Not satisfied"
+            }))
+            .await;
         assert!(result.is_err());
     }
 

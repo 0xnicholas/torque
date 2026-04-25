@@ -20,7 +20,7 @@ pub mod team;
 pub mod tool_policy;
 
 pub use delegation::{Delegation, DelegationCreate, DelegationStatus};
-pub use tool_policy::{ToolPolicy, ToolRiskLevel, ToolSideEffect, ToolGovernanceConfig};
 pub use delegation_event::{DelegationEvent, RejectionReason};
 pub use partial_quality::PartialQuality;
 pub use run::{Run, RunStatus};
+pub use tool_policy::{ToolGovernanceConfig, ToolPolicy, ToolRiskLevel, ToolSideEffect};

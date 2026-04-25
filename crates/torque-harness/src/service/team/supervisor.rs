@@ -1,8 +1,8 @@
 use crate::infra::llm::LlmClient;
 use crate::models::v1::partial_quality::PartialQuality;
 use crate::models::v1::team::{
-    MemberSelector, SelectorType, TeamMode, TeamMember, TeamTask,
-    TeamTaskStatus, TriageResult, TaskComplexity, ProcessingPath,
+    MemberSelector, ProcessingPath, SelectorType, TaskComplexity, TeamMember, TeamMode, TeamTask,
+    TeamTaskStatus, TriageResult,
 };
 use crate::policy::ToolGovernanceService;
 use crate::repository::{DelegationRepository, TeamTaskRepository};
@@ -24,7 +24,10 @@ impl RuleBasedTriage {
     pub fn select_member(task: &TeamTask, members: &[TeamMember]) -> Option<MemberSelector> {
         let goal_lower = task.goal.to_lowercase();
 
-        if goal_lower.contains("code") || goal_lower.contains("implement") || goal_lower.contains("build") {
+        if goal_lower.contains("code")
+            || goal_lower.contains("implement")
+            || goal_lower.contains("build")
+        {
             if let Some(member) = members.iter().find(|m| m.role == "engineer") {
                 info!("Rule-based triage: matched 'code/implement/build' -> selected engineer member {}", member.id);
                 return Some(MemberSelector {
@@ -36,7 +39,10 @@ impl RuleBasedTriage {
             }
         }
 
-        if goal_lower.contains("review") || goal_lower.contains("analyze") || goal_lower.contains("audit") {
+        if goal_lower.contains("review")
+            || goal_lower.contains("analyze")
+            || goal_lower.contains("audit")
+        {
             if let Some(member) = members.iter().find(|m| m.role == "reviewer") {
                 info!("Rule-based triage: matched 'review/analyze/audit' -> selected reviewer member {}", member.id);
                 return Some(MemberSelector {
@@ -49,7 +55,10 @@ impl RuleBasedTriage {
         }
 
         if let Some(member) = members.first() {
-            info!("Rule-based triage: no rule match, selecting first available member {}", member.id);
+            info!(
+                "Rule-based triage: no rule match, selecting first available member {}",
+                member.id
+            );
             return Some(MemberSelector {
                 selector_type: SelectorType::Role,
                 capability_profiles: vec![],
@@ -145,7 +154,13 @@ impl TeamSupervisor {
                 team_task_repo: self.task_repo.clone(),
                 team_instance_id,
             };
-            let agent = SupervisorAgent::new(llm.clone(), vec![], Some(config), self.tool_governance.clone()).await;
+            let agent = SupervisorAgent::new(
+                llm.clone(),
+                vec![],
+                Some(config),
+                self.tool_governance.clone(),
+            )
+            .await;
             let mut guard = self.supervisor_agent.lock().await;
             let mut current_id = self.current_team_instance_id.lock().await;
             *guard = Some(agent);
@@ -306,7 +321,11 @@ impl TeamSupervisor {
         }))
     }
 
-    async fn triage(&self, task: &TeamTask, team_instance_id: Uuid) -> anyhow::Result<TriageResult> {
+    async fn triage(
+        &self,
+        task: &TeamTask,
+        team_instance_id: Uuid,
+    ) -> anyhow::Result<TriageResult> {
         let agent_result = {
             let guard = self.supervisor_agent.lock().await;
             match &*guard {
@@ -324,35 +343,44 @@ impl TeamSupervisor {
                 Ok(triage_result)
             }
             Some(Err(e)) => {
-                warn!("LLM-based triage failed: {:?}, falling back to rule-based triage", e);
-                self.rule_based_triage_fallback(task, team_instance_id).await
+                warn!(
+                    "LLM-based triage failed: {:?}, falling back to rule-based triage",
+                    e
+                );
+                self.rule_based_triage_fallback(task, team_instance_id)
+                    .await
             }
             None => {
                 info!("LLM agent unavailable, using rule-based triage");
-                self.rule_based_triage_fallback(task, team_instance_id).await
+                self.rule_based_triage_fallback(task, team_instance_id)
+                    .await
             }
         }
     }
 
-    async fn rule_based_triage_fallback(&self, task: &TeamTask, team_instance_id: Uuid) -> anyhow::Result<TriageResult> {
+    async fn rule_based_triage_fallback(
+        &self,
+        task: &TeamTask,
+        team_instance_id: Uuid,
+    ) -> anyhow::Result<TriageResult> {
         let team_member_repo = self.selector_resolver.team_member_repo();
         let members = team_member_repo.list_by_team(team_instance_id, 100).await?;
 
         let selector = RuleBasedTriage::select_member(task, &members);
 
         match selector {
-            Some(_) => {
-                Ok(TriageResult {
-                    complexity: TaskComplexity::Simple,
-                    processing_path: ProcessingPath::SingleRoute,
-                    selected_mode: TeamMode::Route,
-                    lead_member_ref: selector.as_ref().and_then(|s| s.role.clone()),
-                    rationale: "Rule-based triage: LLM unavailable, used deterministic role-based selection".to_string(),
-                })
-            }
-            None => {
-                Err(anyhow::anyhow!("Rule-based triage failed: no members available"))
-            }
+            Some(_) => Ok(TriageResult {
+                complexity: TaskComplexity::Simple,
+                processing_path: ProcessingPath::SingleRoute,
+                selected_mode: TeamMode::Route,
+                lead_member_ref: selector.as_ref().and_then(|s| s.role.clone()),
+                rationale:
+                    "Rule-based triage: LLM unavailable, used deterministic role-based selection"
+                        .to_string(),
+            }),
+            None => Err(anyhow::anyhow!(
+                "Rule-based triage failed: no members available"
+            )),
         }
     }
 }

@@ -124,8 +124,8 @@ impl RouteModeHandler {
             .update_delegation_status(team_instance_id, delegation.id, "PENDING")
             .await?;
 
-        let wait_result = wait_for_delegation_completion(delegation.id, event_listener, timeout_duration)
-            .await;
+        let wait_result =
+            wait_for_delegation_completion(delegation.id, event_listener, timeout_duration).await;
 
         match wait_result {
             DelegationWaitOutcome::Completed => {
@@ -165,7 +165,9 @@ impl RouteModeHandler {
                 })
             }
             DelegationWaitOutcome::Failed(error) => {
-                delegation_repo.update_status(delegation.id, "FAILED").await?;
+                delegation_repo
+                    .update_status(delegation.id, "FAILED")
+                    .await?;
                 shared_state
                     .update_delegation_status(team_instance_id, delegation.id, "FAILED")
                     .await?;
@@ -196,7 +198,9 @@ impl RouteModeHandler {
                 })
             }
             DelegationWaitOutcome::Rejected(reason) => {
-                delegation_repo.update_status(delegation.id, "REJECTED").await?;
+                delegation_repo
+                    .update_status(delegation.id, "REJECTED")
+                    .await?;
                 shared_state
                     .update_delegation_status(team_instance_id, delegation.id, "REJECTED")
                     .await?;
@@ -228,7 +232,9 @@ impl RouteModeHandler {
                 })
             }
             DelegationWaitOutcome::Timeout => {
-                delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                delegation_repo
+                    .update_status(delegation.id, "TIMEOUT")
+                    .await?;
                 shared_state
                     .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
                     .await?;
@@ -341,12 +347,18 @@ impl BroadcastModeHandler {
         let mut accepted_count = 0;
         let mut failed_count = 0;
         for (i, delegation_id) in delegation_ids.iter().enumerate() {
-            let outcome = wait_for_delegation_completion(*delegation_id, event_listener.clone(), timeout_duration)
-                .await;
+            let outcome = wait_for_delegation_completion(
+                *delegation_id,
+                event_listener.clone(),
+                timeout_duration,
+            )
+            .await;
 
             match outcome {
                 DelegationWaitOutcome::Completed => {
-                    delegation_repo.update_status(*delegation_id, "ACCEPTED").await?;
+                    delegation_repo
+                        .update_status(*delegation_id, "ACCEPTED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, *delegation_id, "ACCEPTED")
                         .await?;
@@ -362,7 +374,9 @@ impl BroadcastModeHandler {
                     accepted_count += 1;
                 }
                 DelegationWaitOutcome::Failed(_) => {
-                    delegation_repo.update_status(*delegation_id, "FAILED").await?;
+                    delegation_repo
+                        .update_status(*delegation_id, "FAILED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, *delegation_id, "FAILED")
                         .await?;
@@ -378,7 +392,9 @@ impl BroadcastModeHandler {
                     failed_count += 1;
                 }
                 DelegationWaitOutcome::Rejected(_) => {
-                    delegation_repo.update_status(*delegation_id, "REJECTED").await?;
+                    delegation_repo
+                        .update_status(*delegation_id, "REJECTED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, *delegation_id, "REJECTED")
                         .await?;
@@ -395,7 +411,9 @@ impl BroadcastModeHandler {
                     failed_count += 1;
                 }
                 DelegationWaitOutcome::Timeout => {
-                    delegation_repo.update_status(*delegation_id, "TIMEOUT").await?;
+                    delegation_repo
+                        .update_status(*delegation_id, "TIMEOUT")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, *delegation_id, "TIMEOUT")
                         .await?;
@@ -406,7 +424,11 @@ impl BroadcastModeHandler {
                         .update_status(*delegation_id, "TIMEOUT_PARTIAL")
                         .await?;
                     shared_state
-                        .update_delegation_status(team_instance_id, *delegation_id, "TIMEOUT_PARTIAL")
+                        .update_delegation_status(
+                            team_instance_id,
+                            *delegation_id,
+                            "TIMEOUT_PARTIAL",
+                        )
                         .await?;
                     failed_count += 1;
                 }
@@ -543,12 +565,18 @@ impl CoordinateModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            let outcome = wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
-                .await;
+            let outcome = wait_for_delegation_completion(
+                delegation.id,
+                event_listener.clone(),
+                timeout_duration,
+            )
+            .await;
 
             match outcome {
                 DelegationWaitOutcome::Completed => {
-                    delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "ACCEPTED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
                         .await?;
@@ -564,7 +592,9 @@ impl CoordinateModeHandler {
                     previous_result_available = true;
                 }
                 DelegationWaitOutcome::Failed(_) | DelegationWaitOutcome::Rejected(_) => {
-                    delegation_repo.update_status(delegation.id, "FAILED").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "FAILED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "FAILED")
                         .await?;
@@ -581,7 +611,9 @@ impl CoordinateModeHandler {
                     break;
                 }
                 DelegationWaitOutcome::Timeout | DelegationWaitOutcome::TimeoutPartial(_) => {
-                    delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "TIMEOUT")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
                         .await?;
@@ -723,12 +755,18 @@ impl TasksModeHandler {
                 .update_delegation_status(team_instance_id, delegation.id, "PENDING")
                 .await?;
 
-            let outcome = wait_for_delegation_completion(delegation.id, event_listener.clone(), timeout_duration)
-                .await;
+            let outcome = wait_for_delegation_completion(
+                delegation.id,
+                event_listener.clone(),
+                timeout_duration,
+            )
+            .await;
 
             match outcome {
                 DelegationWaitOutcome::Completed => {
-                    delegation_repo.update_status(delegation.id, "ACCEPTED").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "ACCEPTED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "ACCEPTED")
                         .await?;
@@ -743,7 +781,9 @@ impl TasksModeHandler {
                         .await?;
                 }
                 DelegationWaitOutcome::Failed(_) | DelegationWaitOutcome::Rejected(_) => {
-                    delegation_repo.update_status(delegation.id, "FAILED").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "FAILED")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "FAILED")
                         .await?;
@@ -759,7 +799,9 @@ impl TasksModeHandler {
                     failed_count += 1;
                 }
                 DelegationWaitOutcome::Timeout | DelegationWaitOutcome::TimeoutPartial(_) => {
-                    delegation_repo.update_status(delegation.id, "TIMEOUT").await?;
+                    delegation_repo
+                        .update_status(delegation.id, "TIMEOUT")
+                        .await?;
                     shared_state
                         .update_delegation_status(team_instance_id, delegation.id, "TIMEOUT")
                         .await?;

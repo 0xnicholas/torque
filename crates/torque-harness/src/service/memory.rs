@@ -385,21 +385,22 @@ impl MemoryService {
             .await
     }
 
-    pub async fn summarize_entries(
-        &self,
-        entry_ids: Vec<Uuid>,
-    ) -> anyhow::Result<V1MemoryEntry> {
+    pub async fn summarize_entries(&self, entry_ids: Vec<Uuid>) -> anyhow::Result<V1MemoryEntry> {
         let entries = self.repo_v1.get_entries_by_ids(entry_ids).await?;
         if entries.is_empty() {
             anyhow::bail!("No entries found");
         }
 
-        let summary_text = entries.iter()
+        let summary_text = entries
+            .iter()
             .map(|e| format!("[{:?}] {}: {}", e.category, e.key, e.value))
             .collect::<Vec<_>>()
             .join("\n---\n");
 
-        let category = entries.first().map(|e| e.category.clone()).unwrap_or(MemoryCategory::Session);
+        let category = entries
+            .first()
+            .map(|e| e.category.clone())
+            .unwrap_or(MemoryCategory::Session);
 
         let summarized = V1MemoryEntry {
             id: Uuid::new_v4(),
@@ -447,10 +448,7 @@ impl MemoryService {
         Ok(job)
     }
 
-    async fn run_compaction(
-        repo: Arc<dyn MemoryRepositoryV1>,
-        job_id: Uuid,
-    ) -> anyhow::Result<()> {
+    async fn run_compaction(repo: Arc<dyn MemoryRepositoryV1>, job_id: Uuid) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -461,7 +459,10 @@ impl MemoryService {
         let mut anchors = Vec::new();
         let now = chrono::Utc::now();
 
-        let entries = self.repo_v1.list_entries_by_agent(agent_instance_id, 50, 0).await?;
+        let entries = self
+            .repo_v1
+            .list_entries_by_agent(agent_instance_id, 50, 0)
+            .await?;
         for entry in entries {
             anchors.push(ContextAnchor {
                 anchor_type: ContextAnchorType::MemoryEntry,
@@ -470,7 +471,10 @@ impl MemoryService {
             });
         }
 
-        let ext_refs = self.repo_v1.get_external_context_refs(agent_instance_id).await?;
+        let ext_refs = self
+            .repo_v1
+            .get_external_context_refs(agent_instance_id)
+            .await?;
         for ext_ref in ext_refs {
             anchors.push(ContextAnchor {
                 anchor_type: ContextAnchorType::ExternalContextRef,
@@ -496,7 +500,10 @@ impl MemoryService {
             });
         }
 
-        let artifacts = self.repo_v1.get_artifacts_by_instance(agent_instance_id, 50).await?;
+        let artifacts = self
+            .repo_v1
+            .get_artifacts_by_instance(agent_instance_id, 50)
+            .await?;
         for artifact in artifacts {
             anchors.push(ContextAnchor {
                 anchor_type: ContextAnchorType::Artifact,

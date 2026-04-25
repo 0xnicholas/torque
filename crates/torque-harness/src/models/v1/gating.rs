@@ -362,8 +362,11 @@ impl GatingConfigValidator {
         }
 
         if config.auto_approve_quality_threshold > 1.0
-            || config.auto_approve_quality_threshold < 0.0 {
-            return Err(ConfigError::InvalidQualityThreshold(config.auto_approve_quality_threshold));
+            || config.auto_approve_quality_threshold < 0.0
+        {
+            return Err(ConfigError::InvalidQualityThreshold(
+                config.auto_approve_quality_threshold,
+            ));
         }
 
         Ok(())

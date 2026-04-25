@@ -88,14 +88,12 @@ impl RunRepository for PostgresRunRepository {
         webhook_sent_at: DateTime<Utc>,
         webhook_attempts: i32,
     ) -> anyhow::Result<()> {
-        sqlx::query(
-            "UPDATE runs SET webhook_sent_at = $1, webhook_attempts = $2 WHERE id = $3",
-        )
-        .bind(webhook_sent_at)
-        .bind(webhook_attempts)
-        .bind(id)
-        .execute(self.db.pool())
-        .await?;
+        sqlx::query("UPDATE runs SET webhook_sent_at = $1, webhook_attempts = $2 WHERE id = $3")
+            .bind(webhook_sent_at)
+            .bind(webhook_attempts)
+            .bind(id)
+            .execute(self.db.pool())
+            .await?;
         Ok(())
     }
 }

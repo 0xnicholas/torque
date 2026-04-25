@@ -53,7 +53,10 @@ impl MemberAgent for LocalMemberAgent {
             .filter_map(|d| {
                 let selector = &d.child_agent_definition_selector;
                 let goal = selector.get("goal")?.as_str()?.to_string();
-                let instructions = selector.get("instructions").and_then(|v| v.as_str()).map(String::from);
+                let instructions = selector
+                    .get("instructions")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
 
                 Some(MemberTask {
                     delegation_id: d.id,

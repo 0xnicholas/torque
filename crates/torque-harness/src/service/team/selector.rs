@@ -47,10 +47,7 @@ impl SelectorResolver {
             .resolve_capable_agents(&selector.capability_profiles)
             .await?;
 
-        let agent_instance_ids: Vec<Uuid> = members
-            .iter()
-            .map(|m| m.agent_instance_id)
-            .collect();
+        let agent_instance_ids: Vec<Uuid> = members.iter().map(|m| m.agent_instance_id).collect();
 
         let agent_instances = self
             .agent_instance_repo

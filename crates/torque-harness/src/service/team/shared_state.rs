@@ -110,14 +110,16 @@ impl SharedTaskStateManager {
         self.repo.add_decision(team_instance_id, decision).await
     }
 
-    pub async fn atomic_update<F>(&self, team_instance_id: Uuid, f: F) -> anyhow::Result<SharedTaskState>
+    pub async fn atomic_update<F>(
+        &self,
+        team_instance_id: Uuid,
+        f: F,
+    ) -> anyhow::Result<SharedTaskState>
     where
         F: FnOnce(&mut Vec<SharedTaskStateUpdate>) + Send + 'static,
     {
         let mut updates = Vec::new();
         f(&mut updates);
-        self.repo
-            .update_with_lock(team_instance_id, updates)
-            .await
+        self.repo.update_with_lock(team_instance_id, updates).await
     }
 }

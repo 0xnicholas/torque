@@ -62,11 +62,10 @@ impl ToolPolicyRepository for PostgresToolPolicyRepository {
     }
 
     async fn list(&self) -> anyhow::Result<Vec<ToolPolicy>> {
-        let rows = sqlx::query_as::<_, ToolPolicyRow>(
-            "SELECT * FROM v1_tool_policies ORDER BY tool_name",
-        )
-        .fetch_all(self.db.pool())
-        .await?;
+        let rows =
+            sqlx::query_as::<_, ToolPolicyRow>("SELECT * FROM v1_tool_policies ORDER BY tool_name")
+                .fetch_all(self.db.pool())
+                .await?;
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
 
@@ -79,8 +78,8 @@ impl ToolPolicyRepository for PostgresToolPolicyRepository {
     }
 }
 
-use sqlx::FromRow;
 use chrono::{DateTime, Utc};
+use sqlx::FromRow;
 
 #[derive(FromRow)]
 struct ToolPolicyRow {
@@ -107,7 +106,14 @@ impl From<ToolPolicyRow> for ToolPolicy {
                 "critical" => ToolRiskLevel::Critical,
                 _ => ToolRiskLevel::Medium,
             },
-            side_effects: row.side_effects.iter().map(|s| serde_json::from_str(s).unwrap_or(crate::models::v1::tool_policy::ToolSideEffect::FileSystem)).collect(),
+            side_effects: row
+                .side_effects
+                .iter()
+                .map(|s| {
+                    serde_json::from_str(s)
+                        .unwrap_or(crate::models::v1::tool_policy::ToolSideEffect::FileSystem)
+                })
+                .collect(),
             requires_approval: row.requires_approval,
             blocked: row.blocked,
             blocked_reason: row.blocked_reason,

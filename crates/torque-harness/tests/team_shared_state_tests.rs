@@ -1,12 +1,12 @@
-use torque_harness::models::v1::delegation::DelegationStatus;
-use torque_harness::models::v1::team::{
-    Blocker, Decision, DelegationStatusEntry, PolicyCheckSummary, PublishedFact,
-    SharedTaskState, TeamTaskStatus,
-};
-use torque_harness::service::team::SharedTaskStateManager;
-use torque_harness::repository::SharedTaskStateRepository;
 use async_trait::async_trait;
 use std::sync::Arc;
+use torque_harness::models::v1::delegation::DelegationStatus;
+use torque_harness::models::v1::team::{
+    Blocker, Decision, DelegationStatusEntry, PolicyCheckSummary, PublishedFact, SharedTaskState,
+    TeamTaskStatus,
+};
+use torque_harness::repository::SharedTaskStateRepository;
+use torque_harness::service::team::SharedTaskStateManager;
 use uuid::Uuid;
 
 struct MockSharedTaskStateRepository {
@@ -68,15 +68,27 @@ impl SharedTaskStateRepository for MockSharedTaskStateRepository {
         Ok(true)
     }
 
-    async fn add_blocker(&self, _team_instance_id: Uuid, _blocker: Blocker) -> anyhow::Result<bool> {
+    async fn add_blocker(
+        &self,
+        _team_instance_id: Uuid,
+        _blocker: Blocker,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
-    async fn resolve_blocker(&self, _team_instance_id: Uuid, _blocker_id: Uuid) -> anyhow::Result<bool> {
+    async fn resolve_blocker(
+        &self,
+        _team_instance_id: Uuid,
+        _blocker_id: Uuid,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
-    async fn add_decision(&self, _team_instance_id: Uuid, _decision: Decision) -> anyhow::Result<bool> {
+    async fn add_decision(
+        &self,
+        _team_instance_id: Uuid,
+        _decision: Decision,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
@@ -126,7 +138,12 @@ async fn test_shared_task_state_manager_publish_fact() {
     let team_instance_id = Uuid::new_v4();
 
     let result = manager
-        .publish_fact(team_instance_id, "key", serde_json::json!("value"), "test_member")
+        .publish_fact(
+            team_instance_id,
+            "key",
+            serde_json::json!("value"),
+            "test_member",
+        )
         .await;
 
     assert!(result.is_ok());
@@ -259,7 +276,10 @@ async fn test_team_task_status_variants() {
     assert_eq!(TeamTaskStatus::Open.to_string(), "OPEN");
     assert_eq!(TeamTaskStatus::Triaged.to_string(), "TRIAGED");
     assert_eq!(TeamTaskStatus::InProgress.to_string(), "IN_PROGRESS");
-    assert_eq!(TeamTaskStatus::WaitingMembers.to_string(), "WAITING_MEMBERS");
+    assert_eq!(
+        TeamTaskStatus::WaitingMembers.to_string(),
+        "WAITING_MEMBERS"
+    );
     assert_eq!(TeamTaskStatus::Completed.to_string(), "COMPLETED");
     assert_eq!(TeamTaskStatus::Failed.to_string(), "FAILED");
 }

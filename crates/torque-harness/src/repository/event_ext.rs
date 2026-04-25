@@ -57,12 +57,11 @@ impl EventRepositoryExt for PostgresEventRepositoryExt {
     }
 
     async fn list_after(&self, event_id: Uuid) -> anyhow::Result<Vec<Event>> {
-        let anchor_event: Option<Event> = sqlx::query_as::<_, Event>(
-            "SELECT * FROM v1_events WHERE event_id = $1"
-        )
-        .bind(event_id)
-        .fetch_optional(self.db.pool())
-        .await?;
+        let anchor_event: Option<Event> =
+            sqlx::query_as::<_, Event>("SELECT * FROM v1_events WHERE event_id = $1")
+                .bind(event_id)
+                .fetch_optional(self.db.pool())
+                .await?;
 
         match anchor_event {
             Some(anchor) => {

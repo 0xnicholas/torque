@@ -59,21 +59,17 @@ pub async fn restore(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<RecoveryResult>, (StatusCode, Json<ErrorBody>)> {
-    let assessment = services
-        .recovery
-        .assess_recovery(id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "ASSESSMENT_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+    let assessment = services.recovery.assess_recovery(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "ASSESSMENT_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    })?;
 
     let (instance, _messages, _rebuilt_state) = services
         .recovery
@@ -110,18 +106,25 @@ pub async fn get_messages(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<CheckpointMessagesResponse>, (StatusCode, Json<ErrorBody>)> {
-    let messages = services.recovery.get_checkpoint_messages(id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorBody {
-                code: "DB_ERROR".into(),
-                message: e.to_string(),
-                details: None,
-                request_id: None,
-            }),
-        )
-    })?;
-    Ok(Json(CheckpointMessagesResponse { checkpoint_id: id, messages }))
+    let messages = services
+        .recovery
+        .get_checkpoint_messages(id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "DB_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+    Ok(Json(CheckpointMessagesResponse {
+        checkpoint_id: id,
+        messages,
+    }))
 }
 
 #[derive(serde::Serialize)]

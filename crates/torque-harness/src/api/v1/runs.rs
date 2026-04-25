@@ -48,21 +48,17 @@ pub async fn create(
         webhook_attempts: None,
     };
 
-    services
-        .run_repo
-        .create(&run)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+    services.run_repo.create(&run).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "DB_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    })?;
 
     if req.async_execution {
         let async_runner = services.async_runner.clone();

@@ -1,7 +1,10 @@
-use torque_harness::models::v1::gating::MergeStrategy;
-use torque_harness::models::v1::memory::{MemoryCategory, MemoryEntry, MemoryContent};
-use torque_harness::service::merge_strategy::{AppendStrategy, KeepSeparateStrategy, WithProvenanceStrategy, MergeStrategyExecutor, MergedMemoryEntry, MergeStrategyHandler};
 use serde_json::json;
+use torque_harness::models::v1::gating::MergeStrategy;
+use torque_harness::models::v1::memory::{MemoryCategory, MemoryContent, MemoryEntry};
+use torque_harness::service::merge_strategy::{
+    AppendStrategy, KeepSeparateStrategy, MergeStrategyExecutor, MergeStrategyHandler,
+    MergedMemoryEntry, WithProvenanceStrategy,
+};
 
 fn create_test_existing() -> MemoryEntry {
     MemoryEntry {
