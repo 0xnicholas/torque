@@ -3,9 +3,17 @@ use torque_kernel::{
     ApprovalRequestId, ExecutionEngine, ExecutionEvent, ExecutionMode, ExecutionOutcome,
     ExecutionRequest, ExternalContextKind, ExternalContextRef, InMemoryKernelRuntime,
     InMemoryRuntimeStore, KernelRuntime, RecoveryAction, RecoveryDisposition, ResumeSignal,
-    RuntimeCommand, StepDecision, SyncPolicy, Task, TaskConstraint, TaskInputRef, TaskPacket,
-    TaskState,
+    RuntimeCommand, RuntimeStore, StepDecision, SyncPolicy, Task, TaskConstraint, TaskInputRef,
+    TaskPacket, TaskState,
 };
+
+#[test]
+fn kernel_exports_reference_runtime_surface_without_implying_production_runtime() {
+    let _ = std::any::type_name::<dyn KernelRuntime>();
+    let _ = std::any::type_name::<dyn RuntimeStore>();
+    let _ = std::any::type_name::<InMemoryKernelRuntime>();
+    let _ = std::any::type_name::<InMemoryRuntimeStore>();
+}
 
 #[test]
 fn task_transitions_from_open_to_in_progress_to_done() {

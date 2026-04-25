@@ -1,4 +1,7 @@
-//! Core runtime contracts for Torque kernel.
+//! Core execution contracts for the Torque kernel.
+//!
+//! The kernel owns stable execution semantics. Concrete production runtime
+//! environments are expected to sit above this layer.
 
 pub mod agent_definition;
 pub mod agent_instance;
