@@ -407,6 +407,39 @@
 
 ---
 
+## P7: Tool Governance (COMPLETED)
+
+### Tool Risk Model
+- `ToolRiskLevel` enum: Low, Medium, High, Critical
+- `ToolPolicy` model with risk_level, side_effects, blocked, requires_approval
+- `ToolSideEffect` enum: FileSystem, Network, ExternalProcess, StateMutation, DataExfiltration, SystemLevel
+
+### ToolGovernanceService
+- Risk-based tool categorization
+- Blocked/privileged tool lists
+- Approval requirements based on risk level
+- Config caching for performance
+
+### Governance-Aware Tool Execution
+- `GovernedToolRegistry` wraps `ToolRegistry`
+- Two-layer enforcement: governance config + PolicyEvaluator
+- `ToolExecution` enum for registry selection
+- Integrated into PlanExecutor and SupervisorAgent
+
+### API Endpoints
+- `GET /v1/tool-policies` - List all tool policies
+- `GET /v1/tool-policies/{tool_name}` - Get specific policy
+- `POST /v1/tool-policies/{tool_name}` - Create/update policy
+- `DELETE /v1/tool-policies/{tool_name}` - Delete policy
+
+### Database
+- Migration 008: `v1_tool_policies` table
+
+**Implementation:** `crates/torque-harness/src/models/v1/tool_policy.rs`, `policy/tool_governance.rs`, `service/governed_tool.rs`, `api/v1/tool_policy.rs`, `repository/tool_policy.rs`
+**Tests:** `tool_governance_tests` (5 tests)
+
+---
+
 ## P3: Advanced Features (COMPLETED)
 
 ### Proper Memory Compaction with Summarization
@@ -432,7 +465,7 @@
 
 ---
 
-## Current Test Suite (141 tests passing)
+## Current Test Suite (146 tests passing)
 
 | Test File | Count | Status |
 |-----------|-------|--------|
@@ -457,6 +490,7 @@
 | project_scope_tests | 2 | ✅ |
 | session_http_api | 6 | ✅ |
 | stream_event_tests | 3 | ✅ |
+| tool_governance_tests | 5 | ✅ |
 | tool_registry_tests | 1 | ✅ |
 | v1_end_to_end | 4 | ✅ |
 | v1_execution_tests | 3 | ✅ |
@@ -465,7 +499,7 @@
 | v1_team_supervisor_tools_tests | 16 | ✅ |
 | dedup_thresholds_tests | 5 | ✅ |
 | merge_strategy_tests | 4 | ✅ |
-| **TOTAL** | **141** | ✅ |
+| **TOTAL** | **146** | ✅ |
 
 ---
 
@@ -473,7 +507,7 @@
 
 1. ~~**Operator escalation endpoints**~~ - **RESOLVED** - P5 implementation complete
 2. ~~**Async execution mode**~~ - **RESOLVED** - P6 implementation complete
-3. **Tool execution** - Uses simple ToolRegistry; advanced tool governance not yet implemented
+3. ~~**Tool execution**~~ - **RESOLVED** - P7 Tool Governance implementation complete
 
 ---
 
