@@ -1,22 +1,21 @@
 use crate::agent::stream::StreamEvent;
 use crate::config;
 use crate::infra::llm::LlmClient;
-use crate::kernel_bridge::v1_mapping::{run_request_to_execution_request, v1_agent_definition_to_kernel};
-use crate::runtime::host::KernelRuntimeHandle;
+use crate::runtime::message::RuntimeMessage;
+use crate::runtime::mapping::{run_request_to_execution_request, v1_agent_definition_to_kernel};
 use crate::models::v1::agent_instance::AgentInstanceStatus;
 use crate::models::v1::gating::ExecutionSummary;
 use crate::models::v1::run::RunRequest;
 use crate::models::v1::task::{TaskStatus, TaskType};
 use crate::policy::{PolicyEvaluator, PolicyInput};
 use crate::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository, CheckpointRepository, EventRepository,
-    TaskRepository,
+    AgentDefinitionRepository, AgentInstanceRepository, TaskRepository,
 };
 use crate::service::candidate_generator::CandidateGenerator;
 use crate::service::gating::MemoryGatingService;
 use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
-use crate::service::ToolService;
+use crate::service::{RuntimeFactory, ToolService};
 use checkpointer::CheckpointState;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -43,9 +42,7 @@ pub struct RunService {
     agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
     task_repo: Arc<dyn TaskRepository>,
-    event_repo: Arc<dyn EventRepository>,
-    checkpoint_repo: Arc<dyn CheckpointRepository>,
-    checkpointer: Arc<dyn checkpointer::Checkpointer>,
+    runtime_factory: Arc<RuntimeFactory>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     tool_governance: Arc<ToolGovernanceService>,
@@ -61,9 +58,7 @@ impl RunService {
         agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
         agent_instance_repo: Arc<dyn AgentInstanceRepository>,
         task_repo: Arc<dyn TaskRepository>,
-        event_repo: Arc<dyn EventRepository>,
-        checkpoint_repo: Arc<dyn CheckpointRepository>,
-        checkpointer: Arc<dyn checkpointer::Checkpointer>,
+        runtime_factory: Arc<RuntimeFactory>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         tool_governance: Arc<ToolGovernanceService>,
@@ -76,9 +71,7 @@ impl RunService {
             agent_definition_repo,
             agent_instance_repo,
             task_repo,
-            event_repo,
-            checkpoint_repo,
-            checkpointer,
+            runtime_factory,
             llm,
             tools,
             tool_governance,
@@ -289,7 +282,8 @@ impl RunService {
             })),
         };
 
-        self.checkpointer
+        self.runtime_factory
+            .checkpointer()
             .save(instance_id, task_id.unwrap_or(instance_id), state)
             .await?;
         Ok(())
@@ -461,21 +455,19 @@ impl RunService {
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
     ) -> anyhow::Result<String> {
-        let mut kernel = KernelRuntimeHandle::new(
-            vec![kernel_def],
-            self.event_repo.clone(),
-            self.checkpoint_repo.clone(),
-            self.checkpointer.clone(),
-        );
+        let mut kernel = self.runtime_factory.create_handle(vec![kernel_def]);
+        let model_driver = self.runtime_factory.create_model_driver(self.llm.clone());
+        let tool_executor = self.runtime_factory.create_tool_executor(self.tools.clone());
+        let output_sink = self.runtime_factory.create_output_sink(event_sink.clone());
 
         // Execute without policy (policy is evaluated at orchestration layer)
         let result = kernel
             .execute_v1(
                 request,
-                self.llm.clone(),
-                self.tools.clone(),
-                event_sink,
-                vec![], // Start with empty messages for v1
+                &model_driver,
+                &tool_executor,
+                Some(&output_sink),
+                vec![RuntimeMessage::user("Run request execution")],
             )
             .await;
 

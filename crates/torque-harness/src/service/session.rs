@@ -1,11 +1,9 @@
 use crate::agent::stream::StreamEvent;
 use crate::infra::llm::{LlmClient, LlmMessage};
-use crate::runtime::host::KernelRuntimeHandle;
+use crate::runtime::message::RuntimeMessage;
 use crate::runtime::mapping::session_to_execution_request;
-use crate::repository::{
-    CheckpointRepository, EventRepository, MessageRepository, SessionRepository,
-};
-use crate::service::{ContextCompactionService, MemoryService, ToolService};
+use crate::repository::{MessageRepository, SessionRepository};
+use crate::service::{ContextCompactionService, MemoryService, RuntimeFactory, ToolService};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -25,9 +23,7 @@ pub enum SessionServiceError {
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
     message_repo: Arc<dyn MessageRepository>,
-    event_repo: Arc<dyn EventRepository>,
-    checkpoint_repo: Arc<dyn CheckpointRepository>,
-    checkpointer: Arc<dyn checkpointer::Checkpointer>,
+    runtime_factory: Arc<RuntimeFactory>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     memory: Arc<MemoryService>,
@@ -37,9 +33,7 @@ impl SessionService {
     pub fn new(
         session_repo: Arc<dyn SessionRepository>,
         message_repo: Arc<dyn MessageRepository>,
-        event_repo: Arc<dyn EventRepository>,
-        checkpoint_repo: Arc<dyn CheckpointRepository>,
-        checkpointer: Arc<dyn checkpointer::Checkpointer>,
+        runtime_factory: Arc<RuntimeFactory>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         memory: Arc<MemoryService>,
@@ -47,9 +41,7 @@ impl SessionService {
         Self {
             session_repo,
             message_repo,
-            event_repo,
-            checkpoint_repo,
-            checkpointer,
+            runtime_factory,
             llm,
             tools,
             memory,
@@ -135,12 +127,18 @@ impl SessionService {
             SessionServiceError::Other(anyhow::anyhow!("kernel mapping error: {e}"))
         })?;
 
-        let mut kernel = KernelRuntimeHandle::new(
-            vec![],
-            self.event_repo.clone(),
-            self.checkpoint_repo.clone(),
-            self.checkpointer.clone(),
-        );
+        let _ = event_sink.send(StreamEvent::Start { session_id }).await;
+
+        let hydration_source = self
+            .runtime_factory
+            .create_hydration_source(self.session_repo.clone());
+        let mut kernel = self
+            .runtime_factory
+            .create_handle(vec![])
+            .with_hydration_source(Arc::new(hydration_source));
+        let model_driver = self.runtime_factory.create_model_driver(self.llm.clone());
+        let tool_executor = self.runtime_factory.create_tool_executor(self.tools.clone());
+        let output_sink = self.runtime_factory.create_output_sink(event_sink.clone());
 
         let history = self
             .message_repo
@@ -203,13 +201,18 @@ impl SessionService {
             }
         }
 
+        let runtime_messages = llm_messages
+            .into_iter()
+            .map(RuntimeMessage::from)
+            .collect::<Vec<_>>();
+
         let result = kernel
             .execute_chat(
                 request,
-                self.llm.clone(),
-                self.tools.clone(),
-                event_sink.clone(),
-                llm_messages,
+                &model_driver,
+                &tool_executor,
+                Some(&output_sink),
+                runtime_messages,
             )
             .await;
 

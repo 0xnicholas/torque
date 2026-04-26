@@ -9,10 +9,9 @@ use tokio::sync::mpsc;
 use torque_harness::agent::StreamEvent;
 use torque_harness::models::MessageRole;
 use torque_harness::repository::{
-    PostgresCheckpointRepository, PostgresEventRepository, PostgresMemoryRepository,
-    PostgresMessageRepository, PostgresSessionRepository,
+    PostgresMemoryRepository, PostgresMessageRepository, PostgresSessionRepository,
 };
-use torque_harness::service::{MemoryService, SessionService, ToolService};
+use torque_harness::service::{MemoryService, RuntimeFactory, SessionService, ToolService};
 use torque_harness::tools::builtin::create_demo_builtin_tools;
 
 async fn build_session_service(
@@ -21,8 +20,6 @@ async fn build_session_service(
 ) -> SessionService {
     let session_repo = Arc::new(PostgresSessionRepository::new(db.clone()));
     let message_repo = Arc::new(PostgresMessageRepository::new(db.clone()));
-    let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
-    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let memory_repo = Arc::new(PostgresMemoryRepository::new(db.clone()));
 
     let tool = Arc::new(ToolService::new());
@@ -31,16 +28,20 @@ async fn build_session_service(
     ));
     let memory = Arc::new(MemoryService::new(memory_repo, memory_v1_repo, None));
 
-    let checkpointer = Arc::new(torque_harness::kernel_bridge::PostgresCheckpointer::new(
+    let event_repo = Arc::new(torque_harness::repository::PostgresEventRepository::new(db.clone()));
+    let _checkpoint_repo = Arc::new(torque_harness::repository::PostgresCheckpointRepository::new(db.clone()));
+    let checkpointer = Arc::new(torque_harness::runtime::checkpoint::PostgresCheckpointer::new(
         db.clone(),
+    ));
+    let runtime_factory = Arc::new(RuntimeFactory::new(
+        event_repo,
+        checkpointer,
     ));
 
     SessionService::new(
         session_repo,
         message_repo,
-        event_repo,
-        checkpoint_repo,
-        checkpointer,
+        runtime_factory,
         llm,
         tool,
         memory,
