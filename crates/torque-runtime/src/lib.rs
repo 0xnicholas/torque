@@ -8,16 +8,30 @@ pub mod offload;
 pub mod tools;
 pub mod vfs;
 
+pub use environment::{
+    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHydrationSource,
+    RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+};
 pub use host::RuntimeHost;
 
 #[cfg(test)]
 mod tests {
-    use crate::RuntimeHost;
+    use crate::{
+        RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHost,
+        RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+    };
     use torque_kernel::ExecutionRequest;
 
     #[test]
     fn crate_exports_runtime_surface() {
         let _ = std::any::type_name::<RuntimeHost>();
         let _ = std::any::type_name::<ExecutionRequest>();
+        let _ = std::any::type_name::<RuntimeExecutionContext>();
+        let _ = std::any::type_name::<dyn RuntimeModelDriver>();
+        let _ = std::any::type_name::<dyn RuntimeToolExecutor>();
+        let _ = std::any::type_name::<dyn RuntimeEventSink>();
+        let _ = std::any::type_name::<dyn RuntimeCheckpointSink>();
+        let _ = std::any::type_name::<dyn RuntimeHydrationSource>();
+        let _ = std::any::type_name::<dyn RuntimeOutputSink>();
     }
 }
