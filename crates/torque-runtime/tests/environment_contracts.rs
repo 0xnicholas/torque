@@ -1,7 +1,7 @@
 use torque_runtime::checkpoint::{HydrationState, RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use torque_runtime::environment::{
-    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHydrationSource,
-    RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+    ApprovalGateway, RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext,
+    RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
 };
 use torque_runtime::events::{ModelTurnResult, RuntimeFinishReason, RuntimeOutputEvent};
 use torque_runtime::message::{RuntimeMessage, RuntimeMessageRole};
@@ -83,6 +83,7 @@ fn runtime_ports_are_publicly_available() {
     let _ = std::any::type_name::<dyn RuntimeCheckpointSink>();
     let _ = std::any::type_name::<dyn RuntimeHydrationSource>();
     let _ = std::any::type_name::<dyn RuntimeOutputSink>();
+    let _ = std::any::type_name::<dyn ApprovalGateway>();
     let _ = std::any::type_name::<RuntimeExecutionContext>();
     let _ = std::any::type_name::<RuntimeToolDef>();
     let _ = std::any::type_name::<RuntimeCheckpointRef>();

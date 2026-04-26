@@ -9,16 +9,17 @@ pub mod tools;
 pub mod vfs;
 
 pub use environment::{
-    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHydrationSource,
-    RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+    ApprovalGateway, RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext,
+    RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
 };
 pub use host::RuntimeHost;
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHost,
-        RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+        ApprovalGateway, RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext,
+        RuntimeHost, RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink,
+        RuntimeToolExecutor,
     };
     use torque_kernel::ExecutionRequest;
 
@@ -33,5 +34,6 @@ mod tests {
         let _ = std::any::type_name::<dyn RuntimeCheckpointSink>();
         let _ = std::any::type_name::<dyn RuntimeHydrationSource>();
         let _ = std::any::type_name::<dyn RuntimeOutputSink>();
+        let _ = std::any::type_name::<dyn ApprovalGateway>();
     }
 }

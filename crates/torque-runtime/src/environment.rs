@@ -3,7 +3,7 @@ use crate::checkpoint::{HydrationState, RuntimeCheckpointPayload, RuntimeCheckpo
 use crate::events::ModelTurnResult;
 use crate::message::RuntimeMessage;
 use crate::tools::{RuntimeToolDef, RuntimeToolResult};
-use torque_kernel::{AgentInstanceId, ExecutionResult};
+use torque_kernel::{AgentInstanceId, ApprovalRequestId, ExecutionResult};
 use uuid::Uuid;
 
 #[async_trait]
@@ -61,6 +61,15 @@ pub trait RuntimeOutputSink: Send + Sync {
     fn on_tool_call(&self, tool_name: &str, arguments: &serde_json::Value);
     fn on_tool_result(&self, tool_name: &str, result: &RuntimeToolResult);
     fn on_checkpoint(&self, checkpoint_id: Uuid, reason: &str);
+}
+
+#[async_trait]
+pub trait ApprovalGateway: Send + Sync {
+    async fn notify_approval_required(
+        &self,
+        context: &RuntimeExecutionContext,
+        approval_request_id: ApprovalRequestId,
+    ) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
