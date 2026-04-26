@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use checkpointer::Checkpointer;
+use checkpointer::{CheckpointState, Checkpointer};
 use std::sync::Arc;
 use torque_runtime::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use torque_runtime::environment::RuntimeCheckpointSink;
@@ -14,6 +14,18 @@ impl HarnessCheckpointSink {
     }
 }
 
+fn to_checkpoint_state(value: serde_json::Value) -> CheckpointState {
+    match serde_json::from_value(value.clone()) {
+        Ok(state) => state,
+        Err(_) => CheckpointState {
+            messages: vec![],
+            tool_call_count: 0,
+            intermediate_results: vec![],
+            custom_state: Some(value),
+        },
+    }
+}
+
 #[async_trait]
 impl RuntimeCheckpointSink for HarnessCheckpointSink {
     async fn save(
@@ -25,7 +37,7 @@ impl RuntimeCheckpointSink for HarnessCheckpointSink {
             .save(
                 checkpoint.instance_id.as_uuid(),
                 checkpoint.node_id,
-                checkpoint.state,
+                to_checkpoint_state(checkpoint.state),
             )
             .await?;
 

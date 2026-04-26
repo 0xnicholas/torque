@@ -284,12 +284,12 @@ async fn event_checkpoint_and_hydration_adapters_return_expected_shapes() {
             instance_id,
             node_id: Uuid::new_v4(),
             reason: "test".to_string(),
-            state: checkpointer::CheckpointState {
-                messages: vec![],
-                tool_call_count: 0,
-                intermediate_results: vec![],
-                custom_state: None,
-            },
+            state: serde_json::json!({
+                "messages": [],
+                "tool_call_count": 0,
+                "intermediate_results": [],
+                "custom_state": null,
+            }),
         })
         .await
         .expect("checkpoint save should succeed");

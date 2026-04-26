@@ -6,7 +6,6 @@ use torque_runtime::environment::{
 use torque_runtime::events::{ModelTurnResult, RuntimeFinishReason, RuntimeOutputEvent};
 use torque_runtime::message::{RuntimeMessage, RuntimeMessageRole};
 use torque_runtime::tools::{RuntimeOffloadRef, RuntimeToolDef, RuntimeToolResult};
-use checkpointer::r#trait::ArtifactPointer;
 
 #[test]
 fn runtime_message_round_trips_role_and_content() {
@@ -45,22 +44,16 @@ fn runtime_checkpoint_payload_captures_kernel_owned_checkpoint_context() {
         instance_id: torque_kernel::AgentInstanceId::new(),
         node_id: uuid::Uuid::new_v4(),
         reason: "task_complete".to_string(),
-        state: checkpointer::CheckpointState {
-            messages: vec![],
-            tool_call_count: 1,
-            intermediate_results: vec![ArtifactPointer {
-                task_id: "task-1".to_string(),
-                storage: "artifact".to_string(),
-                location: "artifact://1".to_string(),
-                size_bytes: 4,
-                content_type: "text/plain".to_string(),
-            }],
-            custom_state: None,
-        },
+        state: serde_json::json!({
+            "messages": [],
+            "tool_call_count": 1,
+            "intermediate_results": [],
+            "custom_state": null,
+        }),
     };
 
     assert_eq!(payload.reason, "task_complete");
-    assert_eq!(payload.state.tool_call_count, 1);
+    assert_eq!(payload.state["tool_call_count"], 1);
 }
 
 #[test]

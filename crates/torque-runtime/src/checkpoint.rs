@@ -1,4 +1,3 @@
-use checkpointer::CheckpointState;
 use serde::{Deserialize, Serialize};
 use torque_kernel::AgentInstanceId;
 use uuid::Uuid;
@@ -14,7 +13,7 @@ pub struct RuntimeCheckpointPayload {
     pub instance_id: AgentInstanceId,
     pub node_id: Uuid,
     pub reason: String,
-    pub state: CheckpointState,
+    pub state: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

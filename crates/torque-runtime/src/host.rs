@@ -267,19 +267,19 @@ impl RuntimeHost {
         let run_id = checkpoint.instance_id.as_uuid();
         let node_id = checkpoint.active_task_id.map(|id| id.as_uuid()).unwrap_or(run_id);
 
-        let state = checkpointer::CheckpointState {
-            messages: vec![],
-            tool_call_count: 0,
-            intermediate_results: vec![],
-            custom_state: Some(serde_json::json!({
+        let state = serde_json::json!({
+            "messages": [],
+            "tool_call_count": 0,
+            "intermediate_results": [],
+            "custom_state": {
                 "instance_state": format!("{:?}", checkpoint.instance_state),
                 "checkpoint_reason": reason,
                 "active_task_state": checkpoint.active_task_state.map(|s| format!("{:?}", s)),
                 "pending_approval_ids": checkpoint.pending_approval_ids.iter().map(|id| id.as_uuid()).collect::<Vec<_>>(),
                 "child_delegation_ids": checkpoint.child_delegation_ids.iter().map(|id| id.as_uuid()).collect::<Vec<_>>(),
                 "event_sequence": checkpoint.event_sequence,
-            })),
-        };
+            },
+        });
 
         Ok(self
             .checkpoint_sink
