@@ -1,6 +1,6 @@
 use crate::infra::tool_registry::ToolRegistry;
 use crate::service::ArtifactService;
-use crate::service::tool_offload::ToolOffloadService;
+use crate::service::tool_offload::HarnessOffloadArtifactStore;
 use crate::service::vfs::RoutedVfs;
 use crate::tools::builtin::create_builtin_tools;
 use futures::executor::block_on;
@@ -47,7 +47,13 @@ impl ToolService {
         self.vfs.clone()
     }
 
-    pub fn tool_offload_service(&self) -> ToolOffloadService {
-        ToolOffloadService::new(self.artifact_service(), self.vfs())
+    pub fn tool_offload_service(&self) -> torque_runtime::offload::ToolOffloadPolicy {
+        let vfs: Option<std::sync::Arc<dyn torque_runtime::vfs::VfsBackend>> =
+            self.vfs().map(|v| v as std::sync::Arc<dyn torque_runtime::vfs::VfsBackend>);
+        let artifact_store: Option<std::sync::Arc<dyn torque_runtime::offload::OffloadArtifactStore>> =
+            self.artifact_service()
+                .map(|a| std::sync::Arc::new(HarnessOffloadArtifactStore::new(a))
+                    as std::sync::Arc<dyn torque_runtime::offload::OffloadArtifactStore>);
+        torque_runtime::offload::ToolOffloadPolicy::new(vfs, artifact_store)
     }
 }

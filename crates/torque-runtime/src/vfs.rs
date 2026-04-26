@@ -111,6 +111,39 @@ impl RoutedVfs {
     }
 }
 
+#[async_trait]
+impl VfsBackend for RoutedVfs {
+    async fn ls(&self, path: &str) -> anyhow::Result<Vec<FileInfo>> {
+        RoutedVfs::ls(self, path).await
+    }
+
+    async fn read(&self, path: &str) -> anyhow::Result<String> {
+        RoutedVfs::read(self, path).await
+    }
+
+    async fn write(&self, path: &str, content: &str) -> anyhow::Result<()> {
+        RoutedVfs::write(self, path, content).await
+    }
+
+    async fn edit(
+        &self,
+        path: &str,
+        old_string: &str,
+        new_string: &str,
+        replace_all: bool,
+    ) -> anyhow::Result<EditResult> {
+        RoutedVfs::edit(self, path, old_string, new_string, replace_all).await
+    }
+
+    async fn glob(&self, path: &str, pattern: &str) -> anyhow::Result<Vec<FileInfo>> {
+        RoutedVfs::glob(self, path, pattern).await
+    }
+
+    async fn grep(&self, path: &str, pattern: &str) -> anyhow::Result<Vec<GrepMatch>> {
+        RoutedVfs::grep(self, path, pattern).await
+    }
+}
+
 enum RoutedBackend<'a> {
     Scratch(&'a Arc<dyn VfsBackend>),
     Workspace(&'a Arc<dyn VfsBackend>),

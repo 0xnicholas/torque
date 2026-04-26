@@ -4,6 +4,7 @@ pub mod environment;
 pub mod events;
 pub mod host;
 pub mod message;
+pub mod offload;
 pub mod tools;
 pub mod vfs;
 

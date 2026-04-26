@@ -57,7 +57,7 @@ pub use session::SessionService;
 pub use task::TaskService;
 pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
-pub use tool_offload::{ToolOffloadConfig, ToolOffloadService, TOOL_OUTPUT_ARTIFACT_KIND};
+pub use tool_offload::{HarnessOffloadArtifactStore, ToolOffloadConfig, TOOL_OUTPUT_ARTIFACT_KIND};
 pub use vfs::RoutedVfs;
 pub use webhook_manager::WebhookManager;
 
