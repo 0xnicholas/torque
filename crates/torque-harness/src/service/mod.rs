@@ -21,7 +21,6 @@ pub mod notification;
 pub mod recovery;
 pub mod reflexion;
 pub mod run;
-pub mod session;
 pub mod task;
 pub mod team;
 pub mod tool;
@@ -53,7 +52,6 @@ pub use reflexion::{
     ExperienceQuery, ReflectionResult, ReflexionService, RetrievedExperience, SubtaskResult,
 };
 pub use run::RunService;
-pub use session::SessionService;
 pub use task::TaskService;
 pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
@@ -63,8 +61,8 @@ pub use webhook_manager::WebhookManager;
 
 use crate::runtime::host::KernelRuntimeHandle;
 use crate::runtime::{
-    HarnessCheckpointSink, HarnessEventSink, HarnessHydrationSource, HarnessModelDriver,
-    HarnessToolExecutor, StreamEventSinkAdapter,
+    HarnessCheckpointSink, HarnessEventSink, HarnessModelDriver, HarnessToolExecutor,
+    StreamEventSinkAdapter,
 };
 use crate::repository::EventRepository;
 use std::sync::Arc;
@@ -118,20 +116,12 @@ impl RuntimeFactory {
         StreamEventSinkAdapter::new(tx)
     }
 
-    pub fn create_hydration_source(
-        &self,
-        session_repo: Arc<dyn crate::repository::SessionRepository>,
-    ) -> HarnessHydrationSource {
-        HarnessHydrationSource::new(session_repo)
-    }
-
     pub fn checkpointer(&self) -> &Arc<dyn checkpointer::Checkpointer> {
         &self.checkpointer
     }
 }
 
 pub struct ServiceContainer {
-    pub session: std::sync::Arc<SessionService>,
     pub memory: std::sync::Arc<memory::MemoryService>,
     pub tool: std::sync::Arc<ToolService>,
     pub agent_instance: std::sync::Arc<agent_instance::AgentInstanceService>,
@@ -184,14 +174,6 @@ impl ServiceContainer {
             checkpointer.clone(),
         ));
 
-        let session = std::sync::Arc::new(SessionService::new(
-            repos.session.clone(),
-            repos.message.clone(),
-            runtime_factory.clone(),
-            llm.clone(),
-            tool.clone(),
-            memory.clone(),
-        ));
         let agent_instance = std::sync::Arc::new(agent_instance::AgentInstanceService::new(
             repos.agent_instance.clone(),
         ));
@@ -299,7 +281,6 @@ impl ServiceContainer {
         let tool_policy = repos.tool_policy.clone();
 
         Self {
-            session,
             memory,
             tool,
             agent_instance,

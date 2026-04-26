@@ -8,19 +8,18 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use torque_harness::agent::stream::StreamEvent;
-use torque_harness::models::SessionStatus;
 use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::models::v1::event::Event;
-use torque_harness::repository::{ArtifactRepository, EventRepository, SessionKernelState, SessionRepository};
+use torque_harness::repository::{ArtifactRepository, EventRepository};
 use torque_harness::runtime::{
-    HarnessCheckpointSink, HarnessEventSink, HarnessHydrationSource, HarnessModelDriver,
+    HarnessCheckpointSink, HarnessEventSink, HarnessModelDriver,
     HarnessToolExecutor, StreamEventSinkAdapter,
 };
 use torque_harness::service::{ArtifactService, ToolService};
 use torque_runtime::checkpoint::RuntimeCheckpointPayload;
 use torque_runtime::environment::{
-    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeHydrationSource,
-    RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
+    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeToolExecutor,
+    RuntimeModelDriver, RuntimeOutputSink,
 };
 use torque_runtime::message::{RuntimeMessage, RuntimeMessageRole};
 use torque_runtime::tools::RuntimeToolDef;
@@ -149,27 +148,6 @@ impl checkpointer::Checkpointer for FakeCheckpointer {
     }
 }
 
-struct FakeSessionRepository {
-    state: Option<SessionKernelState>,
-}
-
-#[async_trait]
-impl SessionRepository for FakeSessionRepository {
-    async fn create(&self, _api_key: &str, _project_scope: &str) -> anyhow::Result<torque_harness::models::Session> { unimplemented!() }
-    async fn list(&self, _limit: i64) -> anyhow::Result<Vec<torque_harness::models::Session>> { unimplemented!() }
-    async fn get_by_id(&self, _id: Uuid) -> anyhow::Result<Option<torque_harness::models::Session>> { unimplemented!() }
-    async fn update_status(&self, _id: Uuid, _status: SessionStatus, _error_msg: Option<&str>) -> anyhow::Result<bool> { Ok(false) }
-    async fn try_mark_running(&self, _id: Uuid) -> anyhow::Result<bool> { Ok(false) }
-    async fn get_kernel_state(&self, _id: Uuid) -> anyhow::Result<Option<SessionKernelState>> {
-        Ok(self.state.as_ref().map(|state| SessionKernelState {
-            agent_definition_id: state.agent_definition_id,
-            status: state.status.clone(),
-            active_task_id: state.active_task_id,
-            checkpoint_id: state.checkpoint_id,
-        }))
-    }
-}
-
 fn setup_tool_service() -> Arc<ToolService> {
     let artifact_service = Arc::new(ArtifactService::new(Arc::new(NoopArtifactRepository)));
     Arc::new(ToolService::new_with_builtins(artifact_service))
@@ -246,14 +224,6 @@ async fn event_checkpoint_and_hydration_adapters_return_expected_shapes() {
     let event_sink = HarnessEventSink::new(event_repo.clone());
     let checkpointer = Arc::new(FakeCheckpointer::default());
     let checkpoint_sink = HarnessCheckpointSink::new(checkpointer.clone());
-    let hydration_source = HarnessHydrationSource::new(Arc::new(FakeSessionRepository {
-        state: Some(SessionKernelState {
-            agent_definition_id: Uuid::new_v4(),
-            status: "ready".to_string(),
-            active_task_id: None,
-            checkpoint_id: None,
-        }),
-    }));
 
     let instance_id = torque_kernel::AgentInstanceId::new();
     let agent_definition = torque_kernel::AgentDefinition::new("adapter-test", "adapter test");
@@ -294,11 +264,4 @@ async fn event_checkpoint_and_hydration_adapters_return_expected_shapes() {
         .await
         .expect("checkpoint save should succeed");
     assert_eq!(checkpoint_ref.instance_id, instance_id.as_uuid());
-
-    let hydration = hydration_source
-        .load_instance_state(instance_id)
-        .await
-        .expect("hydration lookup should succeed")
-        .expect("hydration state should exist");
-    assert_eq!(hydration.status, "ready");
 }
