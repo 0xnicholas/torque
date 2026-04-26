@@ -5,7 +5,7 @@ use torque_runtime::environment::{
 };
 use torque_runtime::events::{ModelTurnResult, RuntimeFinishReason, RuntimeOutputEvent};
 use torque_runtime::message::{RuntimeMessage, RuntimeMessageRole};
-use torque_runtime::tools::{RuntimeOffloadRef, RuntimeToolDef, RuntimeToolResult};
+use torque_runtime::tools::{RuntimeArtifactRef, RuntimeToolDef, RuntimeToolResult};
 
 #[test]
 fn runtime_message_round_trips_role_and_content() {
@@ -27,7 +27,7 @@ fn runtime_tool_result_can_carry_offload_metadata() {
         success: true,
         content: "stored elsewhere".to_string(),
         error: None,
-        offload_ref: Some(RuntimeOffloadRef {
+        offload_ref: Some(RuntimeArtifactRef {
             storage: "artifact".to_string(),
             locator: "artifact://123".to_string(),
             artifact_id: None,

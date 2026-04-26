@@ -81,7 +81,7 @@ impl ToolOffloadPolicy {
                     Uuid::new_v4(),
                 );
                 vfs.as_ref().write(&path, &result.content).await?;
-                let offload_ref = crate::tools::RuntimeOffloadRef {
+                let offload_ref = crate::tools::RuntimeArtifactRef {
                     storage: "scratch".to_string(),
                     locator: path.clone(),
                     artifact_id: None,
@@ -107,7 +107,7 @@ impl ToolOffloadPolicy {
                     source_instance_id,
                 )
                 .await?;
-            let offload_ref = crate::tools::RuntimeOffloadRef {
+            let offload_ref = crate::tools::RuntimeArtifactRef {
                 storage: "artifact".to_string(),
                 locator: artifact_ref.artifact_id.to_string(),
                 artifact_id: Some(artifact_ref.artifact_id),

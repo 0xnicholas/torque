@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuntimeOffloadRef {
+pub struct RuntimeArtifactRef {
     pub storage: String,
     pub locator: String,
     pub artifact_id: Option<Uuid>,
@@ -14,7 +14,7 @@ pub struct RuntimeToolResult {
     pub success: bool,
     pub content: String,
     pub error: Option<String>,
-    pub offload_ref: Option<RuntimeOffloadRef>,
+    pub offload_ref: Option<RuntimeArtifactRef>,
 }
 
 impl RuntimeToolResult {
