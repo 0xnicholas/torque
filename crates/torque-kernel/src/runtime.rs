@@ -22,12 +22,16 @@ use crate::{
 };
 use chrono::Utc;
 
-/// Primary kernel execution interface.
+/// Primary kernel execution interface (commands only).
 ///
-/// [`KernelRuntime::handle`] processes a new or continuing execution request
-/// with a step decision. For resume flows (approval, tool, delegation),
-/// use [`KernelRuntime::handle_command`] which carries a [`RuntimeCommand`]
-/// with an optional [`ResumeSignal`].
+/// Processes execution requests and step decisions, returning execution
+/// results with state transitions and events.
+///
+/// For state queries (instance, task, execution history, checkpoints),
+/// use [`RuntimeStore`]. This split follows Command-Query Separation:
+/// the kernel owns execution commands; the store provides read access to
+/// persisted state. Consumers that need both should hold
+/// `&mut dyn KernelRuntime` and `&dyn RuntimeStore`.
 pub trait KernelRuntime {
     fn handle(
         &mut self,
@@ -74,12 +78,13 @@ impl RuntimeCommand {
     }
 }
 
-/// Persistence contract for kernel runtime state.
+/// Persistence contract for kernel runtime state (queries only).
 ///
-/// Implementations store agent definitions, instances, tasks, execution
-/// results, and checkpoints. The in-memory implementation
-/// ([`InMemoryRuntimeStore`]) is suitable for tests. Production backends
-/// should implement this trait against a durable store.
+/// Provides read access to agent definitions, instances, tasks, execution
+/// results, and checkpoints.
+///
+/// For execution commands, use [`KernelRuntime`]. See its docs for the
+/// Command-Query Separation design rationale.
 pub trait RuntimeStore {
     fn agent_definition(&self, agent_definition_id: AgentDefinitionId) -> Option<&AgentDefinition>;
     fn put_agent_definition(&mut self, agent_definition: AgentDefinition);
