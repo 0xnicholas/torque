@@ -16,8 +16,8 @@ use crate::service::gating::MemoryGatingService;
 use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
 use crate::service::{RuntimeFactory, ToolService};
-use checkpointer::CheckpointState;
 use std::sync::Arc;
+use torque_runtime::checkpoint::RuntimeCheckpointPayload;
 use tokio::sync::mpsc;
 use tracing::warn;
 use uuid::Uuid;
@@ -254,23 +254,30 @@ impl RunService {
         task_id: Option<Uuid>,
         snapshot: serde_json::Value,
     ) -> anyhow::Result<()> {
-        let state = CheckpointState {
-            messages: vec![],
-            tool_call_count: 0,
-            intermediate_results: vec![],
-            custom_state: Some(serde_json::json!({
+        let state = serde_json::json!({
+            "messages": [],
+            "tool_call_count": 0,
+            "intermediate_results": [],
+            "custom_state": {
                 "instance_state": snapshot.get("status").and_then(|s| s.as_str()).unwrap_or("Ready"),
                 "checkpoint_reason": "run_service",
                 "active_task_state": null,
                 "pending_approval_ids": Vec::<Uuid>::new(),
                 "child_delegation_ids": Vec::<Uuid>::new(),
                 "event_sequence": 0,
-            })),
+            },
+        });
+
+        let checkpoint = RuntimeCheckpointPayload {
+            instance_id: torque_kernel::AgentInstanceId::new(),
+            node_id: task_id.unwrap_or(instance_id),
+            reason: "run_service".to_string(),
+            state,
         };
 
         self.runtime_factory
             .checkpointer()
-            .save(instance_id, task_id.unwrap_or(instance_id), state)
+            .save(checkpoint)
             .await?;
         Ok(())
     }

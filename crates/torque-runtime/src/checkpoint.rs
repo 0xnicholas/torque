@@ -23,3 +23,20 @@ pub struct HydrationState {
     pub active_task_id: Option<Uuid>,
     pub checkpoint_id: Option<Uuid>,
 }
+
+/// A chat message captured in a checkpoint snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub role: String,
+    pub content: String,
+}
+
+/// A lightweight reference to an artifact stored in a checkpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactPointer {
+    pub task_id: String,
+    pub storage: String,
+    pub location: String,
+    pub size_bytes: i64,
+    pub content_type: String,
+}

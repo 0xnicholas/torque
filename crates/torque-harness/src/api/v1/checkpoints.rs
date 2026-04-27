@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use checkpointer::r#trait::Message;
+use torque_runtime::checkpoint::Message;
 use llm::OpenAiClient;
 use std::sync::Arc;
 use uuid::Uuid;

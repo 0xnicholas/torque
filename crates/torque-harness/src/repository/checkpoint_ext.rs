@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::models::v1::checkpoint::{Checkpoint, CheckpointRow};
 use async_trait::async_trait;
-use checkpointer::r#trait::Message;
+use torque_runtime::checkpoint::Message;
 use uuid::Uuid;
 
 #[async_trait]
@@ -66,8 +66,8 @@ impl CheckpointRepositoryExt for PostgresCheckpointRepositoryExt {
         let checkpoint = self.get(checkpoint_id).await?;
         match checkpoint {
             Some(cp) => {
-                let state: checkpointer::CheckpointState = serde_json::from_value(cp.snapshot)?;
-                Ok(state.messages)
+                let state: serde_json::Value = serde_json::from_value(cp.snapshot)?;
+                Ok(serde_json::from_value(state["messages"].clone()).unwrap_or_default())
             }
             None => Ok(Vec::new()),
         }

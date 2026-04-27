@@ -61,28 +61,22 @@ pub use webhook_manager::WebhookManager;
 
 use crate::runtime::host::KernelRuntimeHandle;
 use crate::runtime::{
-    HarnessCheckpointSink, HarnessEventSink, HarnessModelDriver, HarnessToolExecutor,
-    StreamEventSinkAdapter,
+    HarnessEventSink, HarnessModelDriver, HarnessToolExecutor, StreamEventSinkAdapter,
 };
 use crate::repository::EventRepository;
 use std::sync::Arc;
+use torque_runtime::environment::RuntimeCheckpointSink;
 
 /// Assembles runtime dependencies and creates `KernelRuntimeHandle` instances.
-///
-/// `RuntimeFactory` serves as a single injection point for the three dependencies
-/// needed by the kernel execution host (`EventRepository`, `CheckpointRepository`,
-/// `Checkpointer`). Services inject `Arc<RuntimeFactory>` instead of holding each
-/// dependency separately, making the dependency graph explicit and enabling future
-/// replacement of the runtime host with alternative implementations.
 pub struct RuntimeFactory {
     event_repo: Arc<dyn EventRepository>,
-    checkpointer: Arc<dyn checkpointer::Checkpointer>,
+    checkpointer: Arc<dyn RuntimeCheckpointSink>,
 }
 
 impl RuntimeFactory {
     pub fn new(
         event_repo: Arc<dyn EventRepository>,
-        checkpointer: Arc<dyn checkpointer::Checkpointer>,
+        checkpointer: Arc<dyn RuntimeCheckpointSink>,
     ) -> Self {
         Self {
             event_repo,
@@ -97,7 +91,7 @@ impl RuntimeFactory {
         KernelRuntimeHandle::new(
             agent_defs,
             Arc::new(HarnessEventSink::new(self.event_repo.clone())),
-            Arc::new(HarnessCheckpointSink::new(self.checkpointer.clone())),
+            self.checkpointer.clone(),
         )
     }
 
@@ -116,7 +110,7 @@ impl RuntimeFactory {
         StreamEventSinkAdapter::new(tx)
     }
 
-    pub fn checkpointer(&self) -> &Arc<dyn checkpointer::Checkpointer> {
+    pub fn checkpointer(&self) -> &Arc<dyn RuntimeCheckpointSink> {
         &self.checkpointer
     }
 }
@@ -155,7 +149,7 @@ impl ServiceContainer {
     pub fn new(
         repos: crate::repository::RepositoryContainer,
         memory_v1: std::sync::Arc<dyn crate::repository::MemoryRepositoryV1>,
-        checkpointer: std::sync::Arc<dyn checkpointer::Checkpointer>,
+        checkpointer: std::sync::Arc<dyn RuntimeCheckpointSink>,
         llm: std::sync::Arc<dyn llm::LlmClient>,
         embedding: Option<std::sync::Arc<dyn crate::embedding::EmbeddingGenerator>>,
         idempotency: std::sync::Arc<crate::v1_guards::IdempotencyStore>,

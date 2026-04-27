@@ -1,5 +1,5 @@
-use checkpointer::r#trait::Message;
-use checkpointer::Checkpointer;
+use torque_runtime::checkpoint::Message;
+
 use serial_test::serial;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;

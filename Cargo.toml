@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/llm",
-    "crates/checkpointer",
     "crates/torque-kernel",
     "crates/torque-runtime",
     "crates/torque-harness",

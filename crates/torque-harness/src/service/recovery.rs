@@ -12,7 +12,7 @@ use crate::repository::{
 };
 use crate::service::escalation::EscalationService;
 use crate::service::event_replay::EventReplayRegistry;
-use checkpointer::r#trait::{self, ArtifactPointer};
+use torque_runtime::checkpoint::{ArtifactPointer, Message};
 use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -147,7 +147,7 @@ impl RecoveryService {
     pub async fn get_checkpoint_messages(
         &self,
         checkpoint_id: Uuid,
-    ) -> anyhow::Result<Vec<r#trait::Message>> {
+    ) -> anyhow::Result<Vec<Message>> {
         self.checkpoint_repo.get_messages(checkpoint_id).await
     }
 
@@ -240,7 +240,7 @@ impl RecoveryService {
     pub async fn restore_from_checkpoint(
         &self,
         checkpoint_id: Uuid,
-    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>, RebuiltState)> {
+    ) -> anyhow::Result<(AgentInstance, Vec<Message>, RebuiltState)> {
         // 1. Load checkpoint
         let checkpoint = self
             .checkpoint_repo
@@ -251,8 +251,8 @@ impl RecoveryService {
         let instance_id = checkpoint.agent_instance_id;
 
         // Extract messages from checkpoint state
-        let state: r#trait::CheckpointState = serde_json::from_value(checkpoint.snapshot.clone())?;
-        let messages = state.messages;
+        let state: serde_json::Value = serde_json::from_value(checkpoint.snapshot.clone())?;
+        let messages: Vec<Message> = serde_json::from_value(state["messages"].clone()).unwrap_or_default();
 
         // 2. Validate instance exists
         let _instance = self
@@ -506,7 +506,7 @@ impl RecoveryService {
     pub async fn resume_instance(
         &self,
         instance_id: Uuid,
-    ) -> anyhow::Result<(AgentInstance, Vec<r#trait::Message>, RebuiltState)> {
+    ) -> anyhow::Result<(AgentInstance, Vec<Message>, RebuiltState)> {
         let checkpoints = self
             .checkpoint_repo
             .list_by_instance(instance_id, 1)

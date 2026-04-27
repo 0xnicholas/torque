@@ -12,11 +12,10 @@ use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::models::v1::event::Event;
 use torque_harness::repository::{ArtifactRepository, EventRepository};
 use torque_harness::runtime::{
-    HarnessCheckpointSink, HarnessEventSink, HarnessModelDriver,
-    HarnessToolExecutor, StreamEventSinkAdapter,
+    HarnessEventSink, HarnessModelDriver, HarnessToolExecutor, StreamEventSinkAdapter,
 };
 use torque_harness::service::{ArtifactService, ToolService};
-use torque_runtime::checkpoint::RuntimeCheckpointPayload;
+use torque_runtime::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use torque_runtime::environment::{
     RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeToolExecutor,
     RuntimeModelDriver, RuntimeOutputSink,
@@ -106,45 +105,23 @@ impl EventRepository for InMemoryEventRepository {
 }
 
 #[derive(Default)]
-struct FakeCheckpointer {
-    saved: Mutex<VecDeque<(Uuid, Uuid, checkpointer::CheckpointState)>>,
+struct FakeCheckpointSink {
+    saved: Mutex<VecDeque<RuntimeCheckpointPayload>>,
 }
 
 #[async_trait]
-impl checkpointer::Checkpointer for FakeCheckpointer {
+impl RuntimeCheckpointSink for FakeCheckpointSink {
     async fn save(
         &self,
-        run_id: Uuid,
-        node_id: Uuid,
-        state: checkpointer::CheckpointState,
-    ) -> checkpointer::Result<checkpointer::CheckpointId> {
-        self.saved.lock().unwrap().push_back((run_id, node_id, state));
-        Ok(checkpointer::CheckpointId::new())
-    }
-
-    async fn load(
-        &self,
-        _checkpoint_id: checkpointer::CheckpointId,
-    ) -> checkpointer::Result<checkpointer::CheckpointState> {
-        unimplemented!()
-    }
-
-    async fn list_run_checkpoints(
-        &self,
-        _run_id: Uuid,
-    ) -> checkpointer::Result<Vec<checkpointer::CheckpointMeta>> {
-        Ok(vec![])
-    }
-
-    async fn list_node_checkpoints(
-        &self,
-        _node_id: Uuid,
-    ) -> checkpointer::Result<Vec<checkpointer::CheckpointMeta>> {
-        Ok(vec![])
-    }
-
-    async fn delete(&self, _checkpoint_id: checkpointer::CheckpointId) -> checkpointer::Result<()> {
-        Ok(())
+        checkpoint: RuntimeCheckpointPayload,
+    ) -> anyhow::Result<RuntimeCheckpointRef> {
+        let checkpoint_id = Uuid::new_v4();
+        let instance_id = checkpoint.instance_id.as_uuid();
+        self.saved.lock().unwrap().push_back(checkpoint);
+        Ok(RuntimeCheckpointRef {
+            checkpoint_id,
+            instance_id,
+        })
     }
 }
 
@@ -222,8 +199,7 @@ async fn output_sink_adapter_translates_runtime_events() {
 async fn event_checkpoint_and_hydration_adapters_return_expected_shapes() {
     let event_repo = Arc::new(InMemoryEventRepository::default());
     let event_sink = HarnessEventSink::new(event_repo.clone());
-    let checkpointer = Arc::new(FakeCheckpointer::default());
-    let checkpoint_sink = HarnessCheckpointSink::new(checkpointer.clone());
+    let checkpoint_sink = Arc::new(FakeCheckpointSink::default());
 
     let instance_id = torque_kernel::AgentInstanceId::new();
     let agent_definition = torque_kernel::AgentDefinition::new("adapter-test", "adapter test");

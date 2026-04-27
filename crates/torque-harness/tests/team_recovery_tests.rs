@@ -93,7 +93,7 @@ impl CheckpointRepositoryExt for MockCheckpointRepository {
     async fn get_messages(
         &self,
         _checkpoint_id: Uuid,
-    ) -> anyhow::Result<Vec<checkpointer::r#trait::Message>> {
+    ) -> anyhow::Result<Vec<checkpointer::Message>> {
         Ok(vec![])
     }
 }
