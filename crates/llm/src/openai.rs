@@ -69,6 +69,10 @@ impl OpenAiClient {
             body["temperature"] = temperature.into();
         }
 
+        if let Some(stream) = request.stream {
+            body["stream"] = stream.into();
+        }
+
         body
     }
 
@@ -210,7 +214,8 @@ impl LlmClient for OpenAiClient {
         request.stream = Some(true);
 
         let url = format!("{}/chat/completions", self.base_url);
-        let body = self.build_request(request);
+        let mut body = self.build_request(request);
+        body["stream_options"] = serde_json::json!({"include_usage": true});
 
         let response = self
             .http_client
@@ -257,6 +262,11 @@ impl LlmClient for OpenAiClient {
 
         let mut full_content = String::new();
         let mut finish_reason = FinishReason::Stop;
+        let mut usage = TokenUsage {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        };
         let mut tool_calls_by_index: BTreeMap<usize, ToolCallAccumulator> = BTreeMap::new();
 
         for line in lines {
@@ -270,6 +280,18 @@ impl LlmClient for OpenAiClient {
                 #[derive(Deserialize)]
                 struct SSEChunk {
                     choices: Vec<SSEChoice>,
+                    #[serde(default)]
+                    usage: Option<SSEUsage>,
+                }
+
+                #[derive(Deserialize, Default)]
+                struct SSEUsage {
+                    #[serde(rename = "prompt_tokens")]
+                    prompt_tokens: i64,
+                    #[serde(rename = "completion_tokens")]
+                    completion_tokens: i64,
+                    #[serde(rename = "total_tokens")]
+                    total_tokens: i64,
                 }
 
                 #[derive(Deserialize)]
@@ -302,6 +324,13 @@ impl LlmClient for OpenAiClient {
 
                 match serde_json::from_str::<SSEChunk>(data) {
                     Ok(chunk) => {
+                        if let Some(ref sse_usage) = chunk.usage {
+                            usage = TokenUsage {
+                                prompt_tokens: sse_usage.prompt_tokens,
+                                completion_tokens: sse_usage.completion_tokens,
+                                total_tokens: sse_usage.total_tokens,
+                            };
+                        }
                         if let Some(choice) = chunk.choices.into_iter().next() {
                             if let Some(content) = choice.delta.content {
                                 full_content.push_str(&content);
@@ -356,11 +385,7 @@ impl LlmClient for OpenAiClient {
 
         Ok(ChatResponse {
             message: Message::assistant(full_content),
-            usage: TokenUsage {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-            },
+            usage,
             finish_reason,
         })
     }

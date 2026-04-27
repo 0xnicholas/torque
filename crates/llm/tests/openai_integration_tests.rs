@@ -51,6 +51,43 @@ async fn test_chat_returns_tool_calls() {
 }
 
 #[tokio::test]
+async fn test_chat_streaming_returns_token_usage() {
+    let mut server = mockito::Server::new_async().await;
+
+    let sse_body = concat!(
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"}}]}\n\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n",
+        "data: [DONE]\n\n"
+    );
+
+    let mock = server
+        .mock("POST", "/chat/completions")
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(sse_body)
+        .create_async()
+        .await;
+
+    let client = OpenAiClient::new(
+        server.url(),
+        "test-key".to_string(),
+        "gpt-4".to_string(),
+    );
+
+    let request = ChatRequest::new("gpt-4", vec![Message::user("Hello")]);
+    let response = client
+        .chat_streaming(request, Box::new(|_| {}))
+        .await
+        .unwrap();
+
+    assert_eq!(response.usage.prompt_tokens, 10);
+    assert_eq!(response.usage.completion_tokens, 5);
+    assert_eq!(response.usage.total_tokens, 15);
+
+    mock.assert_async().await;
+}
+
+#[tokio::test]
 async fn test_chat_streaming_returns_rate_limit_on_429() {
     let mut server = mockito::Server::new_async().await;
 
