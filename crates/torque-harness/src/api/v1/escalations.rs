@@ -97,7 +97,7 @@ pub async fn resolve(
     Path(id): Path<Uuid>,
     Json(req): Json<EscalationResolveRequest>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
-    let _existing = services
+    services
         .escalation_service
         .get_escalation(id)
         .await
@@ -122,7 +122,7 @@ pub async fn resolve(
                     request_id: None,
                 }),
             )
-        });
+        })?;
 
     let escalation = services
         .escalation_service
