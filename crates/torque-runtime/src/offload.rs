@@ -130,10 +130,12 @@ impl ToolOffloadPolicy {
 
 fn preview(content: &str) -> String {
     const MAX_PREVIEW: usize = 160;
-    if content.len() <= MAX_PREVIEW {
+    let char_count = content.chars().count();
+    if char_count <= MAX_PREVIEW {
         content.to_string()
     } else {
-        format!("{}...", &content[..MAX_PREVIEW])
+        let truncated: String = content.chars().take(MAX_PREVIEW).collect();
+        format!("{}...", truncated)
     }
 }
 

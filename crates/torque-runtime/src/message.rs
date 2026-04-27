@@ -35,6 +35,10 @@ impl RuntimeMessage {
     pub fn assistant(content: impl Into<String>) -> Self {
         Self::new(RuntimeMessageRole::Assistant, content)
     }
+
+    pub fn tool(content: impl Into<String>) -> Self {
+        Self::new(RuntimeMessageRole::Tool, content)
+    }
 }
 
 impl From<LlmMessage> for RuntimeMessage {
@@ -43,7 +47,7 @@ impl From<LlmMessage> for RuntimeMessage {
             "system" => RuntimeMessageRole::System,
             "assistant" => RuntimeMessageRole::Assistant,
             "tool" => RuntimeMessageRole::Tool,
-            _ => RuntimeMessageRole::User,
+            _ => RuntimeMessageRole::System,
         };
         Self {
             role,

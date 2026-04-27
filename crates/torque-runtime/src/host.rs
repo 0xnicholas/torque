@@ -193,7 +193,7 @@ impl RuntimeHost {
                             }
                         }
 
-                        messages.push(RuntimeMessage::user(format!(
+                        messages.push(RuntimeMessage::tool(format!(
                             "Tool '{}' result: {}",
                             tool_call.name, result.content
                         )));
