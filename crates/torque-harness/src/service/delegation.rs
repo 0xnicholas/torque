@@ -58,11 +58,10 @@ impl DelegationService {
     }
 
     pub async fn reject(&self, id: Uuid, reason: &str) -> anyhow::Result<bool> {
-        let delegation = self.repo.get(id).await?;
-        if delegation.is_none() {
-            return Ok(false);
-        }
-        let delegation = delegation.unwrap();
+        let delegation = match self.repo.get(id).await? {
+            Some(d) => d,
+            None => return Ok(false),
+        };
 
         let result = self.repo.reject(id, reason).await?;
 
@@ -81,11 +80,10 @@ impl DelegationService {
     }
 
     pub async fn complete(&self, id: Uuid, artifact_id: Uuid) -> anyhow::Result<bool> {
-        let delegation = self.repo.get(id).await?;
-        if delegation.is_none() {
-            return Ok(false);
-        }
-        let delegation = delegation.unwrap();
+        let delegation = match self.repo.get(id).await? {
+            Some(d) => d,
+            None => return Ok(false),
+        };
 
         let result = self.repo.complete(id, artifact_id).await?;
 
@@ -104,11 +102,10 @@ impl DelegationService {
     }
 
     pub async fn fail(&self, id: Uuid, error: &str) -> anyhow::Result<bool> {
-        let delegation = self.repo.get(id).await?;
-        if delegation.is_none() {
-            return Ok(false);
-        }
-        let delegation = delegation.unwrap();
+        let delegation = match self.repo.get(id).await? {
+            Some(d) => d,
+            None => return Ok(false),
+        };
 
         let result = self.repo.fail(id, error).await?;
 

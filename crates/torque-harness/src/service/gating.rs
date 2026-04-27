@@ -208,7 +208,9 @@ impl MemoryGatingService {
             });
         }
 
-        let best = similar.first().unwrap();
+        let best = similar
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("similar list became empty after is_empty check"))?;
 
         let action = if best.similarity >= thresholds.duplicate {
             DedupAction::Duplicate
@@ -340,7 +342,7 @@ impl MemoryGatingService {
             (DedupAction::Duplicate, EquivalenceResult::Mergeable) => Ok(GateDecision {
                 decision: GateDecisionType::Merge,
                 write_mode: Some(WriteMode::Merge {
-                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    target_id: dedup_result.similar_entry_id.ok_or_else(|| anyhow::anyhow!("missing similar_entry_id for merge decision"))?,
                     strategy: MergeStrategy::Summarize,
                 }),
                 reason: "Duplicate content but semantically mergeable".to_string(),
@@ -350,7 +352,7 @@ impl MemoryGatingService {
             (DedupAction::Mergeable, EquivalenceResult::Equivalent) => Ok(GateDecision {
                 decision: GateDecisionType::Merge,
                 write_mode: Some(WriteMode::Merge {
-                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    target_id: dedup_result.similar_entry_id.ok_or_else(|| anyhow::anyhow!("missing similar_entry_id for merge decision"))?,
                     strategy: MergeStrategy::WithProvenance,
                 }),
                 reason: "Semantically equivalent entries".to_string(),
@@ -367,7 +369,7 @@ impl MemoryGatingService {
             (DedupAction::New, EquivalenceResult::Mergeable) => Ok(GateDecision {
                 decision: GateDecisionType::Merge,
                 write_mode: Some(WriteMode::Merge {
-                    target_id: dedup_result.similar_entry_id.unwrap(),
+                    target_id: dedup_result.similar_entry_id.ok_or_else(|| anyhow::anyhow!("missing similar_entry_id for merge decision"))?,
                     strategy: MergeStrategy::Append,
                 }),
                 reason: "New entry but similar to existing - appending".to_string(),
@@ -426,7 +428,7 @@ impl MemoryGatingService {
                 Ok(GateDecision {
                     decision: GateDecisionType::Merge,
                     write_mode: Some(WriteMode::Merge {
-                        target_id: dedup_result.similar_entry_id.unwrap(),
+                        target_id: dedup_result.similar_entry_id.ok_or_else(|| anyhow::anyhow!("missing similar_entry_id for merge decision"))?,
                         strategy: MergeStrategy::Append,
                     }),
                     reason: "LLM confirmed mergeable".to_string(),
@@ -738,12 +740,15 @@ impl MemoryGatingService {
             None
         };
 
-        let decision = if conflict_result
+        let has_conflict = conflict_result
             .as_ref()
             .map(|c| c.has_conflict)
-            .unwrap_or(false)
-        {
-            Self::make_conflict_decision(conflict_result.unwrap())
+            .unwrap_or(false);
+
+        let decision = if has_conflict {
+            Self::make_conflict_decision(
+                conflict_result.ok_or_else(|| anyhow::anyhow!("conflict_result expected when has_conflict"))?,
+            )
         } else if embedding.is_some() {
             self.resolve_with_rules(&dedup_result, equivalence_result.as_ref())
                 .await?
