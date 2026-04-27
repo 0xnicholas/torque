@@ -1,0 +1,32 @@
+// Auto-generated module file for supervisor tools
+// Individual tool implementations live in separate files
+pub mod delegate_task;
+pub mod accept_result;
+pub mod reject_result;
+pub mod publish_to_team;
+pub mod get_shared_state;
+pub mod complete_task;
+pub mod list_members;
+pub mod delegation_status;
+pub mod update_fact;
+pub mod add_blocker;
+pub mod resolve_blocker;
+pub mod fail_task;
+pub mod request_approval;
+pub mod get_task_details;
+pub mod config;
+pub use delegate_task::*;
+pub use accept_result::*;
+pub use reject_result::*;
+pub use publish_to_team::*;
+pub use get_shared_state::*;
+pub use complete_task::*;
+pub use list_members::*;
+pub use delegation_status::*;
+pub use update_fact::*;
+pub use add_blocker::*;
+pub use resolve_blocker::*;
+pub use fail_task::*;
+pub use request_approval::*;
+pub use get_task_details::*;
+pub use config::*;
