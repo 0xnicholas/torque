@@ -1,52 +1,34 @@
 openapi: 3.1.0
 info:
   title: Torque Platform API
-  description: |
-    Torque Agent Runtime Platform API v1.
+  description: 'Torque Agent Runtime Platform API v1.
 
-    Provides CRUD operations for agent definitions, instances, runs, tasks,
-    artifacts, teams, delegations, approvals, checkpoints, capabilities,
-    events, memory, escalations, and tool policies.
 
-    ## Authentication
+    Provides CRUD operations for agent definitions, instances, tasks, artifacts,
 
-    All endpoints require an `X-API-Key` header. Any non-empty value is
-    accepted. Sessions and instances are scoped to the key used at creation.
+    teams, delegations, approvals, checkpoints, capabilities, events, and memory.
 
-    ## Streaming
-
-    The `/v1/agent-instances/{id}/runs` and `/v1/memory-notifications/sse`
-    endpoints return `text/event-stream` (SSE). Every stream terminates with
-    exactly one terminal event: `done` or `error`.
+    '
   version: 1.0.0
-  license:
-    name: MIT
-    url: https://github.com/0xnicholas/torque/blob/main/LICENSE
   contact:
     name: Torque Team
     url: https://github.com/0xnicholas/torque
-
 servers:
-  - url: http://localhost:3000
-    description: Local development
-
-security:
-  - ApiKeyAuth: []
-
+- url: http://localhost:3000
+  description: Local development
 paths:
-  # ================================================================
-  # Agent Definitions
-  # ================================================================
   /v1/agent-definitions:
     get:
       summary: List agent definitions
       operationId: listAgentDefinitions
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/AgentDefinitionList'
+      tags:
+      - Agent Definitions
     post:
       summary: Create agent definition
       operationId: createAgentDefinition
@@ -57,42 +39,45 @@ paths:
           $ref: '#/components/responses/AgentDefinition'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Agent Definitions
   /v1/agent-definitions/{id}:
     get:
       summary: Get agent definition
       operationId: getAgentDefinition
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/AgentDefinition'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Definitions
     delete:
       summary: Delete agent definition
       operationId: deleteAgentDefinition
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Agent Instances
-  # ================================================================
+      tags:
+      - Agent Definitions
   /v1/agent-instances:
     get:
       summary: List agent instances
       operationId: listAgentInstances
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/AgentInstanceList'
+      tags:
+      - Agent Instances
     post:
       summary: Create agent instance
       operationId: createAgentInstance
@@ -103,60 +88,65 @@ paths:
           $ref: '#/components/responses/AgentInstance'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}:
     get:
       summary: Get agent instance
       operationId: getAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/AgentInstance'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Instances
     delete:
       summary: Delete agent instance
       operationId: deleteAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/cancel:
     post:
       summary: Cancel agent instance
       operationId: cancelAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Cancelled successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/resume:
     post:
-      summary: Resume agent instance from SUSPENDED
+      summary: Resume agent instance
       operationId: resumeAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           description: Resumed successfully
         '501':
           $ref: '#/components/responses/NotImplemented'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/time-travel:
     post:
       summary: Time travel agent instance to checkpoint
-      description: Creates a new branch from the specified checkpoint.
       operationId: timeTravelAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       requestBody:
         $ref: '#/components/requestBodies/TimeTravelRequest'
       responses:
@@ -164,61 +154,66 @@ paths:
           description: Time travel initiated
         '501':
           $ref: '#/components/responses/NotImplemented'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/delegations:
     get:
       summary: List delegations for agent instance
       operationId: listAgentInstanceDelegations
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/DelegationList'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/artifacts:
     get:
       summary: List artifacts for agent instance
       operationId: listAgentInstanceArtifacts
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/ArtifactList'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/events:
     get:
       summary: List events for agent instance
       operationId: listAgentInstanceEvents
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/EventList'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/checkpoints:
     get:
       summary: List checkpoints for agent instance
       operationId: listAgentInstanceCheckpoints
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/CheckpointList'
-
+      tags:
+      - Agent Instances
   /v1/agent-instances/{id}/runs:
     post:
-      summary: Start a run for agent instance (SSE streaming)
+      summary: Start a run for agent instance
       operationId: runAgentInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       requestBody:
         $ref: '#/components/requestBodies/RunRequest'
       responses:
@@ -228,123 +223,97 @@ paths:
             text/event-stream:
               schema:
                 type: string
-        '409':
-          description: Another run is already active for this instance
-
-  # ================================================================
-  # Runs (Standalone)
-  # ================================================================
-  /v1/runs:
-    post:
-      summary: Create a standalone run (supports async)
-      operationId: createRun
-      requestBody:
-        $ref: '#/components/requestBodies/RunCreate'
-      responses:
-        '201':
-          $ref: '#/components/responses/Run'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /v1/runs/{id}/webhook:
-    get:
-      summary: Get webhook delivery status
-      operationId: getRunWebhookStatus
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '200':
-          $ref: '#/components/responses/RunWebhookStatus'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Tasks
-  # ================================================================
+      tags:
+      - Agent Instances
   /v1/tasks:
     get:
       summary: List tasks
       operationId: listTasks
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/TaskList'
-
+      tags:
+      - Tasks
   /v1/tasks/{id}:
     get:
       summary: Get task
       operationId: getTask
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/Task'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Tasks
   /v1/tasks/{id}/cancel:
     post:
       summary: Cancel task
       operationId: cancelTask
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Cancelled successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Tasks
   /v1/tasks/{id}/events:
     get:
       summary: List events for task
       operationId: listTaskEvents
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/EventList'
-
+      tags:
+      - Tasks
   /v1/tasks/{id}/approvals:
     get:
       summary: List approvals for task
       operationId: listTaskApprovals
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/ApprovalList'
-
+      tags:
+      - Tasks
   /v1/tasks/{id}/delegations:
     get:
       summary: List delegations for task
       operationId: listTaskDelegations
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/DelegationList'
-
-  # ================================================================
-  # Artifacts
-  # ================================================================
+      tags:
+      - Tasks
   /v1/artifacts:
     get:
       summary: List artifacts
       operationId: listArtifacts
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/ArtifactList'
+      tags:
+      - Artifacts
     post:
       summary: Create artifact
       operationId: createArtifact
@@ -355,35 +324,39 @@ paths:
           $ref: '#/components/responses/Artifact'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Artifacts
   /v1/artifacts/{id}:
     get:
       summary: Get artifact
       operationId: getArtifact
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/Artifact'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Artifacts
     delete:
       summary: Delete artifact
       operationId: deleteArtifact
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Artifacts
   /v1/artifacts/{id}/content:
     get:
       summary: Get artifact content
       operationId: getArtifactContent
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           description: Artifact content
@@ -393,58 +366,45 @@ paths:
                 type: object
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Artifacts
   /v1/artifacts/{id}/publish:
     post:
-      summary: Publish artifact (promotes scope)
+      summary: Publish artifact to team
       operationId: publishArtifact
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Published successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Events
-  # ================================================================
+      tags:
+      - Artifacts
   /v1/events:
     get:
-      summary: List events (truth source)
-      description: Filterable by resource_type and resource_id query params.
+      summary: List events
       operationId: listEvents
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
-        - name: resource_type
-          in: query
-          schema:
-            type: string
-          description: Filter by resource type (agent_instance, task, etc.)
-        - name: resource_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-          description: Filter by resource UUID
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/EventList'
-
-  # ================================================================
-  # Capability Profiles
-  # ================================================================
+      tags:
+      - Events
   /v1/capability-profiles:
     get:
       summary: List capability profiles
       operationId: listCapabilityProfiles
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/CapabilityProfileList'
+      tags:
+      - Capabilities
     post:
       summary: Create capability profile
       operationId: createCapabilityProfile
@@ -455,54 +415,62 @@ paths:
           $ref: '#/components/responses/CapabilityProfile'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Capabilities
   /v1/capability-profiles/{id}:
     get:
       summary: Get capability profile
       operationId: getCapabilityProfile
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/CapabilityProfile'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
     delete:
       summary: Delete capability profile
       operationId: deleteCapabilityProfile
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /v1/capabilities/resolve:
+      tags:
+      - Capabilities
+  /v1/capability-profiles/{id}/resolve:
     post:
-      summary: Resolve capability refs to agent candidates
+      summary: Resolve capability
       operationId: resolveCapability
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
       requestBody:
         $ref: '#/components/requestBodies/CapabilityResolveRequest'
       responses:
         '200':
-          $ref: '#/components/responses/CapabilityResolution'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
-  # ================================================================
-  # Capability Registry Bindings
-  # ================================================================
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+      - Capabilities
   /v1/capability-registry-bindings:
     get:
       summary: List capability registry bindings
       operationId: listCapabilityBindings
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/CapabilityBindingList'
+      tags:
+      - Capabilities
     post:
       summary: Create capability registry binding
       operationId: createCapabilityBinding
@@ -513,42 +481,45 @@ paths:
           $ref: '#/components/responses/CapabilityBinding'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Capabilities
   /v1/capability-registry-bindings/{id}:
     get:
       summary: Get capability registry binding
       operationId: getCapabilityBinding
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/CapabilityBinding'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
     delete:
       summary: Delete capability registry binding
       operationId: deleteCapabilityBinding
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Team Definitions
-  # ================================================================
+      tags:
+      - Capabilities
   /v1/team-definitions:
     get:
       summary: List team definitions
       operationId: listTeamDefinitions
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/TeamDefinitionList'
+      tags:
+      - Teams
     post:
       summary: Create team definition
       operationId: createTeamDefinition
@@ -559,42 +530,45 @@ paths:
           $ref: '#/components/responses/TeamDefinition'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Teams
   /v1/team-definitions/{id}:
     get:
       summary: Get team definition
       operationId: getTeamDefinition
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/TeamDefinition'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
     delete:
       summary: Delete team definition
       operationId: deleteTeamDefinition
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Team Instances
-  # ================================================================
+      tags:
+      - Teams
   /v1/team-instances:
     get:
       summary: List team instances
       operationId: listTeamInstances
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/TeamInstanceList'
+      tags:
+      - Teams
     post:
       summary: Create team instance
       operationId: createTeamInstance
@@ -605,102 +579,100 @@ paths:
           $ref: '#/components/responses/TeamInstance'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Teams
   /v1/team-instances/{id}:
     get:
       summary: Get team instance
       operationId: getTeamInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/TeamInstance'
         '404':
           $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
     delete:
       summary: Delete team instance
       operationId: deleteTeamInstance
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Teams
   /v1/team-instances/{id}/tasks:
     get:
       summary: List tasks for team instance
       operationId: listTeamTasks
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/TaskList'
+      tags:
+      - Tasks
     post:
-      summary: Create task for team instance (async)
+      summary: Create task for team instance
       operationId: createTeamTask
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '202':
-          description: Task created and queued asynchronously
+          description: Task created
         '501':
           $ref: '#/components/responses/NotImplemented'
-
+      tags:
+      - Tasks
   /v1/team-instances/{id}/members:
     get:
       summary: List team members
       operationId: listTeamMembers
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
-          $ref: '#/components/responses/TeamMemberList'
+          description: Team members list
+          content:
+            application/json:
+              schema:
+                type: object
         '501':
           $ref: '#/components/responses/NotImplemented'
-
+      tags:
+      - Teams
   /v1/team-instances/{id}/publish:
     post:
-      summary: Publish artifact to team shared state
+      summary: Publish to team
       operationId: publishToTeam
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           description: Published successfully
         '501':
           $ref: '#/components/responses/NotImplemented'
-
-  /v1/team-instances/{id}/supervisor/execute:
-    post:
-      summary: Trigger supervisor poll-and-execute cycle
-      description: The supervisor agent triages pending team tasks and
-        creates delegations for sub-agents.
-      operationId: executeSupervisor
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '200':
-          description: Supervisor execution cycle completed
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-
-  # ================================================================
-  # Delegations
-  # ================================================================
+      tags:
+      - Teams
   /v1/delegations:
     get:
       summary: List delegations
       operationId: listDelegations
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/DelegationList'
+      tags:
+      - Delegations
     post:
       summary: Create delegation
       operationId: createDelegation
@@ -711,100 +683,78 @@ paths:
           $ref: '#/components/responses/Delegation'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Delegations
   /v1/delegations/{id}:
     get:
       summary: Get delegation
       operationId: getDelegation
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/Delegation'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Delegations
   /v1/delegations/{id}/accept:
     post:
       summary: Accept delegation
       operationId: acceptDelegation
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Accepted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Delegations
   /v1/delegations/{id}/reject:
     post:
       summary: Reject delegation
       operationId: rejectDelegation
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Rejected successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /v1/delegations/{id}/complete:
-    post:
-      summary: Mark delegation as completed
-      operationId: completeDelegation
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '204':
-          description: Marked complete successfully
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /v1/delegations/{id}/fail:
-    post:
-      summary: Mark delegation as failed
-      operationId: failDelegation
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '204':
-          description: Marked failed successfully
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Approvals
-  # ================================================================
+      tags:
+      - Delegations
   /v1/approvals:
     get:
       summary: List approvals
       operationId: listApprovals
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/ApprovalList'
-
+      tags:
+      - Approvals
   /v1/approvals/{id}:
     get:
       summary: Get approval
       operationId: getApproval
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/Approval'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Approvals
   /v1/approvals/{id}/resolve:
     post:
-      summary: Resolve approval (approved/rejected)
-      description: Operator or human-in-the-loop resolves an approval request.
+      summary: Resolve approval
       operationId: resolveApproval
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       requestBody:
         $ref: '#/components/requestBodies/ApprovalResolveRequest'
       responses:
@@ -812,75 +762,58 @@ paths:
           description: Resolved successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Checkpoints
-  # ================================================================
+      tags:
+      - Approvals
   /v1/checkpoints:
     get:
       summary: List checkpoints
       operationId: listCheckpoints
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/CheckpointList'
-
+      tags:
+      - Checkpoints
   /v1/checkpoints/{id}:
     get:
       summary: Get checkpoint
       operationId: getCheckpoint
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/Checkpoint'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Checkpoints
   /v1/checkpoints/{id}/restore:
     post:
-      summary: Restore from checkpoint
-      description: Replays events from the checkpoint and returns a recovery
-        assessment. Use the result to determine whether to resume, reissue
-        delegations, or escalate.
+      summary: Restore checkpoint
       operationId: restoreCheckpoint
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
-          $ref: '#/components/responses/CheckpointRestore'
+          description: Restored successfully
         '501':
           $ref: '#/components/responses/NotImplemented'
-
-  /v1/checkpoints/{id}/messages:
-    get:
-      summary: Get messages from checkpoint
-      description: Returns the message history captured at this checkpoint,
-        reconstructed from event replay.
-      operationId: getCheckpointMessages
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '200':
-          $ref: '#/components/responses/CheckpointMessages'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Memory Write Candidates
-  # ================================================================
+      tags:
+      - Checkpoints
   /v1/memory-write-candidates:
     get:
       summary: List memory write candidates
       operationId: listMemoryCandidates
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/MemoryCandidateList'
+      tags:
+      - Memory
     post:
       summary: Create memory write candidate
       operationId: createMemoryCandidate
@@ -891,323 +824,85 @@ paths:
           $ref: '#/components/responses/MemoryCandidate'
         '400':
           $ref: '#/components/responses/BadRequest'
-
+      tags:
+      - Memory
   /v1/memory-write-candidates/{id}:
     get:
       summary: Get memory write candidate
       operationId: getMemoryCandidate
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/MemoryCandidate'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Memory
   /v1/memory-write-candidates/{id}/approve:
     post:
       summary: Approve memory write candidate
-      description: Creates a memory entry from the candidate.
       operationId: approveMemoryCandidate
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/MemoryEntry'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Memory
   /v1/memory-write-candidates/{id}/reject:
     post:
       summary: Reject memory write candidate
       operationId: rejectMemoryCandidate
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '204':
           description: Rejected successfully
         '404':
           $ref: '#/components/responses/NotFound'
-
-  /v1/memory-write-candidates/{id}/merge:
-    post:
-      summary: Merge memory write candidate into an existing entry
-      operationId: mergeMemoryCandidate
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      requestBody:
-        $ref: '#/components/requestBodies/CandidateMergeRequest'
-      responses:
-        '200':
-          $ref: '#/components/responses/MemoryEntry'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Memory Entries
-  # ================================================================
+      tags:
+      - Memory
   /v1/memory-entries:
     get:
       summary: List memory entries
       operationId: listMemoryEntries
       parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/MemoryEntryList'
-
+      tags:
+      - Memory
   /v1/memory-entries/{id}:
     get:
       summary: Get memory entry
       operationId: getMemoryEntry
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
           $ref: '#/components/responses/MemoryEntry'
         '404':
           $ref: '#/components/responses/NotFound'
-
+      tags:
+      - Memory
   /v1/memory-entries/search:
-    post:
-      summary: Semantic search memory entries
+    get:
+      summary: Search memory entries
       operationId: searchMemoryEntries
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                query:
-                  type: string
-                limit:
-                  type: integer
-                  default: 20
-              required: [query]
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
       responses:
         '200':
           $ref: '#/components/responses/MemoryEntryList'
-
-  /v1/memory-entries/force:
-    post:
-      summary: Force-create memory entry (bypass candidate flow)
-      operationId: forceWriteMemory
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                agent_instance_id:
-                  type: string
-                  format: uuid
-                category:
-                  type: string
-                key:
-                  type: string
-                value:
-                  type: object
-              required: [agent_instance_id, category, key, value]
-      responses:
-        '201':
-          $ref: '#/components/responses/MemoryEntry'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /v1/memory-entries/backfill:
-    post:
-      summary: Backfill embeddings for memory entries without them
-      description: Triggers embedding generation for memory entries that
-        were created before the embedding pipeline was available.
-      operationId: backfillEmbeddings
-      responses:
-        '200':
-          description: Backfill triggered
-        '501':
-          $ref: '#/components/responses/NotImplemented'
-
-  # ================================================================
-  # Memory Decisions (Audit)
-  # ================================================================
-  /v1/memory/decisions:
-    get:
-      summary: List memory decision log
-      operationId: listMemoryDecisions
-      parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
-        - name: agent_instance_id
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: decision_type
-          in: query
-          schema:
-            type: string
-        - name: start_date
-          in: query
-          schema:
-            type: string
-            format: date-time
-        - name: end_date
-          in: query
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          $ref: '#/components/responses/MemoryDecisionList'
-
-  /v1/memory/decisions/stats:
-    get:
-      summary: Get memory decision statistics
-      operationId: getMemoryDecisionStats
-      responses:
-        '200':
-          $ref: '#/components/responses/MemoryDecisionStats'
-
-  /v1/memory/compact:
-    post:
-      summary: Trigger memory compaction job
-      description: Starts a background job to consolidate or summarize
-        memory entries. Returns a job ID for status tracking.
-      operationId: triggerMemoryCompaction
-      responses:
-        '202':
-          $ref: '#/components/responses/CompactionJob'
-
-  # ================================================================
-  # Memory Notifications (SSE)
-  # ================================================================
-  /v1/memory-notifications/sse:
-    get:
-      summary: SSE stream of memory review notifications
-      description: |
-        Server-sent event stream emitting real-time notifications when
-        memory write candidates are created, approved, rejected, or merged.
-        Events: `candidate_created`, `review_needed`, `approved`,
-        `rejected`, `merged`.
-      operationId: memoryNotificationsSSE
-      responses:
-        '200':
-          description: SSE stream of notification events
-          content:
-            text/event-stream:
-              schema:
-                type: string
-
-  # ================================================================
-  # Escalations
-  # ================================================================
-  /v1/escalations:
-    get:
-      summary: List unresolved escalations
-      description: Operator-facing endpoint listing escalations that
-        require manual intervention.
-      operationId: listEscalations
-      parameters:
-        - $ref: '#/components/parameters/ListLimit'
-        - $ref: '#/components/parameters/ListCursor'
-      responses:
-        '200':
-          $ref: '#/components/responses/EscalationList'
-
-  /v1/escalations/{id}:
-    get:
-      summary: Get escalation with recovery context
-      operationId: getEscalation
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      responses:
-        '200':
-          $ref: '#/components/responses/Escalation'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /v1/escalations/{id}/resolve:
-    post:
-      summary: Resolve an escalation
-      operationId: resolveEscalation
-      parameters:
-        - $ref: '#/components/parameters/ResourceId'
-      requestBody:
-        $ref: '#/components/requestBodies/EscalationResolveRequest'
-      responses:
-        '204':
-          description: Resolved successfully
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  # ================================================================
-  # Tool Policies
-  # ================================================================
-  /v1/tool-policies:
-    get:
-      summary: List all tool policies
-      operationId: listToolPolicies
-      responses:
-        '200':
-          $ref: '#/components/responses/ToolPolicyList'
-
-  /v1/tool-policies/{tool_name}:
-    get:
-      summary: Get tool policy
-      operationId: getToolPolicy
-      parameters:
-        - name: tool_name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          $ref: '#/components/responses/ToolPolicy'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      summary: Create or update tool policy
-      operationId: upsertToolPolicy
-      parameters:
-        - name: tool_name
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        $ref: '#/components/requestBodies/ToolPolicyUpsert'
-      responses:
-        '200':
-          $ref: '#/components/responses/ToolPolicy'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-    delete:
-      summary: Delete tool policy
-      operationId: deleteToolPolicy
-      parameters:
-        - name: tool_name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Deleted successfully
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-# ==================================================================
-# Components
-# ==================================================================
+      tags:
+      - Memory
 components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: Any non-empty value is accepted.
-
   parameters:
     ResourceId:
       name: id
@@ -1217,7 +912,6 @@ components:
         type: string
         format: uuid
       description: Resource UUID
-
     ListLimit:
       name: limit
       in: query
@@ -1227,117 +921,78 @@ components:
         minimum: 1
         maximum: 100
       description: Number of items to return
-
     ListCursor:
       name: cursor
       in: query
       schema:
         type: string
-      description: Pagination cursor (opaque string from previous response)
-
+      description: Pagination cursor
   requestBodies:
     AgentDefinitionCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AgentDefinitionCreate'
-
     AgentInstanceCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AgentInstanceCreate'
-
     TimeTravelRequest:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TimeTravelRequest'
-
     RunRequest:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/RunRequest'
-
-    RunCreate:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/RunCreate'
-
     ArtifactCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ArtifactCreate'
-
     CapabilityProfileCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/CapabilityProfileCreate'
-
     CapabilityResolveRequest:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/CapabilityResolveRequest'
-
     CapabilityBindingCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/CapabilityRegistryBindingCreate'
-
     TeamDefinitionCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TeamDefinitionCreate'
-
     TeamInstanceCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TeamInstanceCreate'
-
     DelegationCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/DelegationCreate'
-
     ApprovalResolveRequest:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApprovalResolveRequest'
-
     MemoryCandidateCreate:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/MemoryWriteCandidateCreate'
-
-    CandidateMergeRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CandidateMergeRequest'
-
-    EscalationResolveRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/EscalationResolveRequest'
-
-    ToolPolicyUpsert:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ToolPolicyUpsert'
-
   responses:
     BadRequest:
       description: Bad request
@@ -1345,312 +1000,187 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorBody'
-
     NotFound:
       description: Resource not found
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorBody'
-
     NotImplemented:
-      description: Not yet implemented
+      description: Not implemented
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorBody'
-
     AgentDefinition:
       description: Agent definition
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AgentDefinition'
-
     AgentDefinitionList:
       description: List of agent definitions
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseAgentDefinition'
-
     AgentInstance:
       description: Agent instance
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/AgentInstance'
-
     AgentInstanceList:
       description: List of agent instances
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseAgentInstance'
-
     Task:
       description: Task
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Task'
-
     TaskList:
       description: List of tasks
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseTask'
-
-    Run:
-      description: Run
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Run'
-
-    RunWebhookStatus:
-      description: Webhook delivery status
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/RunWebhookStatus'
-
     Artifact:
       description: Artifact
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Artifact'
-
     ArtifactList:
       description: List of artifacts
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseArtifact'
-
     Event:
       description: Event
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Event'
-
     EventList:
       description: List of events
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseEvent'
-
     CapabilityProfile:
       description: Capability profile
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/CapabilityProfile'
-
     CapabilityProfileList:
       description: List of capability profiles
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseCapabilityProfile'
-
-    CapabilityResolution:
-      description: Capability resolution result
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CapabilityResolution'
-
     CapabilityBinding:
       description: Capability registry binding
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/CapabilityRegistryBinding'
-
     CapabilityBindingList:
       description: List of capability registry bindings
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseCapabilityRegistryBinding'
-
     TeamDefinition:
       description: Team definition
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TeamDefinition'
-
     TeamDefinitionList:
       description: List of team definitions
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseTeamDefinition'
-
     TeamInstance:
       description: Team instance
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/TeamInstance'
-
     TeamInstanceList:
       description: List of team instances
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseTeamInstance'
-
-    TeamMemberList:
-      description: List of team members
-      content:
-        application/json:
-          schema:
-            type: object
-
     Delegation:
       description: Delegation
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Delegation'
-
     DelegationList:
       description: List of delegations
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseDelegation'
-
     Approval:
       description: Approval
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Approval'
-
     ApprovalList:
       description: List of approvals
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseApproval'
-
     Checkpoint:
       description: Checkpoint
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Checkpoint'
-
     CheckpointList:
       description: List of checkpoints
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseCheckpoint'
-
-    CheckpointRestore:
-      description: Checkpoint restoration result
-      content:
-        application/json:
-          schema:
-            type: object
-
-    CheckpointMessages:
-      description: Messages from checkpoint
-      content:
-        application/json:
-          schema:
-            type: object
-
     MemoryCandidate:
       description: Memory write candidate
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/MemoryWriteCandidate'
-
     MemoryCandidateList:
       description: List of memory write candidates
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseMemoryWriteCandidate'
-
     MemoryEntry:
       description: Memory entry
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/MemoryEntry'
-
     MemoryEntryList:
       description: List of memory entries
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ListResponseMemoryEntry'
-
-    MemoryDecisionList:
-      description: List of memory decisions
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ListResponseMemoryDecision'
-
-    MemoryDecisionStats:
-      description: Memory decision statistics
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/MemoryDecisionStats'
-
-    CompactionJob:
-      description: Compaction job status
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CompactionJob'
-
-    Escalation:
-      description: Escalation with recovery context
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Escalation'
-
-    EscalationList:
-      description: List of escalations
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ListResponseEscalation'
-
-    ToolPolicy:
-      description: Tool policy
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ToolPolicy'
-
-    ToolPolicyList:
-      description: List of tool policies
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ListResponseToolPolicy'
-
   schemas:
-    # ----------------------------------------------------------------
-    # Common
-    # ----------------------------------------------------------------
     ErrorBody:
       type: object
       properties:
@@ -1663,8 +1193,9 @@ components:
           additionalProperties: true
         request_id:
           type: string
-      required: [code, message]
-
+      required:
+      - code
+      - message
     Pagination:
       type: object
       properties:
@@ -1674,11 +1205,8 @@ components:
           type: string
         has_more:
           type: boolean
-      required: [has_more]
-
-    # ----------------------------------------------------------------
-    # Agent Definitions
-    # ----------------------------------------------------------------
+      required:
+      - has_more
     AgentDefinition:
       type: object
       properties:
@@ -1707,8 +1235,16 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, name, tool_policy, memory_policy, delegation_policy, limits, default_model_policy, created_at, updated_at]
-
+      required:
+      - id
+      - name
+      - tool_policy
+      - memory_policy
+      - delegation_policy
+      - limits
+      - default_model_policy
+      - created_at
+      - updated_at
     AgentDefinitionCreate:
       type: object
       properties:
@@ -1733,8 +1269,8 @@ components:
         default_model_policy:
           type: object
           default: {}
-      required: [name]
-
+      required:
+      - name
     ListResponseAgentDefinition:
       type: object
       properties:
@@ -1744,15 +1280,23 @@ components:
             $ref: '#/components/schemas/AgentDefinition'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Agent Instances
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     AgentInstanceStatus:
       type: string
-      enum: [CREATED, HYDRATING, READY, RUNNING, WAITING_TOOL, WAITING_SUBAGENT, WAITING_APPROVAL, SUSPENDED, COMPLETED, FAILED, CANCELLED]
-
+      enum:
+      - CREATED
+      - HYDRATING
+      - READY
+      - RUNNING
+      - WAITING_TOOL
+      - WAITING_SUBAGENT
+      - WAITING_APPROVAL
+      - SUSPENDED
+      - COMPLETED
+      - FAILED
+      - CANCELLED
     AgentInstance:
       type: object
       properties:
@@ -1780,8 +1324,13 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, agent_definition_id, status, external_context_refs, created_at, updated_at]
-
+      required:
+      - id
+      - agent_definition_id
+      - status
+      - external_context_refs
+      - created_at
+      - updated_at
     AgentInstanceCreate:
       type: object
       properties:
@@ -1793,8 +1342,8 @@ components:
           items:
             type: object
           default: []
-      required: [agent_definition_id]
-
+      required:
+      - agent_definition_id
     TimeTravelRequest:
       type: object
       properties:
@@ -1803,8 +1352,8 @@ components:
           format: uuid
         branch_name:
           type: string
-      required: [checkpoint_id]
-
+      required:
+      - checkpoint_id
     ListResponseAgentInstance:
       type: object
       properties:
@@ -1814,11 +1363,9 @@ components:
             $ref: '#/components/schemas/AgentInstance'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Tasks
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     Task:
       type: object
       properties:
@@ -1846,8 +1393,13 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, goal, status, execution_mode, created_at, updated_at]
-
+      required:
+      - id
+      - goal
+      - status
+      - execution_mode
+      - created_at
+      - updated_at
     ListResponseTask:
       type: object
       properties:
@@ -1857,11 +1409,9 @@ components:
             $ref: '#/components/schemas/Task'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Runs
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     RunRequest:
       type: object
       properties:
@@ -1882,89 +1432,24 @@ components:
           type: object
         execution_mode:
           type: string
-          enum: [interactive, sync, async]
-          default: interactive
+          enum:
+          - sync
+          - async
+          default: sync
         expected_outputs:
           type: array
           items:
             type: string
         idempotency_key:
           type: string
-        webhook_url:
-          type: string
-          format: uri
-        async_execution:
-          type: boolean
-          default: false
-      required: [goal]
-
-    RunCreate:
-      type: object
-      properties:
-        agent_definition_id:
-          type: string
-          format: uuid
-        goal:
-          type: string
-        instructions:
-          type: string
-        execution_mode:
-          type: string
-          enum: [sync, async]
-          default: sync
-        webhook_url:
-          type: string
-          format: uri
-        idempotency_key:
-          type: string
-      required: [agent_definition_id, goal]
-
-    Run:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        agent_instance_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [Queued, Running, Completed, Failed, Cancelled]
-        webhook_sent_at:
-          type: string
-          format: date-time
-        webhook_attempts:
-          type: integer
-        created_at:
-          type: string
-          format: date-time
-      required: [id, status, created_at]
-
-    RunWebhookStatus:
-      type: object
-      properties:
-        run_id:
-          type: string
-          format: uuid
-        webhook_url:
-          type: string
-        sent_at:
-          type: string
-          format: date-time
-        attempts:
-          type: integer
-        delivered:
-          type: boolean
-      required: [run_id, delivered]
-
-    # ----------------------------------------------------------------
-    # Artifacts
-    # ----------------------------------------------------------------
+      required:
+      - goal
     ArtifactScope:
       type: string
-      enum: [private, team_shared, external_published]
-
+      enum:
+      - private
+      - team_shared
+      - external_published
     Artifact:
       type: object
       properties:
@@ -1992,8 +1477,14 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, kind, scope, mime_type, size_bytes, content, created_at]
-
+      required:
+      - id
+      - kind
+      - scope
+      - mime_type
+      - size_bytes
+      - content
+      - created_at
     ArtifactCreate:
       type: object
       properties:
@@ -2006,10 +1497,10 @@ components:
           type: string
         content:
           type: object
-        idempotency_key:
-          type: string
-      required: [kind, mime_type, content]
-
+      required:
+      - kind
+      - mime_type
+      - content
     ListResponseArtifact:
       type: object
       properties:
@@ -2019,11 +1510,9 @@ components:
             $ref: '#/components/schemas/Artifact'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Events
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     Event:
       type: object
       properties:
@@ -2044,8 +1533,13 @@ components:
           type: object
         sequence_number:
           type: integer
-      required: [event_id, event_type, timestamp, resource_type, resource_id, payload]
-
+      required:
+      - event_id
+      - event_type
+      - timestamp
+      - resource_type
+      - resource_id
+      - payload
     ListResponseEvent:
       type: object
       properties:
@@ -2055,11 +1549,9 @@ components:
             $ref: '#/components/schemas/Event'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Capabilities
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     CapabilityProfile:
       type: object
       properties:
@@ -2079,8 +1571,12 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, name, capability_type, schema, created_at]
-
+      required:
+      - id
+      - name
+      - capability_type
+      - schema
+      - created_at
     CapabilityProfileCreate:
       type: object
       properties:
@@ -2094,8 +1590,10 @@ components:
           type: object
         constraints:
           type: object
-      required: [name, capability_type, schema]
-
+      required:
+      - name
+      - capability_type
+      - schema
     CapabilityResolveRequest:
       type: object
       properties:
@@ -2105,24 +1603,8 @@ components:
             type: string
         context:
           type: object
-      required: [capability_refs]
-
-    CapabilityResolution:
-      type: object
-      properties:
-        candidates:
-          type: array
-          items:
-            type: object
-            properties:
-              agent_definition_id:
-                type: string
-                format: uuid
-              compatibility_score:
-                type: number
-              profile:
-                $ref: '#/components/schemas/CapabilityProfile'
-
+      required:
+      - capability_refs
     ListResponseCapabilityProfile:
       type: object
       properties:
@@ -2132,8 +1614,9 @@ components:
             $ref: '#/components/schemas/CapabilityProfile'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
+      required:
+      - data
+      - pagination
     CapabilityRegistryBinding:
       type: object
       properties:
@@ -2153,8 +1636,12 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, capability_profile_id, agent_definition_id, priority, created_at]
-
+      required:
+      - id
+      - capability_profile_id
+      - agent_definition_id
+      - priority
+      - created_at
     CapabilityRegistryBindingCreate:
       type: object
       properties:
@@ -2170,8 +1657,9 @@ components:
         config:
           type: object
           default: {}
-      required: [capability_profile_id, agent_definition_id]
-
+      required:
+      - capability_profile_id
+      - agent_definition_id
     ListResponseCapabilityRegistryBinding:
       type: object
       properties:
@@ -2181,11 +1669,9 @@ components:
             $ref: '#/components/schemas/CapabilityRegistryBinding'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Teams
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     TeamDefinition:
       type: object
       properties:
@@ -2208,8 +1694,12 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, name, supervisor_agent_definition_id, sub_agents, created_at]
-
+      required:
+      - id
+      - name
+      - supervisor_agent_definition_id
+      - sub_agents
+      - created_at
     TeamDefinitionCreate:
       type: object
       properties:
@@ -2226,8 +1716,10 @@ components:
             type: object
         policy:
           type: string
-      required: [name, supervisor_agent_definition_id, sub_agents]
-
+      required:
+      - name
+      - supervisor_agent_definition_id
+      - sub_agents
     ListResponseTeamDefinition:
       type: object
       properties:
@@ -2237,8 +1729,9 @@ components:
             $ref: '#/components/schemas/TeamDefinition'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
+      required:
+      - data
+      - pagination
     TeamInstance:
       type: object
       properties:
@@ -2253,16 +1746,19 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, team_definition_id, status, created_at]
-
+      required:
+      - id
+      - team_definition_id
+      - status
+      - created_at
     TeamInstanceCreate:
       type: object
       properties:
         team_definition_id:
           type: string
           format: uuid
-      required: [team_definition_id]
-
+      required:
+      - team_definition_id
     ListResponseTeamInstance:
       type: object
       properties:
@@ -2272,11 +1768,9 @@ components:
             $ref: '#/components/schemas/TeamInstance'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Delegations
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     Delegation:
       type: object
       properties:
@@ -2296,8 +1790,13 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, task_id, parent_agent_instance_id, child_agent_definition_selector, status, created_at]
-
+      required:
+      - id
+      - task_id
+      - parent_agent_instance_id
+      - child_agent_definition_selector
+      - status
+      - created_at
     DelegationCreate:
       type: object
       properties:
@@ -2309,8 +1808,10 @@ components:
           format: uuid
         child_agent_definition_selector:
           type: object
-      required: [task_id, parent_agent_instance_id, child_agent_definition_selector]
-
+      required:
+      - task_id
+      - parent_agent_instance_id
+      - child_agent_definition_selector
     ListResponseDelegation:
       type: object
       properties:
@@ -2320,11 +1821,9 @@ components:
             $ref: '#/components/schemas/Delegation'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Approvals
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     Approval:
       type: object
       properties:
@@ -2344,18 +1843,21 @@ components:
         resolved_at:
           type: string
           format: date-time
-      required: [id, task_id, approval_type, status, requested_at]
-
+      required:
+      - id
+      - task_id
+      - approval_type
+      - status
+      - requested_at
     ApprovalResolveRequest:
       type: object
       properties:
         resolution:
           type: string
-          enum: [approved, rejected]
         comment:
           type: string
-      required: [resolution]
-
+      required:
+      - resolution
     ListResponseApproval:
       type: object
       properties:
@@ -2365,11 +1867,9 @@ components:
             $ref: '#/components/schemas/Approval'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Checkpoints
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     Checkpoint:
       type: object
       properties:
@@ -2387,8 +1887,11 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, agent_instance_id, snapshot, created_at]
-
+      required:
+      - id
+      - agent_instance_id
+      - snapshot
+      - created_at
     ListResponseCheckpoint:
       type: object
       properties:
@@ -2398,15 +1901,16 @@ components:
             $ref: '#/components/schemas/Checkpoint'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Memory
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     MemoryCategory:
       type: string
-      enum: [agent_profile_memory, user_preference_memory, task_or_domain_memory, external_context_memory]
-
+      enum:
+      - agent_profile_memory
+      - user_preference_memory
+      - task_or_domain_memory
+      - external_context_memory
     MemoryContent:
       type: object
       properties:
@@ -2416,12 +1920,16 @@ components:
           type: string
         value:
           type: object
-      required: [category, key, value]
-
+      required:
+      - category
+      - key
+      - value
     MemoryWriteCandidateStatus:
       type: string
-      enum: [PENDING, APPROVED, REJECTED]
-
+      enum:
+      - PENDING
+      - APPROVED
+      - REJECTED
     MemoryWriteCandidate:
       type: object
       properties:
@@ -2451,8 +1959,12 @@ components:
         reviewed_at:
           type: string
           format: date-time
-      required: [id, agent_instance_id, content, status, created_at]
-
+      required:
+      - id
+      - agent_instance_id
+      - content
+      - status
+      - created_at
     MemoryWriteCandidateCreate:
       type: object
       properties:
@@ -2463,19 +1975,9 @@ components:
           $ref: '#/components/schemas/MemoryContent'
         reasoning:
           type: string
-      required: [agent_instance_id, content]
-
-    CandidateMergeRequest:
-      type: object
-      properties:
-        target_entry_id:
-          type: string
-          format: uuid
-        strategy:
-          type: string
-          enum: [append, keep_separate, with_provenance, summarize]
-      required: [target_entry_id, strategy]
-
+      required:
+      - agent_instance_id
+      - content
     ListResponseMemoryWriteCandidate:
       type: object
       properties:
@@ -2485,8 +1987,9 @@ components:
             $ref: '#/components/schemas/MemoryWriteCandidate'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
+      required:
+      - data
+      - pagination
     MemoryEntry:
       type: object
       properties:
@@ -2514,8 +2017,14 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, category, key, value, source_candidate_id, created_at, updated_at]
-
+      required:
+      - id
+      - category
+      - key
+      - value
+      - source_candidate_id
+      - created_at
+      - updated_at
     ListResponseMemoryEntry:
       type: object
       properties:
@@ -2525,250 +2034,72 @@ components:
             $ref: '#/components/schemas/MemoryEntry'
         pagination:
           $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    MemoryDecision:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        candidate_id:
-          type: string
-          format: uuid
-        decision_type:
-          type: string
-        reason:
-          type: string
-        agent_instance_id:
-          type: string
-          format: uuid
-        created_at:
-          type: string
-          format: date-time
-      required: [id, candidate_id, decision_type, created_at]
-
-    ListResponseMemoryDecision:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/MemoryDecision'
-        pagination:
-          $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    MemoryDecisionStats:
-      type: object
-      properties:
-        total_decisions:
-          type: integer
-        approved:
-          type: integer
-        rejected:
-          type: integer
-        merged:
-          type: integer
-        review:
-          type: integer
-        approval_rate:
-          type: number
-        rejection_rate:
-          type: number
-        avg_quality_score:
-          type: number
-        top_rejection_reasons:
-          type: array
-          items:
-            type: object
-            properties:
-              reason:
-                type: string
-              count:
-                type: integer
-
-    CompactionJob:
-      type: object
-      properties:
-        job_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [Pending, Running, Completed, Failed]
-        started_at:
-          type: string
-          format: date-time
-
-    # ----------------------------------------------------------------
-    # Escalations
-    # ----------------------------------------------------------------
-    EscalationStatus:
-      type: string
-      enum: [Unresolved, Resolved]
-
-    EscalationLevel:
-      type: string
-      enum: [Operator, Supervisor, System]
-
-    Escalation:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        agent_instance_id:
-          type: string
-          format: uuid
-        level:
-          $ref: '#/components/schemas/EscalationLevel'
-        reason:
-          type: string
-        status:
-          $ref: '#/components/schemas/EscalationStatus'
-        recovery_context:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        resolved_at:
-          type: string
-          format: date-time
-      required: [id, agent_instance_id, level, reason, status, created_at]
-
-    EscalationResolveRequest:
-      type: object
-      properties:
-        action:
-          type: string
-          enum: [ReissueDelegation, AcceptCompletedOutput, FailTeamTask, ManualIntervention]
-        comment:
-          type: string
-      required: [action]
-
-    ListResponseEscalation:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Escalation'
-        pagination:
-          $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Tool Policies
-    # ----------------------------------------------------------------
-    ToolRiskLevel:
-      type: string
-      enum: [Low, Medium, High, Critical]
-
-    ToolPolicy:
-      type: object
-      properties:
-        tool_name:
-          type: string
-        risk_level:
-          $ref: '#/components/schemas/ToolRiskLevel'
-        blocked:
-          type: boolean
-          default: false
-        requires_approval:
-          type: boolean
-          default: false
-        side_effects:
-          type: array
-          items:
-            type: string
-            enum: [FileSystem, Network, ExternalProcess, StateMutation, DataExfiltration, SystemLevel]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required: [tool_name, risk_level, created_at, updated_at]
-
-    ToolPolicyUpsert:
-      type: object
-      properties:
-        risk_level:
-          $ref: '#/components/schemas/ToolRiskLevel'
-        blocked:
-          type: boolean
-        requires_approval:
-          type: boolean
-        side_effects:
-          type: array
-          items:
-            type: string
-      required: [risk_level]
-
-    ListResponseToolPolicy:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/ToolPolicy'
-        pagination:
-          $ref: '#/components/schemas/Pagination'
-      required: [data, pagination]
-
-    # ----------------------------------------------------------------
-    # Run Events (SSE)
-    # ----------------------------------------------------------------
+      required:
+      - data
+      - pagination
     RunEvent:
       type: object
       properties:
         event:
           type: string
-          enum: [start, chunk, tool_call, tool_result, checkpoint_created, done, error]
+          enum:
+          - start
+          - chunk
+          - tool_call
+          - tool_result
+          - done
+          - error
         data:
           type: object
-      required: [event]
-
+      required:
+      - event
     RunEventStart:
       type: object
       properties:
         event:
           type: string
-          enum: [start]
-        instance_id:
+          enum:
+          - start
+        session_id:
           type: string
           format: uuid
-      required: [event, instance_id]
-
+      required:
+      - event
+      - session_id
     RunEventChunk:
       type: object
       properties:
         event:
           type: string
-          enum: [chunk]
+          enum:
+          - chunk
         content:
           type: string
-      required: [event, content]
-
+      required:
+      - event
+      - content
     RunEventToolCall:
       type: object
       properties:
         event:
           type: string
-          enum: [tool_call]
+          enum:
+          - tool_call
         name:
           type: string
         arguments:
           type: object
-      required: [event, name, arguments]
-
+      required:
+      - event
+      - name
+      - arguments
     RunEventToolResult:
       type: object
       properties:
         event:
           type: string
-          enum: [tool_result]
+          enum:
+          - tool_result
         name:
           type: string
         success:
@@ -2777,29 +2108,61 @@ components:
           type: string
         error:
           type: string
-      required: [event, name, success, content]
-
+      required:
+      - event
+      - name
+      - success
+      - content
     RunEventDone:
       type: object
       properties:
         event:
           type: string
-          enum: [done]
+          enum:
+          - done
         message_id:
           type: string
           format: uuid
         artifacts:
           type: object
-      required: [event, message_id]
-
+      required:
+      - event
+      - message_id
     RunEventError:
       type: object
       properties:
         event:
           type: string
-          enum: [error]
+          enum:
+          - error
         code:
           type: string
         message:
           type: string
-      required: [event, code, message]
+      required:
+      - event
+      - code
+      - message
+tags:
+- name: Agent Definitions
+  description: Manage agent definitions
+- name: Agent Instances
+  description: Manage agent instances and their lifecycle
+- name: Tasks
+  description: Manage tasks
+- name: Artifacts
+  description: Manage artifacts
+- name: Events
+  description: Query events
+- name: Capabilities
+  description: Manage capability profiles and registry bindings
+- name: Teams
+  description: Manage team definitions and instances
+- name: Delegations
+  description: Manage agent delegations
+- name: Approvals
+  description: Manage approvals
+- name: Checkpoints
+  description: Manage checkpoints
+- name: Memory
+  description: Manage memory write candidates and entries
