@@ -165,10 +165,21 @@ impl LlmClient for OpenAiClient {
         let (message, finish_reason_str) = if let Some(choice) = body.choices.into_iter().next() {
             let content = choice.message.content.unwrap_or_default();
             let reason = choice.finish_reason;
+            let tool_calls = choice.message.tool_calls.map(|calls| {
+                calls
+                    .into_iter()
+                    .map(|tc| ToolCall {
+                        id: tc.id,
+                        name: tc.function.name,
+                        arguments: serde_json::from_str(&tc.function.arguments)
+                            .unwrap_or(serde_json::Value::Object(Default::default())),
+                    })
+                    .collect()
+            });
             let msg = Message {
                 role: choice.message.role,
                 content,
-                tool_calls: None,
+                tool_calls,
             };
             (msg, reason)
         } else {
