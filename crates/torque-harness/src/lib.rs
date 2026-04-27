@@ -14,6 +14,7 @@ pub mod models;
 pub mod notification;
 pub mod policy;
 pub mod repository;
+pub mod runtime;
 pub mod service;
 pub mod tools;
 pub mod v1_guards;

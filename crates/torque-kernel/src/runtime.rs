@@ -1,3 +1,9 @@
+//! Kernel-owned runtime contracts plus an in-memory reference implementation.
+//!
+//! Production runtime environments are expected to compose these contracts
+//! above the kernel. This module stays responsible for stable semantics and
+//! a small in-memory implementation for tests and local reference execution.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -81,6 +87,7 @@ pub trait RuntimeStore {
     fn latest_checkpoint(&self, instance_id: AgentInstanceId) -> Option<&Checkpoint>;
 }
 
+/// In-memory reference store used by the kernel's local runtime implementation.
 #[derive(Debug, Default)]
 pub struct InMemoryRuntimeStore {
     agent_definitions: HashMap<AgentDefinitionId, AgentDefinition>,
@@ -239,6 +246,10 @@ impl RuntimeStore for InMemoryRuntimeStore {
     }
 }
 
+/// Reference implementation of the kernel runtime contract.
+///
+/// This type is intentionally useful for tests and local execution. It is not
+/// the full production runtime environment for Torque deployments.
 #[derive(Debug, Default)]
 pub struct InMemoryKernelRuntime {
     engine: ExecutionEngine,

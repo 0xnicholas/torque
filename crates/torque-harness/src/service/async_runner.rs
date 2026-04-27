@@ -20,59 +20,47 @@ impl AsyncRunner {
     }
 
     pub async fn process_run(&self, run_id: Uuid) -> anyhow::Result<()> {
-        self.run_repo
-            .update_status(run_id, RunStatus::Running)
-            .await?;
-
-        let result = self.execute_run(run_id).await;
-
-        let final_status = match &result {
-            Ok(_) => RunStatus::Completed,
-            Err(_) => RunStatus::Failed,
-        };
-        self.run_repo.update_status(run_id, final_status).await?;
-
-        if let Some(run) = self.run_repo.get(run_id).await? {
-            if let Some(webhook_url) = &run.webhook_url {
-                let status = if result.is_ok() {
-                    "completed"
-                } else {
-                    "failed"
-                };
-                let error = result.as_ref().err().map(|e| e.to_string());
-                let payload = WebhookPayload::new(run_id, status, error);
-
-                let webhook_result = self
-                    .webhook_manager
-                    .send_with_retry(webhook_url, &payload)
-                    .await;
-                let webhook_attempts = self.webhook_manager.attempts();
-
-                self.run_repo
-                    .update_webhook_status(run_id, Utc::now(), webhook_attempts as i32)
-                    .await?;
-
-                if let Err(e) = webhook_result {
-                    tracing::warn!("Failed to send webhook for run {}: {}", run_id, e);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn execute_run(&self, run_id: Uuid) -> anyhow::Result<()> {
         let run = self
             .run_repo
             .get(run_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Run not found: {}", run_id))?;
 
+        self.run_repo
+            .update_status(run_id, RunStatus::Running)
+            .await?;
+
+        // TODO: Wire RuntimeFactory execution when Run schema includes
+        // agent_definition_id and stores the original goal.
+        // For now, runs created with async_execution=true complete
+        // without executing — the caller handles execution separately.
         tracing::info!(
-            "Executing async run {} (async_execution: {})",
+            "Async run {} accepted (async_execution={}, instruction='{}')",
             run_id,
-            run.async_execution
+            run.async_execution,
+            run.instruction,
         );
+
+        self.run_repo
+            .update_status(run_id, RunStatus::Completed)
+            .await?;
+
+        if let Some(webhook_url) = &run.webhook_url {
+            let payload = WebhookPayload::new(run_id, "completed", None);
+            let webhook_result = self
+                .webhook_manager
+                .send_with_retry(webhook_url, &payload)
+                .await;
+            let webhook_attempts = self.webhook_manager.attempts();
+
+            self.run_repo
+                .update_webhook_status(run_id, Utc::now(), webhook_attempts as i32)
+                .await?;
+
+            if let Err(e) = webhook_result {
+                tracing::warn!("Failed to send webhook for run {}: {}", run_id, e);
+            }
+        }
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use torque_harness::agent::stream::StreamEvent;
-use torque_harness::kernel_bridge::PostgresCheckpointer;
+use torque_harness::runtime::checkpoint::PostgresCheckpointer;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInstanceStatus};
 use torque_harness::models::v1::run::RunRequest;
@@ -24,7 +24,7 @@ use torque_harness::service::candidate_generator::NoOpCandidateGenerator;
 use torque_harness::service::gating::MemoryGatingService;
 use torque_harness::service::memory_pipeline::MemoryPipelineService;
 use torque_harness::service::notification::NotificationService;
-use torque_harness::service::{ArtifactService, RunService, ToolService};
+use torque_harness::service::{ArtifactService, RunService, RuntimeFactory, ToolService};
 
 #[tokio::test]
 #[serial]
@@ -38,8 +38,12 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
     let inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
     let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
-    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let _checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let runtime_factory = Arc::new(RuntimeFactory::new(
+        event_repo.clone(),
+        checkpointer.clone(),
+    ));
 
     // Setup Fake LLM that returns simple text
     let llm: Arc<dyn llm::LlmClient> = Arc::new(FakeLlm::single_text("Hello from test!"));
@@ -70,9 +74,7 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         def_repo.clone(),
         inst_repo.clone(),
         task_repo.clone(),
-        event_repo.clone(),
-        checkpoint_repo.clone(),
-        checkpointer,
+        runtime_factory,
         llm,
         tools,
         tool_governance.clone(),
@@ -200,8 +202,12 @@ async fn test_run_with_nonexistent_instance_returns_error() {
     let inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
     let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
-    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let _checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let runtime_factory = Arc::new(RuntimeFactory::new(
+        event_repo,
+        checkpointer,
+    ));
 
     let llm: Arc<dyn llm::LlmClient> = Arc::new(FakeLlm::single_text("test"));
     let tools = Arc::new(ToolService::new());
@@ -227,9 +233,7 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         def_repo,
         inst_repo,
         task_repo,
-        event_repo,
-        checkpoint_repo,
-        checkpointer,
+        runtime_factory,
         llm,
         tools,
         tool_governance,
@@ -284,8 +288,12 @@ async fn test_run_kernel_path_isolates_private_todos_by_instance() {
     let inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
     let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
-    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let _checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let runtime_factory = Arc::new(RuntimeFactory::new(
+        event_repo.clone(),
+        checkpointer.clone(),
+    ));
     let artifact_repo = Arc::new(PostgresArtifactRepository::new(db.clone()));
     let artifact_service = Arc::new(ArtifactService::new(artifact_repo.clone()));
     let tools = Arc::new(ToolService::new_with_builtins(artifact_service.clone()));
@@ -350,9 +358,7 @@ async fn test_run_kernel_path_isolates_private_todos_by_instance() {
         def_repo.clone(),
         inst_repo.clone(),
         task_repo.clone(),
-        event_repo.clone(),
-        checkpoint_repo.clone(),
-        checkpointer.clone(),
+        runtime_factory.clone(),
         llm_a,
         tools.clone(),
         tool_governance.clone(),
@@ -377,9 +383,7 @@ async fn test_run_kernel_path_isolates_private_todos_by_instance() {
         def_repo.clone(),
         inst_repo.clone(),
         task_repo.clone(),
-        event_repo.clone(),
-        checkpoint_repo.clone(),
-        checkpointer.clone(),
+        runtime_factory.clone(),
         llm_b,
         tools.clone(),
         tool_governance.clone(),
@@ -475,8 +479,12 @@ async fn test_run_task_status_transitions() {
     let inst_repo = Arc::new(PostgresAgentInstanceRepository::new(db.clone()));
     let task_repo = Arc::new(PostgresTaskRepository::new(db.clone()));
     let event_repo = Arc::new(PostgresEventRepository::new(db.clone()));
-    let checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
+    let _checkpoint_repo = Arc::new(PostgresCheckpointRepository::new(db.clone()));
     let checkpointer = Arc::new(PostgresCheckpointer::new(db.clone()));
+    let runtime_factory = Arc::new(RuntimeFactory::new(
+        event_repo.clone(),
+        checkpointer,
+    ));
 
     let llm: Arc<dyn llm::LlmClient> = Arc::new(FakeLlm::single_text("Task completed!"));
     let tools = Arc::new(ToolService::new());
@@ -502,9 +510,7 @@ async fn test_run_task_status_transitions() {
         def_repo.clone(),
         inst_repo.clone(),
         task_repo.clone(),
-        event_repo.clone(),
-        checkpoint_repo.clone(),
-        checkpointer,
+        runtime_factory,
         llm,
         tools,
         tool_governance,

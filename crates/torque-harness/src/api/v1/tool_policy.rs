@@ -1,4 +1,5 @@
 use crate::db::Database;
+use crate::models::v1::common::{ErrorBody, ListResponse, Pagination};
 use crate::models::v1::tool_policy::ToolPolicy;
 use crate::service::ServiceContainer;
 use axum::{
@@ -11,13 +12,21 @@ use std::sync::Arc;
 
 pub async fn list(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
-) -> Result<Json<Vec<ToolPolicy>>, StatusCode> {
-    services
+) -> Result<Json<ListResponse<ToolPolicy>>, (StatusCode, Json<ErrorBody>)> {
+    let data = services
         .tool_policy
         .list()
         .await
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(ErrorBody::db_error)?;
+
+    Ok(Json(ListResponse {
+        data,
+        pagination: Pagination {
+            next_cursor: None,
+            prev_cursor: None,
+            has_more: false,
+        },
+    }))
 }
 
 pub async fn get(

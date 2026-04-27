@@ -1,42 +1,26 @@
 use crate::agent::stream::StreamEvent;
 use crate::config;
 use crate::infra::llm::LlmClient;
-use crate::kernel_bridge::{
-    run_request_to_execution_request, v1_agent_definition_to_kernel, KernelRuntimeHandle,
-};
+use crate::runtime::message::RuntimeMessage;
+use crate::runtime::mapping::{run_request_to_execution_request, v1_agent_definition_to_kernel};
 use crate::models::v1::agent_instance::AgentInstanceStatus;
 use crate::models::v1::gating::ExecutionSummary;
 use crate::models::v1::run::RunRequest;
 use crate::models::v1::task::{TaskStatus, TaskType};
 use crate::policy::{PolicyEvaluator, PolicyInput};
 use crate::repository::{
-    AgentDefinitionRepository, AgentInstanceRepository, CheckpointRepository, EventRepository,
-    TaskRepository,
+    AgentDefinitionRepository, AgentInstanceRepository, TaskRepository,
 };
 use crate::service::candidate_generator::CandidateGenerator;
 use crate::service::gating::MemoryGatingService;
 use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
-use crate::service::ToolService;
+use crate::service::{RuntimeFactory, ToolService};
 use checkpointer::CheckpointState;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::warn;
 use uuid::Uuid;
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct ExecuteRequest {
-    pub agent_definition_id: Uuid,
-    pub agent_instance_id: Uuid,
-    pub system_prompt: Option<String>,
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct ExecuteResponse {
-    pub state: torque_kernel::ExecutionResult,
-}
 
 use crate::policy::ToolGovernanceService;
 
@@ -44,9 +28,7 @@ pub struct RunService {
     agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
     agent_instance_repo: Arc<dyn AgentInstanceRepository>,
     task_repo: Arc<dyn TaskRepository>,
-    event_repo: Arc<dyn EventRepository>,
-    checkpoint_repo: Arc<dyn CheckpointRepository>,
-    checkpointer: Arc<dyn checkpointer::Checkpointer>,
+    runtime_factory: Arc<RuntimeFactory>,
     llm: Arc<dyn LlmClient>,
     tools: Arc<ToolService>,
     tool_governance: Arc<ToolGovernanceService>,
@@ -62,9 +44,7 @@ impl RunService {
         agent_definition_repo: Arc<dyn AgentDefinitionRepository>,
         agent_instance_repo: Arc<dyn AgentInstanceRepository>,
         task_repo: Arc<dyn TaskRepository>,
-        event_repo: Arc<dyn EventRepository>,
-        checkpoint_repo: Arc<dyn CheckpointRepository>,
-        checkpointer: Arc<dyn checkpointer::Checkpointer>,
+        runtime_factory: Arc<RuntimeFactory>,
         llm: Arc<dyn LlmClient>,
         tools: Arc<ToolService>,
         tool_governance: Arc<ToolGovernanceService>,
@@ -77,9 +57,7 @@ impl RunService {
             agent_definition_repo,
             agent_instance_repo,
             task_repo,
-            event_repo,
-            checkpoint_repo,
-            checkpointer,
+            runtime_factory,
             llm,
             tools,
             tool_governance,
@@ -290,7 +268,8 @@ impl RunService {
             })),
         };
 
-        self.checkpointer
+        self.runtime_factory
+            .checkpointer()
             .save(instance_id, task_id.unwrap_or(instance_id), state)
             .await?;
         Ok(())
@@ -326,135 +305,6 @@ impl RunService {
         self.policy_evaluator.evaluate(&input, &sources)
     }
 
-    pub async fn execute_with_harness(
-        &self,
-        instance_id: Uuid,
-        request: RunRequest,
-        event_sink: mpsc::Sender<StreamEvent>,
-    ) -> anyhow::Result<()> {
-        let instance = self
-            .agent_instance_repo
-            .get(instance_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Agent instance not found: {}", instance_id))?;
-
-        let definition = self
-            .agent_definition_repo
-            .get(instance.agent_definition_id)
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Agent definition not found: {}",
-                    instance.agent_definition_id
-                )
-            })?;
-
-        self.agent_instance_repo
-            .update_status(instance_id, AgentInstanceStatus::Running)
-            .await?;
-
-        let task = self
-            .task_repo
-            .create(
-                TaskType::AgentTask,
-                &request.goal,
-                request.instructions.as_deref(),
-                Some(instance_id),
-                serde_json::to_value(&request.input_artifacts)?,
-            )
-            .await?;
-
-        self.agent_instance_repo
-            .update_current_task(instance_id, Some(task.id))
-            .await?;
-        self.task_repo
-            .update_status(task.id, TaskStatus::Running)
-            .await?;
-
-        if let Err(e) = event_sink
-            .send(StreamEvent::Start {
-                session_id: instance_id,
-            })
-            .await
-        {
-            warn!("Failed to send start event: {}", e);
-        }
-
-        let mut planning_executor = crate::harness::PlanningExecutor::new(
-            self.llm.clone(),
-            self.tools.registry(),
-            self.tool_governance.clone(),
-            self.reflexion.clone(),
-        );
-        planning_executor.set_instance_id(instance_id);
-
-        let system_prompt = definition.system_prompt.as_deref();
-
-        let result = planning_executor
-            .plan_and_execute(&request.goal, system_prompt, event_sink.clone())
-            .await;
-
-        let final_status = match &result {
-            Ok(ref r) if r.success => TaskStatus::Completed,
-            _ => TaskStatus::Failed,
-        };
-        self.task_repo.update_status(task.id, final_status).await?;
-
-        self.agent_instance_repo
-            .update_current_task(instance_id, None)
-            .await?;
-        self.agent_instance_repo
-            .update_status(
-                instance_id,
-                if result.as_ref().map(|r| r.success).unwrap_or(false) {
-                    AgentInstanceStatus::Ready
-                } else {
-                    AgentInstanceStatus::Failed
-                },
-            )
-            .await?;
-
-        match &result {
-            Ok(_) => {
-                if let Err(e) = event_sink
-                    .send(StreamEvent::Done {
-                        message_id: task.id,
-                        artifacts: None,
-                    })
-                    .await
-                {
-                    warn!("Failed to send done event: {}", e);
-                }
-            }
-            Err(ref e) => {
-                if let Err(send_err) = event_sink
-                    .send(StreamEvent::Error {
-                        code: "EXECUTION_ERROR".into(),
-                        message: e.to_string(),
-                    })
-                    .await
-                {
-                    warn!("Failed to send error event: {}", send_err);
-                }
-            }
-        }
-
-        let snapshot = serde_json::json!({
-            "status": if result.as_ref().map(|r| r.success).unwrap_or(false) { "READY" } else { "FAILED" },
-            "task_id": task.id,
-            "goal": request.goal,
-        });
-
-        if let Err(e) = self
-            .create_checkpoint(instance_id, Some(task.id), snapshot)
-            .await
-        {
-            warn!("Failed to create checkpoint: {}", e);
-        }
-
-        result.map(|_| ())
-    }
-
     async fn run_execution(
         &self,
         _instance_id: Uuid,
@@ -462,21 +312,19 @@ impl RunService {
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
     ) -> anyhow::Result<String> {
-        let mut kernel = KernelRuntimeHandle::new(
-            vec![kernel_def],
-            self.event_repo.clone(),
-            self.checkpoint_repo.clone(),
-            self.checkpointer.clone(),
-        );
+        let mut kernel = self.runtime_factory.create_handle(vec![kernel_def]);
+        let model_driver = self.runtime_factory.create_model_driver(self.llm.clone());
+        let tool_executor = self.runtime_factory.create_tool_executor(self.tools.clone());
+        let output_sink = self.runtime_factory.create_output_sink(event_sink.clone());
 
         // Execute without policy (policy is evaluated at orchestration layer)
         let result = kernel
             .execute_v1(
                 request,
-                self.llm.clone(),
-                self.tools.clone(),
-                event_sink,
-                vec![], // Start with empty messages for v1
+                &model_driver,
+                &tool_executor,
+                Some(&output_sink),
+                vec![RuntimeMessage::user("Run request execution")],
             )
             .await;
 

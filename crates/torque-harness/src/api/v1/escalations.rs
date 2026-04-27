@@ -26,17 +26,7 @@ pub async fn list(
         .escalation_service
         .list_pending_escalations(limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let has_more = escalations.len() > limit as usize;
     if has_more {
@@ -62,17 +52,7 @@ pub async fn get(
         .escalation_service
         .get_escalation(id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?
+        .map_err(ErrorBody::db_error)?
         .ok_or((
             StatusCode::NOT_FOUND,
             Json(ErrorBody {
@@ -97,21 +77,11 @@ pub async fn resolve(
     Path(id): Path<Uuid>,
     Json(req): Json<EscalationResolveRequest>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
-    let _existing = services
+    services
         .escalation_service
         .get_escalation(id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?
+        .map_err(ErrorBody::db_error)?
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
@@ -122,23 +92,13 @@ pub async fn resolve(
                     request_id: None,
                 }),
             )
-        });
+        })?;
 
     let escalation = services
         .escalation_service
         .resolve_escalation(id, &req.resolution, req.resolved_by)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     Ok(Json(escalation))
 }

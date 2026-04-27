@@ -21,7 +21,6 @@ pub mod notification;
 pub mod recovery;
 pub mod reflexion;
 pub mod run;
-pub mod session;
 pub mod task;
 pub mod team;
 pub mod tool;
@@ -53,16 +52,76 @@ pub use reflexion::{
     ExperienceQuery, ReflectionResult, ReflexionService, RetrievedExperience, SubtaskResult,
 };
 pub use run::RunService;
-pub use session::SessionService;
 pub use task::TaskService;
 pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
-pub use tool_offload::{ToolOffloadConfig, ToolOffloadService, TOOL_OUTPUT_ARTIFACT_KIND};
+pub use tool_offload::{HarnessOffloadArtifactStore, ToolOffloadConfig, TOOL_OUTPUT_ARTIFACT_KIND};
 pub use vfs::RoutedVfs;
 pub use webhook_manager::WebhookManager;
 
+use crate::runtime::host::KernelRuntimeHandle;
+use crate::runtime::{
+    HarnessCheckpointSink, HarnessEventSink, HarnessModelDriver, HarnessToolExecutor,
+    StreamEventSinkAdapter,
+};
+use crate::repository::EventRepository;
+use std::sync::Arc;
+
+/// Assembles runtime dependencies and creates `KernelRuntimeHandle` instances.
+///
+/// `RuntimeFactory` serves as a single injection point for the three dependencies
+/// needed by the kernel execution host (`EventRepository`, `CheckpointRepository`,
+/// `Checkpointer`). Services inject `Arc<RuntimeFactory>` instead of holding each
+/// dependency separately, making the dependency graph explicit and enabling future
+/// replacement of the runtime host with alternative implementations.
+pub struct RuntimeFactory {
+    event_repo: Arc<dyn EventRepository>,
+    checkpointer: Arc<dyn checkpointer::Checkpointer>,
+}
+
+impl RuntimeFactory {
+    pub fn new(
+        event_repo: Arc<dyn EventRepository>,
+        checkpointer: Arc<dyn checkpointer::Checkpointer>,
+    ) -> Self {
+        Self {
+            event_repo,
+            checkpointer,
+        }
+    }
+
+    pub fn create_handle(
+        &self,
+        agent_defs: Vec<torque_kernel::AgentDefinition>,
+    ) -> KernelRuntimeHandle {
+        KernelRuntimeHandle::new(
+            agent_defs,
+            Arc::new(HarnessEventSink::new(self.event_repo.clone())),
+            Arc::new(HarnessCheckpointSink::new(self.checkpointer.clone())),
+        )
+    }
+
+    pub fn create_model_driver(&self, llm: Arc<dyn llm::LlmClient>) -> HarnessModelDriver {
+        HarnessModelDriver::new(llm)
+    }
+
+    pub fn create_tool_executor(&self, tools: Arc<ToolService>) -> HarnessToolExecutor {
+        HarnessToolExecutor::new(tools)
+    }
+
+    pub fn create_output_sink(
+        &self,
+        tx: tokio::sync::mpsc::Sender<crate::agent::stream::StreamEvent>,
+    ) -> StreamEventSinkAdapter {
+        StreamEventSinkAdapter::new(tx)
+    }
+
+    pub fn checkpointer(&self) -> &Arc<dyn checkpointer::Checkpointer> {
+        &self.checkpointer
+    }
+}
+
 pub struct ServiceContainer {
-    pub session: std::sync::Arc<SessionService>,
     pub memory: std::sync::Arc<memory::MemoryService>,
     pub tool: std::sync::Arc<ToolService>,
     pub agent_instance: std::sync::Arc<agent_instance::AgentInstanceService>,
@@ -89,6 +148,7 @@ pub struct ServiceContainer {
     pub notification_service: std::sync::Arc<notification::NotificationService>,
     pub tool_governance: std::sync::Arc<crate::policy::ToolGovernanceService>,
     pub tool_policy: std::sync::Arc<dyn crate::repository::ToolPolicyRepository>,
+    pub runtime_factory: Arc<RuntimeFactory>,
 }
 
 impl ServiceContainer {
@@ -108,16 +168,12 @@ impl ServiceContainer {
             memory_v1.clone(),
             embedding.clone(),
         ));
-        let session = std::sync::Arc::new(SessionService::new(
-            repos.session.clone(),
-            repos.message.clone(),
+
+        let runtime_factory = Arc::new(RuntimeFactory::new(
             repos.event.clone(),
-            repos.checkpoint.clone(),
             checkpointer.clone(),
-            llm.clone(),
-            tool.clone(),
-            memory.clone(),
         ));
+
         let agent_instance = std::sync::Arc::new(agent_instance::AgentInstanceService::new(
             repos.agent_instance.clone(),
         ));
@@ -201,9 +257,7 @@ impl ServiceContainer {
             repos.agent_definition.clone(),
             repos.agent_instance.clone(),
             repos.task.clone(),
-            repos.event.clone(),
-            repos.checkpoint.clone(),
-            checkpointer.clone(),
+            runtime_factory.clone(),
             llm.clone(),
             tool.clone(),
             tool_governance.clone(),
@@ -227,7 +281,6 @@ impl ServiceContainer {
         let tool_policy = repos.tool_policy.clone();
 
         Self {
-            session,
             memory,
             tool,
             agent_instance,
@@ -254,6 +307,7 @@ impl ServiceContainer {
             notification_service,
             tool_governance,
             tool_policy,
+            runtime_factory,
         }
     }
 }

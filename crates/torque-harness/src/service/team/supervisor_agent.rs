@@ -7,7 +7,7 @@ use crate::service::team::supervisor_tools::{create_supervisor_tools, Supervisor
 use crate::tools::ToolRegistry;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use torque_kernel::StepDecision;
+use torque_runtime::StepDecision;
 
 pub struct SupervisorAgent {
     react: ReActHarness,

@@ -1,9 +1,9 @@
 use sqlx::postgres::PgPoolOptions;
-use std::env;
 use std::sync::Arc;
 use tracing::info;
 
 use torque_harness::app;
+use torque_harness::config::AppConfig;
 use torque_harness::db::Database;
 
 #[tokio::main]
@@ -14,15 +14,12 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting torque-harness service...");
 
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/torque_harness".to_string());
-
-    let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let config = AppConfig::from_env();
 
     info!("Connecting to database...");
     let pool = PgPoolOptions::new()
         .max_connections(20)
-        .connect(&database_url)
+        .connect(&config.database_url)
         .await?;
 
     info!("Running database migrations...");
@@ -35,8 +32,8 @@ async fn main() -> anyhow::Result<()> {
 
     let app = app::build_app(database, llm);
 
-    info!("Listening on {}", bind_addr);
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+    info!("Listening on {}", config.bind_addr);
+    let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())

@@ -29,6 +29,7 @@ async-stream = "0.3"
 # Internal dependencies
 llm = { path = "../llm" }
 torque-kernel = { path = "../torque-kernel" }
+torque-runtime = { path = "../torque-runtime" }
 checkpointer = { path = "../checkpointer" }
 
 [dev-dependencies]

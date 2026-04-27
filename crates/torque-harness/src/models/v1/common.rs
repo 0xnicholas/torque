@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use axum::{http::StatusCode, Json};
+
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
     pub code: String,
@@ -10,6 +12,44 @@ pub struct ErrorBody {
     pub details: Option<HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+}
+
+impl ErrorBody {
+    pub fn db_error(e: impl ToString) -> (StatusCode, Json<Self>) {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Self {
+                code: "DB_ERROR".into(),
+                message: e.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    }
+
+    pub fn not_found(resource: impl ToString) -> (StatusCode, Json<Self>) {
+        (
+            StatusCode::NOT_FOUND,
+            Json(Self {
+                code: "NOT_FOUND".into(),
+                message: resource.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    }
+
+    pub fn bad_request(msg: impl ToString) -> (StatusCode, Json<Self>) {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(Self {
+                code: "BAD_REQUEST".into(),
+                message: msg.to_string(),
+                details: None,
+                request_id: None,
+            }),
+        )
+    }
 }
 
 #[derive(Debug, Serialize)]

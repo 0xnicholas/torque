@@ -10,12 +10,6 @@ use crate::service::ServiceContainer;
 
 pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
     let repos = RepositoryContainer {
-        session: Arc::new(crate::repository::PostgresSessionRepository::new(
-            db.clone(),
-        )),
-        message: Arc::new(crate::repository::PostgresMessageRepository::new(
-            db.clone(),
-        )),
         memory: Arc::new(crate::repository::PostgresMemoryRepository::new(db.clone())),
         event: Arc::new(crate::repository::PostgresEventRepository::new(db.clone())),
         checkpoint: Arc::new(crate::repository::PostgresCheckpointRepository::new(
@@ -92,7 +86,7 @@ pub fn build_app(db: Database, llm: Arc<OpenAiClient>) -> Router {
         }
     };
 
-    let checkpointer = Arc::new(crate::kernel_bridge::PostgresCheckpointer::new(db.clone()));
+    let checkpointer = Arc::new(crate::runtime::checkpoint::PostgresCheckpointer::new(db.clone()));
     let idempotency = Arc::new(crate::v1_guards::IdempotencyStore::new());
     let run_gate = Arc::new(crate::v1_guards::RunGate::new());
     let llm_dyn: Arc<dyn llm::LlmClient> = llm.clone();

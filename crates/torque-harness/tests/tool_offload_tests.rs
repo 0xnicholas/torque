@@ -4,11 +4,11 @@ use std::sync::Arc;
 use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::repository::ArtifactRepository;
 use torque_harness::service::{
-    tool_offload::TOOL_OUTPUT_ARTIFACT_KIND, ArtifactService, RoutedVfs, ToolOffloadConfig,
-    ToolOffloadService,
+    tool_offload::TOOL_OUTPUT_ARTIFACT_KIND, ArtifactService, HarnessOffloadArtifactStore, RoutedVfs,
 };
 use torque_harness::service::vfs::{ScratchBackend, WorkspaceBackend};
-use torque_harness::tools::ToolResult;
+use torque_runtime::offload::{ToolOffloadConfig, ToolOffloadPolicy};
+use torque_runtime::tools::RuntimeToolResult;
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -151,23 +151,21 @@ fn test_vfs() -> Arc<RoutedVfs> {
 #[tokio::test]
 async fn tool_offload_tests_small_result_stays_inline() {
     let repo = Arc::new(InMemoryArtifactRepository::default());
-    let service = ToolOffloadService::new(
-        Some(Arc::new(ArtifactService::new(repo))),
-        Some(test_vfs()),
-    )
-    .with_config(ToolOffloadConfig {
-        inline_max_bytes: 16,
-        scratch_max_bytes: 32,
-    });
+    let artifact_store = Arc::new(HarnessOffloadArtifactStore::new(Arc::new(
+        ArtifactService::new(repo),
+    )));
+    let vfs = test_vfs() as Arc<dyn torque_runtime::vfs::VfsBackend>;
+    let policy = ToolOffloadPolicy::new(Some(vfs), Some(artifact_store)).with_config(
+        ToolOffloadConfig {
+            inline_max_bytes: 16,
+            scratch_max_bytes: 32,
+        },
+    );
 
-    let result = service
+    let result = policy
         .offload(
             "demo",
-            ToolResult {
-                success: true,
-                content: "short".to_string(),
-                error: None,
-            },
+            RuntimeToolResult::success("short"),
             None,
         )
         .await
@@ -179,10 +177,13 @@ async fn tool_offload_tests_small_result_stays_inline() {
 #[tokio::test]
 async fn tool_offload_tests_medium_result_offloads_to_scratch() {
     let repo = Arc::new(InMemoryArtifactRepository::default());
+    let artifact_store = Arc::new(HarnessOffloadArtifactStore::new(Arc::new(
+        ArtifactService::new(repo),
+    )));
     let vfs = test_vfs();
-    let service = ToolOffloadService::new(
-        Some(Arc::new(ArtifactService::new(repo))),
-        Some(vfs.clone()),
+    let policy = ToolOffloadPolicy::new(
+        Some(vfs.clone() as Arc<dyn torque_runtime::vfs::VfsBackend>),
+        Some(artifact_store),
     )
     .with_config(ToolOffloadConfig {
         inline_max_bytes: 8,
@@ -190,14 +191,10 @@ async fn tool_offload_tests_medium_result_offloads_to_scratch() {
     });
 
     let raw = "x".repeat(32);
-    let result = service
+    let result = policy
         .offload(
             "demo",
-            ToolResult {
-                success: true,
-                content: raw.clone(),
-                error: None,
-            },
+            RuntimeToolResult::success(raw.clone()),
             None,
         )
         .await
@@ -224,24 +221,22 @@ async fn tool_offload_tests_medium_result_offloads_to_scratch() {
 async fn tool_offload_tests_large_result_offloads_to_artifact() {
     let repo = Arc::new(InMemoryArtifactRepository::default());
     let repo_for_assert = repo.clone();
-    let service = ToolOffloadService::new(
-        Some(Arc::new(ArtifactService::new(repo))),
-        Some(test_vfs()),
-    )
-    .with_config(ToolOffloadConfig {
-        inline_max_bytes: 8,
-        scratch_max_bytes: 16,
-    });
+    let artifact_store = Arc::new(HarnessOffloadArtifactStore::new(Arc::new(
+        ArtifactService::new(repo),
+    )));
+    let vfs = test_vfs() as Arc<dyn torque_runtime::vfs::VfsBackend>;
+    let policy = ToolOffloadPolicy::new(Some(vfs), Some(artifact_store)).with_config(
+        ToolOffloadConfig {
+            inline_max_bytes: 8,
+            scratch_max_bytes: 16,
+        },
+    );
 
     let instance_id = Uuid::new_v4();
-    let result = service
+    let result = policy
         .offload(
             "demo",
-            ToolResult {
-                success: true,
-                content: "y".repeat(64),
-                error: None,
-            },
+            RuntimeToolResult::success("y".repeat(64)),
             Some(instance_id),
         )
         .await

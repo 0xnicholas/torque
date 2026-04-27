@@ -77,17 +77,7 @@ pub async fn create_candidate(
         .memory
         .v1_create_candidate(&candidate)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok((StatusCode::CREATED, Json(created)))
 }
 
@@ -116,33 +106,13 @@ pub async fn list_candidates(
         .memory
         .v1_list_candidates(status, limit, offset)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let stats = services
         .memory
         .v1_count_candidates_by_status(None)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let stats = stats.map(|counts| {
         let mut total = 0i64;
@@ -231,17 +201,7 @@ pub async fn list_decisions(
             offset,
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let has_more = rows.len() >= limit as usize;
     let next_cursor = if has_more {
@@ -344,17 +304,7 @@ pub async fn approve_candidate(
             Some(candidate.id),
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     services
         .memory
@@ -365,17 +315,7 @@ pub async fn approve_candidate(
             Some(entry.id),
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let _ = services
         .notification_service
@@ -481,17 +421,7 @@ pub async fn merge_candidate(
         .memory
         .v1_get_entry(req.target_id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let target_entry = match target_entry {
         Some(e) => e,
@@ -564,17 +494,7 @@ pub async fn merge_candidate(
             Some(candidate.id),
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     services
         .memory
@@ -585,17 +505,7 @@ pub async fn merge_candidate(
             Some(entry.id),
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let _ = services
         .notification_service
@@ -620,17 +530,7 @@ pub async fn list_entries(
         .memory
         .v1_list_entries(limit, offset)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() >= limit as usize;
     let next_cursor = if has_more {
         Some((offset + limit).to_string())
@@ -703,17 +603,7 @@ pub async fn force_write(
         .memory
         .v1_create_entry(None, None, req.category, &req.key, req.value, None)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     Ok((StatusCode::CREATED, Json(entry)))
 }
@@ -739,17 +629,7 @@ pub async fn backfill(
         .memory
         .get_entries_without_embedding(batch_size)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     let mut processed = 0;
     let mut failed = 0;
@@ -834,17 +714,7 @@ pub async fn trigger_compaction(
         .memory
         .trigger_compaction(req.agent_instance_id, req.team_instance_id, req.categories)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok(Json(job))
 }
 
@@ -863,16 +733,6 @@ pub async fn get_decision_stats(
         .memory
         .get_decision_stats(q.agent_instance_id, q.start_date, q.end_date)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok(Json(stats))
 }

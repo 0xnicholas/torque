@@ -14,10 +14,8 @@ pub mod event;
 pub mod event_ext;
 pub mod memory;
 pub mod memory_v1;
-pub mod message;
 pub mod rule;
 pub mod run;
-pub mod session;
 pub mod task;
 pub mod team;
 pub mod tool_policy;
@@ -39,10 +37,8 @@ pub use event::{EventRepository, PostgresEventRepository};
 pub use event_ext::{EventRepositoryExt, PostgresEventRepositoryExt};
 pub use memory::{MemoryRepository, PostgresMemoryRepository};
 pub use memory_v1::{MemoryRepositoryV1, PostgresMemoryRepositoryV1};
-pub use message::{MessageRepository, PostgresMessageRepository};
 pub use rule::{PostgresRuleRepository, RuleRepository};
 pub use run::{PostgresRunRepository, RunRepository};
-pub use session::{PostgresSessionRepository, SessionKernelState, SessionRepository};
 pub use task::{PostgresTaskRepository, TaskRepository};
 pub use team::{
     PostgresSharedTaskStateRepository, PostgresTeamDefinitionRepository,
@@ -53,8 +49,6 @@ pub use team::{
 pub use tool_policy::{PostgresToolPolicyRepository, ToolPolicyRepository};
 
 pub struct RepositoryContainer {
-    pub session: Arc<dyn SessionRepository>,
-    pub message: Arc<dyn MessageRepository>,
     pub memory: Arc<dyn MemoryRepository>,
     pub event: Arc<dyn EventRepository>,
     pub checkpoint: Arc<dyn CheckpointRepository>,
