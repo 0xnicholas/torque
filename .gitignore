@@ -5,3 +5,4 @@ target/
 .omx/
 .sisyphus/
 tmp.json
+**/.vfs-tests/
