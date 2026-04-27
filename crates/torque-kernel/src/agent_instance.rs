@@ -15,9 +15,6 @@ pub enum AgentInstanceState {
     WaitingSubagent,
     WaitingApproval,
     Suspended,
-    Completed,
-    Failed,
-    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

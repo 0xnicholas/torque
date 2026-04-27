@@ -574,7 +574,11 @@ impl KernelRuntime for InMemoryKernelRuntime {
             )
         })?;
 
-        let operation = (|| -> Result<(ExecutionResult, Option<ResumeSignal>), KernelError> {
+        // Deferred restore: always put instance and task back, even if
+        // the operation fails. The store is in-memory and put is infallible,
+        // so partial state is at least retained for retry.
+        // A transactional store would wrap this in a rollback-on-error.
+        let result = (|| -> Result<(ExecutionResult, Option<ResumeSignal>), KernelError> {
             let mut applied_resume_signal = None;
 
             match instance.state() {
@@ -688,10 +692,11 @@ impl KernelRuntime for InMemoryKernelRuntime {
             Ok((result, applied_resume_signal))
         })();
 
+        // Always restore instance and task to the store
         self.store.put_instance(instance);
         self.store.put_task(task);
 
-        let (mut result, applied_resume_signal) = operation?;
+        let (mut result, applied_resume_signal) = result?;
         result.sequence_number = self.store.execution_history(result.instance_id).len() as u64 + 1;
         if let Some(resume_signal) = applied_resume_signal {
             result

@@ -12,7 +12,6 @@ pub enum TaskState {
     Blocked,
     Done,
     Failed,
-    Abandoned,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
