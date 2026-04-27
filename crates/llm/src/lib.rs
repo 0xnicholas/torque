@@ -1,7 +1,6 @@
 pub mod client;
 pub mod error;
 pub mod openai;
-pub mod streaming;
 pub mod tools;
 
 pub use client::{ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage};

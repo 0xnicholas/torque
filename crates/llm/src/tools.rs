@@ -1,13 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Function {
-    pub name: String,
-    pub description: Option<String>,
-    pub parameters: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDef {
     pub name: String,
     pub description: String,
@@ -40,11 +33,4 @@ impl ToolCall {
     pub fn arguments_as<T: for<'de> Deserialize<'de>>(&self) -> Option<T> {
         serde_json::from_value(self.arguments.clone()).ok()
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StreamingChunk {
-    pub content: String,
-    pub is_last: bool,
-    pub tool_call: Option<ToolCall>,
 }
