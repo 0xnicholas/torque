@@ -41,17 +41,7 @@ pub async fn list_definitions(
         .team
         .list_definitions(limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();
@@ -169,17 +159,7 @@ pub async fn create_task(
         .team
         .create_team_task(id, &req)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -193,17 +173,7 @@ pub async fn list_tasks(
         .team
         .list_team_tasks(id, limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();
@@ -229,17 +199,7 @@ pub async fn list_members(
         .team
         .list_members(id, limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();
@@ -265,17 +225,7 @@ pub async fn publish(
         .team
         .get_instance(id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?
+        .map_err(ErrorBody::db_error)?
         .ok_or((
             StatusCode::NOT_FOUND,
             Json(ErrorBody {

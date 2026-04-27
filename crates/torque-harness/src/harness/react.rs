@@ -8,7 +8,7 @@ use llm::{ChatRequest, FinishReason, Message};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use torque_kernel::StepDecision;
+use torque_runtime::StepDecision;
 
 const MAX_STEPS: usize = 50;
 const MAX_CONSECUTIVE_TOOL_FAILURES: usize = 3;

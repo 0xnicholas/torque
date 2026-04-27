@@ -17,17 +17,7 @@ pub async fn list(
         .tool_policy
         .list()
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
 
     Ok(Json(ListResponse {
         data,

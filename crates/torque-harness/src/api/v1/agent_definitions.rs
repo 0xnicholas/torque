@@ -39,17 +39,7 @@ pub async fn list(
         .agent_definition
         .list(limit + 1, cursor, q.sort.as_deref())
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();

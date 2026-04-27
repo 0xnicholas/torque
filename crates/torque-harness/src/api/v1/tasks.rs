@@ -77,17 +77,7 @@ pub async fn list_events(
         .event
         .list_by_resource("task", id, &[], limit)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok(Json(ListResponse {
         data: rows,
         pagination: Pagination {
@@ -108,17 +98,7 @@ pub async fn list_approvals(
         .approval
         .list_by_task(id, limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();
@@ -144,17 +124,7 @@ pub async fn list_delegations(
         .delegation
         .list_by_task(id, limit + 1)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     let has_more = rows.len() > limit as usize;
     if has_more {
         rows.pop();

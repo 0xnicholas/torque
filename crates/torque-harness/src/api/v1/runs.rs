@@ -114,17 +114,7 @@ pub async fn webhook_status(
         .run_repo
         .get(id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?
+        .map_err(ErrorBody::db_error)?
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,

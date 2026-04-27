@@ -13,6 +13,7 @@ pub use environment::{
     RuntimeHydrationSource, RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
 };
 pub use host::RuntimeHost;
+pub use torque_kernel::{ExecutionResult, StepDecision};
 
 #[cfg(test)]
 mod tests {

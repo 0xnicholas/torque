@@ -23,17 +23,7 @@ pub async fn create(
             req.child_agent_definition_selector,
         )
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok((StatusCode::CREATED, Json(delegation)))
 }
 

@@ -110,17 +110,7 @@ pub async fn get_messages(
         .recovery
         .get_checkpoint_messages(id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: "DB_ERROR".into(),
-                    message: e.to_string(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .map_err(ErrorBody::db_error)?;
     Ok(Json(CheckpointMessagesResponse {
         checkpoint_id: id,
         messages,
