@@ -168,6 +168,7 @@ impl LlmClient for OpenAiClient {
             let msg = Message {
                 role: choice.message.role,
                 content,
+                tool_calls: None,
             };
             (msg, reason)
         } else {

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<super::tools::ToolCall>>,
 }
 
 impl Message {
@@ -12,6 +14,7 @@ impl Message {
         Self {
             role: "system".into(),
             content: content.into(),
+            tool_calls: None,
         }
     }
 
@@ -19,6 +22,7 @@ impl Message {
         Self {
             role: "user".into(),
             content: content.into(),
+            tool_calls: None,
         }
     }
 
@@ -26,6 +30,7 @@ impl Message {
         Self {
             role: "assistant".into(),
             content: content.into(),
+            tool_calls: None,
         }
     }
 }

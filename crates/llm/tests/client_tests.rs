@@ -71,3 +71,45 @@ fn test_request_serialization() {
     assert!(json.contains("\"max_tokens\":100"));
     assert!(!json.contains("\"temperature\":")); // Should be omitted when None
 }
+
+#[test]
+fn test_message_with_tool_calls_serialization() {
+    let tool_call = llm::ToolCall {
+        id: "call_1".to_string(),
+        name: "test_func".to_string(),
+        arguments: serde_json::json!({"key": "value"}),
+    };
+    let msg = llm::Message {
+        role: "assistant".to_string(),
+        content: String::new(),
+        tool_calls: Some(vec![tool_call]),
+    };
+
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(json.contains("\"tool_calls\""));
+    assert!(json.contains("\"call_1\""));
+    assert!(json.contains("\"test_func\""));
+}
+
+#[test]
+fn test_message_without_tool_calls_omitted() {
+    let msg = llm::Message {
+        role: "user".to_string(),
+        content: "Hello".to_string(),
+        tool_calls: None,
+    };
+
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(!json.contains("tool_calls"));
+}
+
+#[test]
+fn test_message_tool_calls_deserialization() {
+    let json = r#"{"role":"assistant","content":"","tool_calls":[{"id":"call_1","name":"test_func","arguments":{"key":"value"}}]}"#;
+    let msg: llm::Message = serde_json::from_str(json).unwrap();
+    assert_eq!(msg.role, "assistant");
+    assert!(msg.tool_calls.is_some());
+    let calls = msg.tool_calls.unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].id, "call_1");
+}
