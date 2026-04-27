@@ -49,3 +49,61 @@ async fn test_chat_returns_tool_calls() {
 
     mock.assert_async().await;
 }
+
+#[tokio::test]
+async fn test_chat_streaming_returns_rate_limit_on_429() {
+    let mut server = mockito::Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/chat/completions")
+        .with_status(429)
+        .with_body(r#"{"error": {"message": "Too many requests"}}"#)
+        .create_async()
+        .await;
+
+    let client = OpenAiClient::new(
+        server.url(),
+        "test-key".to_string(),
+        "gpt-4".to_string(),
+    );
+
+    let request = ChatRequest::new("gpt-4", vec![Message::user("Hello")]);
+    let result = client.chat_streaming(request, Box::new(|_| {})).await;
+
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        llm::LlmError::RateLimitExceeded => {}
+        other => panic!("Expected RateLimitExceeded, got {:?}", other),
+    }
+
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_chat_streaming_returns_authentication_failed_on_401() {
+    let mut server = mockito::Server::new_async().await;
+
+    let mock = server
+        .mock("POST", "/chat/completions")
+        .with_status(401)
+        .with_body(r#"{"error": {"message": "Invalid API key"}}"#)
+        .create_async()
+        .await;
+
+    let client = OpenAiClient::new(
+        server.url(),
+        "bad-key".to_string(),
+        "gpt-4".to_string(),
+    );
+
+    let request = ChatRequest::new("gpt-4", vec![Message::user("Hello")]);
+    let result = client.chat_streaming(request, Box::new(|_| {})).await;
+
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        llm::LlmError::AuthenticationFailed => {}
+        other => panic!("Expected AuthenticationFailed, got {:?}", other),
+    }
+
+    mock.assert_async().await;
+}

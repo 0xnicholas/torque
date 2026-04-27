@@ -222,6 +222,15 @@ impl LlmClient for OpenAiClient {
             .await?;
 
         let status = response.status();
+
+        if status.as_u16() == 401 {
+            return Err(LlmError::AuthenticationFailed);
+        }
+
+        if status.as_u16() == 429 {
+            return Err(LlmError::RateLimitExceeded);
+        }
+
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(LlmError::InvalidResponse(format!(
