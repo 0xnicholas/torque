@@ -226,15 +226,7 @@ pub async fn publish(
         .get_instance(id)
         .await
         .map_err(ErrorBody::db_error)?
-        .ok_or((
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                code: "NOT_FOUND".into(),
-                message: "Team instance not found".into(),
-                details: None,
-                request_id: None,
-            }),
-        ))?;
+        .ok_or(ErrorBody::not_found("Team instance not found"))?;
 
     // TODO: Implement actual publish logic (update team instance status, create shared state entry)
     // For now, return 200 OK as placeholder

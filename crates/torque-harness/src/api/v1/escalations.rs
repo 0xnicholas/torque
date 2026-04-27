@@ -53,15 +53,7 @@ pub async fn get(
         .get_escalation(id)
         .await
         .map_err(ErrorBody::db_error)?
-        .ok_or((
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                code: "NOT_FOUND".into(),
-                message: "Escalation not found".into(),
-                details: None,
-                request_id: None,
-            }),
-        ))?;
+        .ok_or(ErrorBody::not_found("Escalation not found"))?;
 
     Ok(Json(escalation))
 }
@@ -82,17 +74,7 @@ pub async fn resolve(
         .get_escalation(id)
         .await
         .map_err(ErrorBody::db_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    code: "NOT_FOUND".into(),
-                    message: "Escalation not found".into(),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .ok_or_else(|| ErrorBody::not_found("Escalation not found"))?;
 
     let escalation = services
         .escalation_service

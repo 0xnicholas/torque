@@ -250,15 +250,7 @@ pub async fn approve_candidate(
     let candidate = match candidate {
         Some(c) => c,
         None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    code: "NOT_FOUND".into(),
-                    message: "Candidate not found".into(),
-                    details: None,
-                    request_id: None,
-                }),
-            ))
+            return Err(ErrorBody::not_found("Candidate not found"))
         }
     };
 
@@ -347,15 +339,7 @@ pub async fn reject_candidate(
                 .await;
             Ok(StatusCode::NO_CONTENT)
         }
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                code: "NOT_FOUND".into(),
-                message: "Candidate not found".into(),
-                details: None,
-                request_id: None,
-            }),
-        )),
+        Ok(None) => Err(ErrorBody::not_found("Candidate not found")),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
@@ -388,15 +372,7 @@ pub async fn merge_candidate(
     let candidate = match candidate {
         Some(c) => c,
         None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    code: "NOT_FOUND".into(),
-                    message: "Candidate not found".into(),
-                    details: None,
-                    request_id: None,
-                }),
-            ))
+            return Err(ErrorBody::not_found("Candidate not found"))
         }
     };
 

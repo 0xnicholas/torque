@@ -115,17 +115,7 @@ pub async fn webhook_status(
         .get(id)
         .await
         .map_err(ErrorBody::db_error)?
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    code: "NOT_FOUND".into(),
-                    message: format!("Run {} not found", id),
-                    details: None,
-                    request_id: None,
-                }),
-            )
-        })?;
+        .ok_or_else(|| ErrorBody::not_found(format!("Run {} not found", id)))?;
 
     Ok(Json(WebhookStatusResponse {
         run_id: run.id,
