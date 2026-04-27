@@ -24,11 +24,11 @@ pub use execution::{
     ExecutionEvent, ExecutionMode, ExecutionOutcome, ExecutionRequest, ExecutionResult,
 };
 pub use ids::{
-    AgentDefinitionId, AgentInstanceId, ApprovalRequestId, ArtifactId, DelegationRequestId,
-    ExecutionRequestId, ExternalContextRefId, TaskId,
+    AgentDefinitionId, AgentInstanceId, ApprovalRequestId, ArtifactId, CheckpointId,
+    DelegationRequestId, ExecutionRequestId, ExternalContextRefId, TaskId,
 };
 pub use recovery::{
-    Checkpoint, CheckpointId, CheckpointStateView, RecoveryAction, RecoveryAssessment,
+    Checkpoint, CheckpointStateView, RecoveryAction, RecoveryAssessment,
     RecoveryDisposition, RecoveryView,
 };
 pub use runtime::{

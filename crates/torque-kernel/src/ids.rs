@@ -26,3 +26,4 @@ define_id!(DelegationRequestId);
 define_id!(ApprovalRequestId);
 define_id!(ArtifactId);
 define_id!(ExternalContextRefId);
+define_id!(CheckpointId);

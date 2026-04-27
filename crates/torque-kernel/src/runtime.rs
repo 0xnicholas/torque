@@ -12,12 +12,13 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::recovery::{
-    Checkpoint, CheckpointId, CheckpointStateView, RecoveryAction, RecoveryAssessment,
+    Checkpoint, CheckpointStateView, RecoveryAction, RecoveryAssessment,
     RecoveryDisposition, RecoveryView,
 };
 use crate::{
     AgentDefinition, AgentDefinitionId, AgentInstance, AgentInstanceId, AgentInstanceState,
-    ExecutionEngine, ExecutionRequest, ExecutionResult, KernelError, StepDecision, Task, TaskId,
+    CheckpointId, ExecutionEngine, ExecutionRequest, ExecutionResult, KernelError, StepDecision,
+    Task, TaskId,
     TaskInputRef, TaskPacket,
 };
 use chrono::Utc;

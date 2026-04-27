@@ -4,22 +4,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    AgentInstanceId, AgentInstanceState, ApprovalRequestId, DelegationRequestId, ExecutionOutcome,
-    ExecutionResult, TaskId, TaskState,
+    AgentInstanceId, AgentInstanceState, ApprovalRequestId, CheckpointId, DelegationRequestId,
+    ExecutionOutcome, ExecutionResult, TaskId, TaskState,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CheckpointId(Uuid);
-
-impl CheckpointId {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    pub fn as_uuid(&self) -> Uuid {
-        self.0
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Checkpoint {
