@@ -5,10 +5,7 @@
 
 pub mod agent_definition;
 pub mod agent_instance;
-pub mod approval;
-pub mod artifact;
 pub mod context_ref;
-pub mod delegation;
 pub mod engine;
 pub mod error;
 pub mod execution;
@@ -20,10 +17,7 @@ pub mod task_packet;
 
 pub use agent_definition::{AgentDefinition, AgentLimits};
 pub use agent_instance::{AgentInstance, AgentInstanceState};
-pub use approval::{ApprovalKind, ApprovalRequest, ApprovalState};
-pub use artifact::{Artifact, ArtifactBodyRef, ArtifactKind};
 pub use context_ref::{AccessMode, ExternalContextKind, ExternalContextRef, SyncPolicy};
-pub use delegation::{DelegationRequest, DelegationResult, DelegationState};
 pub use engine::{ExecutionEngine, StepDecision};
 pub use error::{KernelError, StateTransitionError, ValidationError};
 pub use execution::{

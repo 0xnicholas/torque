@@ -1,8 +1,11 @@
 //! Kernel-owned runtime contracts plus an in-memory reference implementation.
 //!
-//! Production runtime environments are expected to compose these contracts
-//! above the kernel. This module stays responsible for stable semantics and
-//! a small in-memory implementation for tests and local reference execution.
+//! Defines the [`KernelRuntime`] and [`RuntimeStore`] traits that form the
+//! execution API boundary. Production runtime environments compose these
+//! contracts above the kernel (see `torque-runtime`).
+//!
+//! [`InMemoryKernelRuntime`] is a reference implementation useful for tests
+//! and local execution. It is not the full production runtime environment.
 
 use std::collections::HashMap;
 
@@ -19,6 +22,12 @@ use crate::{
 };
 use chrono::Utc;
 
+/// Primary kernel execution interface.
+///
+/// [`KernelRuntime::handle`] processes a new or continuing execution request
+/// with a step decision. For resume flows (approval, tool, delegation),
+/// use [`KernelRuntime::handle_command`] which carries a [`RuntimeCommand`]
+/// with an optional [`ResumeSignal`].
 pub trait KernelRuntime {
     fn handle(
         &mut self,
@@ -65,6 +74,12 @@ impl RuntimeCommand {
     }
 }
 
+/// Persistence contract for kernel runtime state.
+///
+/// Implementations store agent definitions, instances, tasks, execution
+/// results, and checkpoints. The in-memory implementation
+/// ([`InMemoryRuntimeStore`]) is suitable for tests. Production backends
+/// should implement this trait against a durable store.
 pub trait RuntimeStore {
     fn agent_definition(&self, agent_definition_id: AgentDefinitionId) -> Option<&AgentDefinition>;
     fn put_agent_definition(&mut self, agent_definition: AgentDefinition);

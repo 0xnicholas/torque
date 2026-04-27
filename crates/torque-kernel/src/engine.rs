@@ -20,6 +20,12 @@ pub enum StepDecision {
 }
 
 #[derive(Debug, Default)]
+/// Core execution engine that validates state transitions and produces
+/// execution events.
+///
+/// [`ExecutionEngine::step`] takes an instance, a task, a task packet,
+/// and a step decision, then applies state transitions and returns
+/// an [`ExecutionResult`] with the resulting events.
 pub struct ExecutionEngine;
 
 impl ExecutionEngine {
