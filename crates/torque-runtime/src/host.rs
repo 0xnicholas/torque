@@ -10,7 +10,10 @@ use torque_kernel::{
     AgentDefinition, AgentInstanceId, ExecutionRequest, ExecutionResult, InMemoryKernelRuntime,
     KernelError, KernelRuntime, StepDecision,
 };
+
+/// Maximum tool calls per execution before returning an error.
 pub const MAX_TOOL_CALLS: usize = 20;
+/// Maximum consecutive tool failures before aborting execution.
 pub const MAX_CONSECUTIVE_TOOL_FAILURES: usize = 3;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,9 +24,12 @@ pub enum RuntimeHostError {
     Runtime(#[from] anyhow::Error),
 }
 
+/// Controls when the runtime host creates checkpoints during execution.
 #[derive(Debug, Clone)]
 pub struct RuntimeCheckpointPolicy {
+    /// Create a checkpoint after each LLM turn that returns tool calls.
     pub checkpoint_on_awaiting_llm: bool,
+    /// Create a checkpoint after task completion.
     pub checkpoint_on_task_complete: bool,
 }
 
@@ -36,6 +42,14 @@ impl Default for RuntimeCheckpointPolicy {
     }
 }
 
+/// Production execution host that orchestrates kernel steps with
+/// model turns and tool calls.
+///
+/// Wraps an [`InMemoryKernelRuntime`] and delegates I/O to pluggable
+/// port implementations ([`RuntimeModelDriver`], [`RuntimeToolExecutor`],
+/// [`RuntimeOutputSink`]). Constructed with at least an
+/// [`RuntimeEventSink`] and [`RuntimeCheckpointSink`]; hydration source
+/// and checkpoint policy are optional builder methods.
 pub struct RuntimeHost {
     runtime: InMemoryKernelRuntime,
     event_sink: Arc<dyn crate::environment::RuntimeEventSink>,
