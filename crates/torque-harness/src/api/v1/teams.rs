@@ -4,7 +4,7 @@ use crate::models::v1::team::{
     TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTask,
     TeamTaskCreate,
 };
-use crate::service::{team::SupervisorResult, ServiceContainer};
+use crate::service::ServiceContainer;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

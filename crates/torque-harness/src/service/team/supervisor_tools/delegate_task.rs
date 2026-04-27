@@ -1,9 +1,8 @@
-use crate::models::v1::team::{MemberSelector, PublishScope, TeamTaskStatus};
+use crate::models::v1::team::MemberSelector;
 use crate::repository::{DelegationRepository, TeamMemberRepository, TeamTaskRepository};
 use crate::service::build_delegation_packet;
 use crate::service::team::selector::SelectorResolver;
-use crate::service::team::shared_state::SharedTaskStateManager;
-use crate::tools::{Tool, ToolArc, ToolResult};
+use crate::tools::{Tool, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;

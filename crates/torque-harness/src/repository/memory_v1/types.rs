@@ -3,9 +3,8 @@ use crate::models::v1::artifact::Artifact;
 use crate::models::v1::external_context::ExternalContextRef;
 use crate::models::v1::gating::SimilarMemoryResult;
 use crate::models::v1::memory::{
-    DecisionStats, HybridSearchRow, MemoryCategory, MemoryDecisionLog, MemoryEntry, MemoryEntryRow,
-    MemoryWriteCandidate, MemoryWriteCandidateStatus, RejectionReasonCount, SemanticSearchResult,
-    SemanticSearchRow, SessionMemoryEntry,
+    DecisionStats, MemoryCategory, MemoryDecisionLog, MemoryEntry,
+    MemoryWriteCandidate, MemoryWriteCandidateStatus, SemanticSearchResult, SessionMemoryEntry,
 };
 use async_trait::async_trait;
 use uuid::Uuid;

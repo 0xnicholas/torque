@@ -1,4 +1,3 @@
-use crate::db::Database;
 use crate::models::v1::artifact::Artifact;
 use crate::models::v1::external_context::ExternalContextRef;
 use crate::models::v1::gating::SimilarMemoryResult;

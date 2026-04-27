@@ -1,5 +1,4 @@
 use crate::models::v1::memory::MemoryWriteCandidate;
-use std::sync::Arc;
 use tokio::sync::broadcast;
 
 #[derive(Debug, Clone)]

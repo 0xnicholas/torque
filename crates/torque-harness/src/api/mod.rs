@@ -1,9 +1,6 @@
 use crate::db::Database;
 use crate::service::ServiceContainer;
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::Router;
 use llm::OpenAiClient;
 use std::sync::Arc;
 

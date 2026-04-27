@@ -1,7 +1,7 @@
 use crate::models::v1::agent_definition::AgentDefinition as V1AgentDefinition;
 use crate::models::v1::run::RunRequest;
 use torque_kernel::{
-    AgentDefinition, AgentDefinition as KernelAgentDefinition, ExecutionMode, ExecutionRequest,
+    AgentDefinition as KernelAgentDefinition, ExecutionMode, ExecutionRequest,
 };
 
 pub fn v1_agent_definition_to_kernel(def: &V1AgentDefinition) -> KernelAgentDefinition {

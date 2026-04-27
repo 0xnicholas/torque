@@ -2,9 +2,9 @@ use crate::config;
 use crate::embedding::EmbeddingGenerator;
 use crate::models::v1::gating::{
     CandidateGenerationConfig, ConflictResult, ConflictType, DecisionFactors, DedupAction,
-    DedupResult, DedupThresholds, EquivalenceCheckInput, EquivalenceResult, ExecutionSummary,
+    DedupResult, DedupThresholds, EquivalenceCheckInput, EquivalenceResult,
     GateDecision, GateDecisionType, GatingConfig, MergeStrategy, QualityScore, ReviewPriority,
-    RiskAssessment, RiskLevel, SimilarMemoryResult, WriteMode,
+    RiskAssessment, RiskLevel, WriteMode,
 };
 use crate::models::v1::memory::{
     MemoryCategory, MemoryContent, MemoryWriteCandidate, MemoryWriteCandidateStatus,
