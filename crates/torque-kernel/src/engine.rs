@@ -44,7 +44,7 @@ impl ExecutionEngine {
         // =============================================================================
         // CHECKPOINT CREATION POINT
         // =============================================================================
-        // TODO (Phase 2): When transitioning to WaitingTool/WaitingApproval/WaitingSubagent/Suspended,
+        // TODO (Phase 2): When transitioning to AwaitingTool/AwaitingApproval/AwaitingDelegation/Suspended,
         // trigger checkpoint creation via callback to persistence layer.
         //
         // Per Recovery Core Design Section 5.2 - "Recommended checkpoint contents should
@@ -56,9 +56,9 @@ impl ExecutionEngine {
         // 3. Wiring callback into state transition logic below
         //
         // Key state transitions that should trigger checkpoint:
-        // - Running -> WaitingTool (line 49)
-        // - Running -> WaitingApproval (line 53)
-        // - Running -> WaitingSubagent (line 58)
+        // - Running -> AwaitingTool (line 49)
+        // - Running -> AwaitingApproval (line 53)
+        // - Running -> AwaitingDelegation (line 58)
         // - Running -> Suspended (line 84)
         // =============================================================================
 

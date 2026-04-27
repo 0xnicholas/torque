@@ -101,14 +101,14 @@ fn execution_engine_moves_running_work_into_waiting_approval() {
         .expect("step should succeed");
 
     assert_eq!(result.outcome, ExecutionOutcome::AwaitApproval);
-    assert_eq!(result.instance_state, AgentInstanceState::WaitingApproval);
+    assert_eq!(result.instance_state, AgentInstanceState::AwaitingApproval);
     assert_eq!(result.task_state, TaskState::InProgress);
     assert_eq!(result.approval_request_ids, vec![approval_id]);
     assert!(
         result
             .events
             .iter()
-            .any(|event| matches!(event, ExecutionEvent::InstanceStateChanged { to, .. } if *to == AgentInstanceState::WaitingApproval))
+            .any(|event| matches!(event, ExecutionEvent::InstanceStateChanged { to, .. } if *to == AgentInstanceState::AwaitingApproval))
     );
 }
 
@@ -406,7 +406,7 @@ fn runtime_exports_checkpoint_state_view() {
     assert_eq!(state_view.instance_id, result.instance_id);
     assert_eq!(
         state_view.instance_state,
-        AgentInstanceState::WaitingApproval
+        AgentInstanceState::AwaitingApproval
     );
     assert_eq!(state_view.active_task_id, Some(result.task_id));
     assert_eq!(state_view.active_task_state, Some(TaskState::InProgress));
@@ -860,7 +860,7 @@ fn runtime_resumes_waiting_approval_before_completing_task() {
         )
         .expect("first request should enter waiting approval");
 
-    assert_eq!(first.instance_state, AgentInstanceState::WaitingApproval);
+    assert_eq!(first.instance_state, AgentInstanceState::AwaitingApproval);
     assert_eq!(first.task_state, TaskState::InProgress);
 
     let second = runtime

@@ -559,7 +559,7 @@ async fn test_full_recovery_flow_restore_and_resume() {
     assert!(
         matches!(
             restored.status,
-            AgentInstanceStatus::Ready | AgentInstanceStatus::WaitingTool
+            AgentInstanceStatus::Ready | AgentInstanceStatus::AwaitingTool
         ),
         "Instance should be restored, got {:?}",
         restored.status
@@ -572,6 +572,6 @@ async fn test_full_recovery_flow_restore_and_resume() {
     let assessment = recovery.assess_recovery(checkpoint_id.0).await.unwrap();
     assert!(
         !assessment.is_terminal(),
-        "Assessment should not be terminal for WaitingTool"
+        "Assessment should not be terminal for AwaitingTool"
     );
 }

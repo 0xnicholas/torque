@@ -92,7 +92,7 @@ impl EventReplayHandler for ApprovalRequestedHandler {
         let instance_id = event.resource_id;
         let payload = &event.payload;
 
-        repo.update_status(instance_id, AgentInstanceStatus::WaitingApproval)
+        repo.update_status(instance_id, AgentInstanceStatus::AwaitingApproval)
             .await
             .map_err(|e| format!("Failed to update instance status: {}", e))?;
 
@@ -118,7 +118,7 @@ impl EventReplayHandler for DelegationRequestedHandler {
         let instance_id = event.resource_id;
         let payload = &event.payload;
 
-        repo.update_status(instance_id, AgentInstanceStatus::WaitingSubagent)
+        repo.update_status(instance_id, AgentInstanceStatus::AwaitingDelegation)
             .await
             .map_err(|e| format!("Failed to update instance status: {}", e))?;
 

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::{
     error::StateTransitionError,
@@ -11,10 +12,25 @@ pub enum AgentInstanceState {
     Hydrating,
     Ready,
     Running,
-    WaitingTool,
-    WaitingSubagent,
-    WaitingApproval,
+    AwaitingTool,
+    AwaitingDelegation,
+    AwaitingApproval,
     Suspended,
+}
+
+impl fmt::Display for AgentInstanceState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Created => write!(f, "created"),
+            Self::Hydrating => write!(f, "hydrating"),
+            Self::Ready => write!(f, "ready"),
+            Self::Running => write!(f, "running"),
+            Self::AwaitingTool => write!(f, "awaiting_tool"),
+            Self::AwaitingDelegation => write!(f, "awaiting_delegation"),
+            Self::AwaitingApproval => write!(f, "awaiting_approval"),
+            Self::Suspended => write!(f, "suspended"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,9 +92,9 @@ impl AgentInstance {
             &[
                 AgentInstanceState::Hydrating,
                 AgentInstanceState::Running,
-                AgentInstanceState::WaitingTool,
-                AgentInstanceState::WaitingSubagent,
-                AgentInstanceState::WaitingApproval,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
                 AgentInstanceState::Suspended,
             ],
         )
@@ -92,9 +108,9 @@ impl AgentInstance {
         self.transition(
             AgentInstanceState::Running,
             &[
-                AgentInstanceState::WaitingTool,
-                AgentInstanceState::WaitingSubagent,
-                AgentInstanceState::WaitingApproval,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
                 AgentInstanceState::Suspended,
             ],
         )
@@ -102,7 +118,7 @@ impl AgentInstance {
 
     pub fn wait_for_tool(&mut self) -> Result<(), StateTransitionError> {
         self.transition(
-            AgentInstanceState::WaitingTool,
+            AgentInstanceState::AwaitingTool,
             &[AgentInstanceState::Running],
         )
     }
@@ -112,7 +128,7 @@ impl AgentInstance {
         approval_id: ApprovalRequestId,
     ) -> Result<(), StateTransitionError> {
         self.transition(
-            AgentInstanceState::WaitingApproval,
+            AgentInstanceState::AwaitingApproval,
             &[AgentInstanceState::Running],
         )?;
         self.pending_approval_ids.push(approval_id);
@@ -124,7 +140,7 @@ impl AgentInstance {
         delegation_id: DelegationRequestId,
     ) -> Result<(), StateTransitionError> {
         self.transition(
-            AgentInstanceState::WaitingSubagent,
+            AgentInstanceState::AwaitingDelegation,
             &[AgentInstanceState::Running],
         )?;
         self.child_delegation_ids.push(delegation_id);
@@ -136,9 +152,9 @@ impl AgentInstance {
             AgentInstanceState::Suspended,
             &[
                 AgentInstanceState::Running,
-                AgentInstanceState::WaitingTool,
-                AgentInstanceState::WaitingSubagent,
-                AgentInstanceState::WaitingApproval,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
             ],
         )
     }

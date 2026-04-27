@@ -284,9 +284,9 @@ impl RecoveryService {
                     "READY" => AgentInstanceStatus::Ready,
                     "RUNNING" => AgentInstanceStatus::Running,
                     "SUSPENDED" => AgentInstanceStatus::Suspended,
-                    "WAITING_SUBAGENT" => AgentInstanceStatus::WaitingSubagent,
-                    "WAITING_APPROVAL" => AgentInstanceStatus::WaitingApproval,
-                    "WAITING_TOOL" => AgentInstanceStatus::WaitingTool,
+                    "WAITING_SUBAGENT" => AgentInstanceStatus::AwaitingDelegation,
+                    "WAITING_APPROVAL" => AgentInstanceStatus::AwaitingApproval,
+                    "WAITING_TOOL" => AgentInstanceStatus::AwaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo
@@ -412,7 +412,7 @@ impl RecoveryService {
                                         }
                                         AgentInstanceStatus::Completed => {
                                             tracing::info!(
-                                                "Reconciliation: child {} completed but parent {} still WaitingSubagent",
+                                                "Reconciliation: child {} completed but parent {} still AwaitingDelegation",
                                                 child_id,
                                                 instance_id
                                             );
@@ -585,9 +585,9 @@ impl RecoveryService {
                     "READY" => AgentInstanceStatus::Ready,
                     "RUNNING" => AgentInstanceStatus::Running,
                     "SUSPENDED" => AgentInstanceStatus::Suspended,
-                    "WAITING_SUBAGENT" => AgentInstanceStatus::WaitingSubagent,
-                    "WAITING_APPROVAL" => AgentInstanceStatus::WaitingApproval,
-                    "WAITING_TOOL" => AgentInstanceStatus::WaitingTool,
+                    "WAITING_SUBAGENT" => AgentInstanceStatus::AwaitingDelegation,
+                    "WAITING_APPROVAL" => AgentInstanceStatus::AwaitingApproval,
+                    "WAITING_TOOL" => AgentInstanceStatus::AwaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo

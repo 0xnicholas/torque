@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::{
     error::{StateTransitionError, ValidationError},
@@ -12,6 +13,18 @@ pub enum TaskState {
     Blocked,
     Done,
     Failed,
+}
+
+impl fmt::Display for TaskState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open => write!(f, "open"),
+            Self::InProgress => write!(f, "in_progress"),
+            Self::Blocked => write!(f, "blocked"),
+            Self::Done => write!(f, "done"),
+            Self::Failed => write!(f, "failed"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

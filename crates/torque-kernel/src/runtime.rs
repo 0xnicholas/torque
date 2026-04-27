@@ -421,9 +421,9 @@ impl InMemoryKernelRuntime {
             .map(|result| result.outcome);
 
         let disposition = match instance.state() {
-            AgentInstanceState::WaitingApproval => RecoveryDisposition::AwaitingApproval,
-            AgentInstanceState::WaitingTool => RecoveryDisposition::AwaitingTool,
-            AgentInstanceState::WaitingSubagent => RecoveryDisposition::AwaitingDelegation,
+            AgentInstanceState::AwaitingApproval => RecoveryDisposition::AwaitingApproval,
+            AgentInstanceState::AwaitingTool => RecoveryDisposition::AwaitingTool,
+            AgentInstanceState::AwaitingDelegation => RecoveryDisposition::AwaitingDelegation,
             AgentInstanceState::Suspended => RecoveryDisposition::Suspended,
             _ if matches!(latest_outcome, Some(crate::ExecutionOutcome::FailedTask)) => {
                 RecoveryDisposition::Failed
@@ -583,7 +583,7 @@ impl KernelRuntime for InMemoryKernelRuntime {
 
             match instance.state() {
                 AgentInstanceState::Ready => instance.begin_running()?,
-                AgentInstanceState::WaitingApproval => match command.resume_signal {
+                AgentInstanceState::AwaitingApproval => match command.resume_signal {
                     Some(ResumeSignal::ApprovalGranted {
                         approval_request_id,
                     }) => {
@@ -608,7 +608,7 @@ impl KernelRuntime for InMemoryKernelRuntime {
                         .into());
                     }
                 },
-                AgentInstanceState::WaitingTool => match command.resume_signal {
+                AgentInstanceState::AwaitingTool => match command.resume_signal {
                     Some(ResumeSignal::ToolCompleted) => {
                         instance.resume_running()?;
                         applied_resume_signal = Some(ResumeSignal::ToolCompleted);
@@ -628,7 +628,7 @@ impl KernelRuntime for InMemoryKernelRuntime {
                         .into());
                     }
                 },
-                AgentInstanceState::WaitingSubagent => match command.resume_signal {
+                AgentInstanceState::AwaitingDelegation => match command.resume_signal {
                     Some(ResumeSignal::DelegationCompleted {
                         delegation_request_id,
                     }) => {
