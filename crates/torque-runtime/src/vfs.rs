@@ -280,22 +280,22 @@ pub struct WorkspaceBackend {
 
 impl WorkspaceBackend {
     pub fn new(root: PathBuf) -> Self {
-        Self { root }
+        let canonical = root.canonicalize().unwrap_or(root);
+        Self { root: canonical }
     }
 
     fn resolve(&self, path: &str) -> anyhow::Result<PathBuf> {
         ensure_prefix(path, "/workspace")?;
         let relative = path.trim_start_matches("/workspace").trim_start_matches('/');
-        let resolved = self.root.join(relative);
 
-        // Prevent path traversal: canonicalize and verify result stays
-        // within the workspace root.
-        let canonical = match resolved.canonicalize() {
-            Ok(p) => p,
-            Err(_) => return Ok(resolved),
-        };
-        let canonical_root = self.root.canonicalize().unwrap_or_else(|_| self.root.clone());
-        if !canonical.starts_with(&canonical_root) {
+        if relative.is_empty() {
+            return Ok(self.root.clone());
+        }
+
+        let resolved = self.root.join(relative);
+        let canonical = resolved.canonicalize().unwrap_or(resolved);
+
+        if !canonical.starts_with(&self.root) {
             return Err(anyhow::anyhow!(
                 "path '{}' escapes workspace root",
                 path

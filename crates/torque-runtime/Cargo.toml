@@ -13,3 +13,6 @@ uuid = { workspace = true }
 thiserror = { workspace = true }
 llm = { path = "../llm" }
 torque-kernel = { path = "../torque-kernel" }
+
+[dev-dependencies]
+tempfile = "3"
