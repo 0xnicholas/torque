@@ -1,10 +1,8 @@
-use torque_runtime::checkpoint::Message;
-
 use serial_test::serial;
+use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use torque_harness::db::Database;
-use torque_harness::kernel_bridge::PostgresCheckpointer;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInstanceStatus};
 use torque_harness::repository::{
@@ -12,6 +10,12 @@ use torque_harness::repository::{
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
     PostgresCheckpointRepositoryExt,
 };
+use torque_harness::runtime::checkpoint::PostgresCheckpointer;
+use torque_harness::service::RecoveryService;
+use torque_kernel::AgentInstanceId;
+use torque_runtime::checkpoint::{Message, RuntimeCheckpointPayload};
+use torque_runtime::RuntimeCheckpointSink;
+use uuid::Uuid;
 
 async fn setup_test_db() -> Option<Database> {
     let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
@@ -26,6 +30,30 @@ async fn setup_test_db() -> Option<Database> {
     Some(Database::new(pool))
 }
 
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+struct CheckpointState {
+    messages: Vec<Message>,
+    tool_call_count: usize,
+    intermediate_results: Vec<serde_json::Value>,
+    custom_state: Option<serde_json::Value>,
+}
+
+async fn save_checkpoint(
+    checkpointer: &PostgresCheckpointer,
+    instance_id: Uuid,
+    state: CheckpointState,
+) -> anyhow::Result<Uuid> {
+    let state_json = serde_json::to_value(&state)?;
+    let payload = RuntimeCheckpointPayload {
+        instance_id: AgentInstanceId::from_uuid(instance_id),
+        node_id: instance_id,
+        reason: "test_checkpoint".to_string(),
+        state: state_json,
+    };
+    let cp_ref = checkpointer.save(payload).await?;
+    Ok(cp_ref.checkpoint_id)
+}
+
 #[tokio::test]
 #[serial]
 async fn test_checkpoint_persistence_and_retrieval() {
@@ -37,7 +65,7 @@ async fn test_checkpoint_persistence_and_retrieval() {
 
     let instance_id = uuid::Uuid::new_v4();
     let task_id = uuid::Uuid::new_v4();
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -51,8 +79,7 @@ async fn test_checkpoint_persistence_and_retrieval() {
         })),
     };
 
-    let checkpoint_id = checkpointer
-        .save(instance_id, task_id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance_id, state)
         .await
         .expect("should save checkpoint");
 
@@ -63,7 +90,7 @@ async fn test_checkpoint_persistence_and_retrieval() {
 
     assert_eq!(
         loaded_state
-            .custom_state
+            .get("custom_state")
             .as_ref()
             .and_then(|v| v.get("instance_state"))
             .and_then(|v| v.as_str()),
@@ -71,7 +98,7 @@ async fn test_checkpoint_persistence_and_retrieval() {
     );
     assert_eq!(
         loaded_state
-            .custom_state
+            .get("custom_state")
             .as_ref()
             .and_then(|v| v.get("checkpoint_reason"))
             .and_then(|v| v.as_str()),
@@ -96,7 +123,7 @@ async fn test_checkpoint_list_by_instance() {
     let instance_id = uuid::Uuid::new_v4();
 
     for i in 0..3 {
-        let state = checkpointer::CheckpointState {
+        let state = CheckpointState {
             messages: vec![],
             tool_call_count: 0,
             intermediate_results: vec![],
@@ -105,8 +132,7 @@ async fn test_checkpoint_list_by_instance() {
                 "checkpoint_reason": format!("reason_{}", i),
             })),
         };
-        let _ = checkpointer
-            .save(instance_id, uuid::Uuid::new_v4(), state)
+        let _ = save_checkpoint(checkpointer.as_ref(), instance_id, state)
             .await
             .expect("should save checkpoint");
     }
@@ -156,7 +182,7 @@ async fn test_checkpoint_model_query() {
         .await
         .expect("should create agent instance");
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -166,8 +192,7 @@ async fn test_checkpoint_model_query() {
         })),
     };
     let checkpointer: Arc<PostgresCheckpointer> = Arc::new(PostgresCheckpointer::new(db.clone()));
-    let _ = checkpointer
-        .save(instance.id, instance.id, state)
+    let _ = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
@@ -190,7 +215,7 @@ async fn test_checkpoint_model_query() {
 #[tokio::test]
 #[serial]
 async fn test_checkpoint_state_format() {
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -205,7 +230,7 @@ async fn test_checkpoint_state_format() {
     };
 
     let serialized = serde_json::to_string(&state).expect("should serialize");
-    let deserialized: checkpointer::CheckpointState =
+    let deserialized: CheckpointState =
         serde_json::from_str(&serialized).expect("should deserialize");
 
     assert_eq!(
@@ -277,7 +302,7 @@ async fn test_recovery_service_reads_checkpoint_format() {
         .await
         .unwrap();
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -290,13 +315,12 @@ async fn test_recovery_service_reads_checkpoint_format() {
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .unwrap();
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
-    let result = recovery.restore_from_checkpoint(checkpoint_id.0).await;
+    let result = recovery.restore_from_checkpoint(checkpoint_id).await;
 
     assert!(
         result.is_ok(),
@@ -358,7 +382,7 @@ async fn test_reconciliation_resolves_child_failure() {
         .await
         .unwrap();
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -371,8 +395,7 @@ async fn test_reconciliation_resolves_child_failure() {
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer
-        .save(parent.id, parent.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), parent.id, state)
         .await
         .unwrap();
 
@@ -382,7 +405,7 @@ async fn test_reconciliation_resolves_child_failure() {
         .unwrap();
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
-    let result = recovery.restore_from_checkpoint(checkpoint_id.0).await;
+    let result = recovery.restore_from_checkpoint(checkpoint_id).await;
 
     assert!(result.is_ok(), "Restore should succeed: {:?}", result.err());
 
@@ -433,7 +456,7 @@ async fn test_recovery_assess_recovery() {
         .await
         .unwrap();
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -446,14 +469,13 @@ async fn test_recovery_assess_recovery() {
             "event_sequence": 1,
         })),
     };
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .unwrap();
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
-    let assessment = recovery.assess_recovery(checkpoint_id.0).await;
+    let assessment = recovery.assess_recovery(checkpoint_id).await;
     assert!(
         assessment.is_ok(),
         "assess_recovery should succeed: {:?}",
@@ -513,7 +535,7 @@ async fn test_full_recovery_flow_restore_and_resume() {
         .await
         .unwrap();
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![
             Message {
                 role: "user".to_string(),
@@ -535,8 +557,7 @@ async fn test_full_recovery_flow_restore_and_resume() {
             "event_sequence": 10,
         })),
     };
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .unwrap();
 
@@ -552,7 +573,7 @@ async fn test_full_recovery_flow_restore_and_resume() {
     );
 
     let (restored, _messages, _rebuilt_state) = recovery
-        .restore_from_checkpoint(checkpoint_id.0)
+        .restore_from_checkpoint(checkpoint_id)
         .await
         .unwrap();
 
@@ -566,10 +587,10 @@ async fn test_full_recovery_flow_restore_and_resume() {
     );
 
     let loaded = checkpointer.load(checkpoint_id).await.unwrap();
-    assert_eq!(loaded.messages.len(), 2, "Should preserve message history");
-    assert_eq!(loaded.tool_call_count, 1);
+    assert_eq!(loaded.get("messages").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0), 2, "Should preserve message history");
+    assert_eq!(loaded.get("tool_call_count").and_then(|v| v.as_u64()).unwrap_or(0), 1);
 
-    let assessment = recovery.assess_recovery(checkpoint_id.0).await.unwrap();
+    let assessment = recovery.assess_recovery(checkpoint_id).await.unwrap();
     assert!(
         !assessment.is_terminal(),
         "Assessment should not be terminal for AwaitingTool"

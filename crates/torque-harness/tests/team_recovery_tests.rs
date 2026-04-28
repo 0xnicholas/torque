@@ -14,6 +14,7 @@ use torque_harness::repository::{
     TeamTaskRepository,
 };
 use torque_harness::service::recovery::RecoveryService;
+use torque_runtime::checkpoint::Message;
 use uuid::Uuid;
 
 struct MockAgentInstanceRepository;
@@ -93,7 +94,7 @@ impl CheckpointRepositoryExt for MockCheckpointRepository {
     async fn get_messages(
         &self,
         _checkpoint_id: Uuid,
-    ) -> anyhow::Result<Vec<checkpointer::Message>> {
+    ) -> anyhow::Result<Vec<Message>> {
         Ok(vec![])
     }
 }

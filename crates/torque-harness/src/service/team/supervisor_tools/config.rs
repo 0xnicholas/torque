@@ -75,6 +75,7 @@ mod tests {
     use super::*;
     use crate::models::v1::delegation::{Delegation, DelegationStatus};
     use crate::repository::DelegationRepository;
+    use crate::tools::Tool;
     use async_trait::async_trait;
     use std::sync::Arc;
     use uuid::Uuid;

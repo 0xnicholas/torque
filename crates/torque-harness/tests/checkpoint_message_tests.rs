@@ -1,10 +1,8 @@
-use torque_runtime::checkpoint::Message;
-
 use serial_test::serial;
+use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use torque_harness::db::Database;
-use torque_harness::kernel_bridge::PostgresCheckpointer;
 use torque_harness::models::v1::agent_definition::AgentDefinitionCreate;
 use torque_harness::models::v1::agent_instance::{AgentInstanceCreate, AgentInstanceStatus};
 use torque_harness::repository::PostgresEventRepositoryExt;
@@ -13,7 +11,11 @@ use torque_harness::repository::{
     PostgresAgentDefinitionRepository, PostgresAgentInstanceRepository,
     PostgresCheckpointRepositoryExt,
 };
+use torque_harness::runtime::checkpoint::PostgresCheckpointer;
 use torque_harness::service::RecoveryService;
+use torque_kernel::AgentInstanceId;
+use torque_runtime::checkpoint::{Message, RuntimeCheckpointPayload};
+use torque_runtime::RuntimeCheckpointSink;
 use uuid::Uuid;
 
 async fn setup_test_db() -> Option<Database> {
@@ -27,6 +29,30 @@ async fn setup_test_db() -> Option<Database> {
     };
 
     Some(Database::new(pool))
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CheckpointState {
+    messages: Vec<Message>,
+    tool_call_count: usize,
+    intermediate_results: Vec<serde_json::Value>,
+    custom_state: Option<serde_json::Value>,
+}
+
+async fn save_checkpoint(
+    checkpointer: &PostgresCheckpointer,
+    instance_id: Uuid,
+    state: CheckpointState,
+) -> anyhow::Result<Uuid> {
+    let state_json = serde_json::to_value(&state)?;
+    let payload = RuntimeCheckpointPayload {
+        instance_id: AgentInstanceId::from_uuid(instance_id),
+        node_id: instance_id,
+        reason: "test_checkpoint".to_string(),
+        state: state_json,
+    };
+    let cp_ref = checkpointer.save(payload).await?;
+    Ok(cp_ref.checkpoint_id)
 }
 
 #[tokio::test]
@@ -79,7 +105,7 @@ async fn test_get_checkpoint_messages_returns_messages() {
         },
     ];
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: test_messages.clone(),
         tool_call_count: 2,
         intermediate_results: vec![],
@@ -89,15 +115,14 @@ async fn test_get_checkpoint_messages_returns_messages() {
         })),
     };
 
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let messages = recovery
-        .get_checkpoint_messages(checkpoint_id.0)
+        .get_checkpoint_messages(checkpoint_id)
         .await
         .expect("should get checkpoint messages");
 
@@ -147,7 +172,7 @@ async fn test_get_checkpoint_messages_empty_for_checkpoint_without_messages() {
         .await
         .expect("should create agent instance");
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![],
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -157,15 +182,14 @@ async fn test_get_checkpoint_messages_empty_for_checkpoint_without_messages() {
         })),
     };
 
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let messages = recovery
-        .get_checkpoint_messages(checkpoint_id.0)
+        .get_checkpoint_messages(checkpoint_id)
         .await
         .expect("should get checkpoint messages");
 
@@ -247,7 +271,7 @@ async fn test_restore_from_checkpoint_returns_messages() {
         },
     ];
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: test_messages.clone(),
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -257,15 +281,14 @@ async fn test_restore_from_checkpoint_returns_messages() {
         })),
     };
 
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
     let recovery = RecoveryService::new(instance_repo.clone(), checkpoint_repo.clone(), event_repo);
 
     let (restored_instance, messages, _rebuilt_state) = recovery
-        .restore_from_checkpoint(checkpoint_id.0)
+        .restore_from_checkpoint(checkpoint_id)
         .await
         .expect("should restore from checkpoint");
 
@@ -313,7 +336,7 @@ async fn test_checkpoint_repository_get_messages() {
         .await
         .expect("should create agent instance");
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: vec![Message {
             role: "assistant".to_string(),
             content: "This is a test message.".to_string(),
@@ -325,13 +348,12 @@ async fn test_checkpoint_repository_get_messages() {
         })),
     };
 
-    let checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
     let messages = checkpoint_repo
-        .get_messages(checkpoint_id.0)
+        .get_messages(checkpoint_id)
         .await
         .expect("should get messages from repository");
 
@@ -388,7 +410,7 @@ async fn test_resume_instance_returns_messages() {
         },
     ];
 
-    let state = checkpointer::CheckpointState {
+    let state = CheckpointState {
         messages: test_messages.clone(),
         tool_call_count: 0,
         intermediate_results: vec![],
@@ -398,8 +420,7 @@ async fn test_resume_instance_returns_messages() {
         })),
     };
 
-    let _checkpoint_id = checkpointer
-        .save(instance.id, instance.id, state)
+    let _checkpoint_id = save_checkpoint(checkpointer.as_ref(), instance.id, state)
         .await
         .expect("should save checkpoint");
 
