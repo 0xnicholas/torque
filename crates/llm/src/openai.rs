@@ -20,8 +20,12 @@ pub struct OpenAiClient {
 
 impl OpenAiClient {
     pub fn new(base_url: String, api_key: String, default_model: String) -> Self {
+        let http_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .expect("failed to build reqwest client");
         Self {
-            http_client: Client::new(),
+            http_client,
             base_url,
             api_key,
             default_model,
@@ -89,6 +93,7 @@ impl OpenAiClient {
 
 #[async_trait]
 impl LlmClient for OpenAiClient {
+    #[tracing::instrument(skip(self))]
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = self.build_request(request);
@@ -194,6 +199,12 @@ impl LlmClient for OpenAiClient {
 
         let finish_reason = Self::parse_finish_reason(Some(finish_reason_str.as_str()));
 
+        tracing::debug!(
+            finish_reason = ?finish_reason,
+            tokens = body.usage.total_tokens,
+            "chat completed"
+        );
+
         Ok(ChatResponse {
             message,
             usage: TokenUsage {
@@ -205,6 +216,7 @@ impl LlmClient for OpenAiClient {
         })
     }
 
+    #[tracing::instrument(skip(self, callback))]
     async fn chat_streaming(
         &self,
         request: ChatRequest,
@@ -360,10 +372,18 @@ impl LlmClient for OpenAiClient {
                             }
                         }
                     }
-                    Err(_) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            data = %data.chars().take(200).collect::<String>(),
+                            "Failed to parse SSE chunk, skipping"
+                        );
+                    }
                 }
             }
         }
+
+        let total_tool_calls = tool_calls_by_index.len();
 
         for (_, acc) in tool_calls_by_index {
             if acc.name.is_empty() {
@@ -382,6 +402,13 @@ impl LlmClient for OpenAiClient {
                 arguments,
             }));
         }
+
+        tracing::debug!(
+            finish_reason = ?finish_reason,
+            tool_calls = total_tool_calls,
+            tokens = usage.total_tokens,
+            "chat streaming completed"
+        );
 
         Ok(ChatResponse {
             message: Message::assistant(full_content),
