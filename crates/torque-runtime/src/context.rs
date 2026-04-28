@@ -66,6 +66,12 @@ impl ContextCompactionService {
             return None;
         }
 
+        if messages.last().map_or(false, |m| {
+            CompactSummary::is_compaction_message(&m.content)
+        }) {
+            return None;
+        }
+
         let preserve = self.policy.preserve_recent_messages.min(messages.len());
         let split_index = messages.len().saturating_sub(preserve);
         let older = &messages[..split_index];

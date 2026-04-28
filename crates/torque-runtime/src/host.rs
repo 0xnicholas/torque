@@ -206,11 +206,7 @@ impl RuntimeHost {
             if let Some(compacted) = self.compaction_service.compact(&llm_messages) {
                 messages = vec![compacted.to_runtime_message()];
                 for lm in compacted.preserved_tail {
-                    messages.push(crate::message::RuntimeMessage::from(LlmMessage {
-                        role: lm.role,
-                        content: lm.content,
-                        tool_calls: lm.tool_calls,
-                    }));
+                    messages.push(crate::message::RuntimeMessage::from(lm));
                 }
             }
 

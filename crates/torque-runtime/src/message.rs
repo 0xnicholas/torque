@@ -47,7 +47,7 @@ impl From<LlmMessage> for RuntimeMessage {
             "system" => RuntimeMessageRole::System,
             "assistant" => RuntimeMessageRole::Assistant,
             "tool" => RuntimeMessageRole::Tool,
-            _ => RuntimeMessageRole::System,
+            _ => RuntimeMessageRole::User,
         };
         Self {
             role,
