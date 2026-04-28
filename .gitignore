@@ -4,5 +4,6 @@ target/
 .DS_Store
 .omx/
 .sisyphus/
+.opencode/
 tmp.json
 **/.vfs-tests/
