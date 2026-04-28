@@ -97,7 +97,9 @@ pub trait RuntimeOutputSink: Send + Sync {
 /// state. Implementations surface the request to an operator or
 /// automated approval policy.
 ///
-/// Note: this port is defined but not yet wired into RuntimeHost.
+/// Wired into RuntimeHost via `with_approval_gateway()`. Notifications
+/// are sent after each kernel step that produces an AwaitApproval
+/// outcome; failures are logged and do not block execution.
 #[async_trait]
 pub trait ApprovalGateway: Send + Sync {
     async fn notify_approval_required(

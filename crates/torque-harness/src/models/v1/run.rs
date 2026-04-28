@@ -3,7 +3,7 @@ use sqlx::FromRow;
 use std::fmt::Display;
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RunRequest {
     pub goal: String,
     pub instructions: Option<String>,
@@ -22,6 +22,8 @@ pub struct RunRequest {
     pub webhook_url: Option<String>,
     #[serde(default)]
     pub async_execution: bool,
+    #[serde(default)]
+    pub agent_instance_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -30,7 +32,7 @@ pub struct RunEvent {
     pub data: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
 #[sqlx(type_name = "run_status", rename_all = "snake_case")]
 pub enum RunStatus {
     Queued,
@@ -57,7 +59,9 @@ pub struct Run {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub status: RunStatus,
+    pub agent_instance_id: Uuid,
     pub instruction: String,
+    pub request_payload: serde_json::Value,
     pub failure_policy: Option<String>,
     pub webhook_url: Option<String>,
     pub async_execution: bool,

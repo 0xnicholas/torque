@@ -18,7 +18,7 @@ pub mod task_packet;
 pub use agent_definition::{AgentDefinition, AgentLimits};
 pub use agent_instance::{AgentInstance, AgentInstanceState};
 pub use context_ref::{AccessMode, ExternalContextKind, ExternalContextRef, SyncPolicy};
-pub use engine::{ExecutionEngine, StepDecision};
+pub use engine::{CheckpointCallback, ExecutionEngine, StepDecision};
 pub use error::{KernelError, StateTransitionError, ValidationError};
 pub use execution::{
     ExecutionEvent, ExecutionMode, ExecutionOutcome, ExecutionRequest, ExecutionResult,

@@ -1,10 +1,11 @@
 use torque_kernel::{
-    AccessMode, AgentDefinition, AgentDefinitionId, AgentInstance, AgentInstanceState,
-    ApprovalRequestId, ExecutionEngine, ExecutionEvent, ExecutionMode, ExecutionOutcome,
+    AccessMode, AgentDefinition, AgentDefinitionId, AgentInstance, AgentInstanceId,
+    AgentInstanceState, ApprovalRequestId, CheckpointCallback, DelegationRequestId,
+    ExecutionEngine, ExecutionEvent, ExecutionMode, ExecutionOutcome,
     ExecutionRequest, ExternalContextKind, ExternalContextRef, InMemoryKernelRuntime,
     InMemoryRuntimeStore, KernelRuntime, RecoveryAction, RecoveryDisposition, ResumeSignal,
-    RuntimeCommand, RuntimeStore, StepDecision, SyncPolicy, Task, TaskConstraint, TaskInputRef,
-    TaskPacket, TaskState,
+    RuntimeCommand, RuntimeStore, StepDecision, SyncPolicy, Task, TaskConstraint, TaskId,
+    TaskInputRef, TaskPacket, TaskState,
 };
 
 #[test]
@@ -97,6 +98,7 @@ fn execution_engine_moves_running_work_into_waiting_approval() {
             &mut task,
             &packet,
             StepDecision::AwaitApproval(approval_id),
+            None,
         )
         .expect("step should succeed");
 
@@ -134,6 +136,7 @@ fn execution_engine_completes_task_and_returns_terminal_result() {
             &mut task,
             &packet,
             StepDecision::CompleteTask("kernel contracts stabilized".into()),
+            None,
         )
         .expect("step should succeed");
 
@@ -839,7 +842,7 @@ fn execution_engine_requires_task_packet_for_continue_step() {
 
     let packet = TaskPacket::from_request_and_task(&request, &task);
     let result = ExecutionEngine::default()
-        .step(&mut instance, &mut task, &packet, StepDecision::Continue)
+        .step(&mut instance, &mut task, &packet, StepDecision::Continue, None)
         .expect("continue step should succeed");
 
     assert_eq!(result.outcome, ExecutionOutcome::Continue);
@@ -1053,4 +1056,108 @@ fn runtime_resumes_suspended_instance_with_manual_signal() {
         .events
         .iter()
         .any(|event| matches!(event, ExecutionEvent::ResumeApplied { .. })));
+}
+
+// ── CheckpointCallback contract tests ───────────────────────────────
+
+use std::cell::RefCell;
+
+struct CountingCallback {
+    count: RefCell<usize>,
+    last_from: RefCell<Option<AgentInstanceState>>,
+    last_to: RefCell<Option<AgentInstanceState>>,
+}
+
+impl CountingCallback {
+    fn new() -> Self {
+        Self {
+            count: RefCell::new(0),
+            last_from: RefCell::new(None),
+            last_to: RefCell::new(None),
+        }
+    }
+}
+
+impl CheckpointCallback for CountingCallback {
+    fn on_awaiting_state(
+        &self,
+        _instance_id: AgentInstanceId,
+        _task_id: TaskId,
+        from_state: AgentInstanceState,
+        to_state: AgentInstanceState,
+        _approval_ids: &[ApprovalRequestId],
+        _delegation_ids: &[DelegationRequestId],
+    ) {
+        *self.count.borrow_mut() += 1;
+        *self.last_from.borrow_mut() = Some(from_state);
+        *self.last_to.borrow_mut() = Some(to_state);
+    }
+}
+
+#[test]
+fn checkpoint_callback_invoked_on_awaiting_tool() {
+    let definition_id = AgentDefinitionId::new();
+    let request = ExecutionRequest::new(definition_id, "Tool callback", vec!["wait".into()]);
+    let mut instance = AgentInstance::new(definition_id);
+    let mut task = Task::new("Tool callback".into(), vec!["wait".into()], vec![]);
+
+    task.start().expect("task should start");
+    instance.begin_hydrating().expect("instance should hydrate");
+    instance.mark_ready().expect("instance should become ready");
+    instance.bind_active_task(task.id()).expect("task should bind");
+    instance.begin_running().expect("instance should start");
+
+    let packet = TaskPacket::from_request_and_task(&request, &task);
+    let callback = CountingCallback::new();
+
+    let result = ExecutionEngine::default()
+        .step(
+            &mut instance,
+            &mut task,
+            &packet,
+            StepDecision::AwaitTool,
+            Some(&callback),
+        )
+        .expect("step should succeed");
+
+    assert_eq!(result.outcome, ExecutionOutcome::AwaitTool);
+    assert_eq!(*callback.count.borrow(), 1);
+    assert_eq!(
+        *callback.last_from.borrow(),
+        Some(AgentInstanceState::Running)
+    );
+    assert_eq!(
+        *callback.last_to.borrow(),
+        Some(AgentInstanceState::AwaitingTool)
+    );
+}
+
+#[test]
+fn checkpoint_callback_not_invoked_on_continue() {
+    let definition_id = AgentDefinitionId::new();
+    let request = ExecutionRequest::new(definition_id, "Continue callback", vec!["go".into()]);
+    let mut instance = AgentInstance::new(definition_id);
+    let mut task = Task::new("Continue callback".into(), vec!["go".into()], vec![]);
+
+    task.start().expect("task should start");
+    instance.begin_hydrating().expect("instance should hydrate");
+    instance.mark_ready().expect("instance should become ready");
+    instance.bind_active_task(task.id()).expect("task should bind");
+    instance.begin_running().expect("instance should start");
+
+    let packet = TaskPacket::from_request_and_task(&request, &task);
+    let callback = CountingCallback::new();
+
+    let result = ExecutionEngine::default()
+        .step(
+            &mut instance,
+            &mut task,
+            &packet,
+            StepDecision::Continue,
+            Some(&callback),
+        )
+        .expect("step should succeed");
+
+    assert_eq!(result.outcome, ExecutionOutcome::Continue);
+    assert_eq!(*callback.count.borrow(), 0);
 }

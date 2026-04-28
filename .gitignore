@@ -7,3 +7,7 @@ target/
 .opencode/
 tmp.json
 **/.vfs-tests/
+torque-docs/.vitepress/
+torque-docs/dist/
+torque-docs/node_modules/
+_references-oss/

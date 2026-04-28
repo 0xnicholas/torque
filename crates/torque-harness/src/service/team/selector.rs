@@ -115,25 +115,27 @@ impl SelectorResolver {
             return Ok(std::collections::HashSet::new());
         }
 
-        let profiles = self.capability_profile_repo.list(100).await?;
-        let matching_profile_ids: Vec<Uuid> = profiles
-            .into_iter()
-            .filter(|p| {
-                profile_names
-                    .iter()
-                    .any(|name| p.name.to_lowercase().contains(&name.to_lowercase()))
-            })
-            .map(|p| p.id)
-            .collect();
+        let mut matching_profile_ids = Vec::new();
+        for name in profile_names {
+            if let Some(profile) = self
+                .capability_profile_repo
+                .get_by_name(name)
+                .await?
+            {
+                matching_profile_ids.push(profile.id);
+            }
+        }
 
         if matching_profile_ids.is_empty() {
             return Ok(std::collections::HashSet::new());
         }
 
-        let bindings = self.capability_binding_repo.list(500).await?;
+        let bindings = self
+            .capability_binding_repo
+            .list_by_profile_ids(&matching_profile_ids)
+            .await?;
         let capable_agents: std::collections::HashSet<Uuid> = bindings
             .into_iter()
-            .filter(|b| matching_profile_ids.contains(&b.capability_profile_id))
             .map(|b| b.agent_definition_id)
             .collect();
 
@@ -155,12 +157,12 @@ impl SelectorResolver {
             return Ok(vec![]);
         }
 
-        let profiles = self.capability_profile_repo.list(100).await?;
-        let capability_names: Vec<String> = profiles
-            .into_iter()
-            .filter(|p| profile_ids.contains(&p.id))
-            .map(|p| p.name)
-            .collect();
+        let mut capability_names = Vec::new();
+        for profile_id in profile_ids {
+            if let Some(profile) = self.capability_profile_repo.get(profile_id).await? {
+                capability_names.push(profile.name);
+            }
+        }
 
         Ok(capability_names)
     }

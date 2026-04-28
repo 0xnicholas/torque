@@ -708,7 +708,7 @@ impl KernelRuntime for InMemoryKernelRuntime {
 
             let result = self
                 .engine
-                .step(&mut instance, &mut task, &packet, command.decision)?;
+                .step(&mut instance, &mut task, &packet, command.decision, None)?;
 
             Ok((result, applied_resume_signal))
         })();

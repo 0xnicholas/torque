@@ -75,6 +75,33 @@ impl RunService {
         request: RunRequest,
         event_sink: mpsc::Sender<StreamEvent>,
     ) -> anyhow::Result<()> {
+        self.execute_inner(
+            instance_id,
+            request,
+            event_sink,
+            vec![RuntimeMessage::user("Run request execution")],
+        )
+        .await
+    }
+
+    pub async fn execute_with_history(
+        &self,
+        instance_id: Uuid,
+        request: RunRequest,
+        event_sink: mpsc::Sender<StreamEvent>,
+        initial_messages: Vec<RuntimeMessage>,
+    ) -> anyhow::Result<()> {
+        self.execute_inner(instance_id, request, event_sink, initial_messages)
+            .await
+    }
+
+    async fn execute_inner(
+        &self,
+        instance_id: Uuid,
+        request: RunRequest,
+        event_sink: mpsc::Sender<StreamEvent>,
+        initial_messages: Vec<RuntimeMessage>,
+    ) -> anyhow::Result<()> {
         // 1. Fetch instance and definition
         let instance = self
             .agent_instance_repo
@@ -140,6 +167,7 @@ impl RunService {
                 kernel_def,
                 execution_request,
                 event_sink.clone(),
+                initial_messages,
             )
             .await;
 
@@ -318,20 +346,20 @@ impl RunService {
         kernel_def: torque_kernel::AgentDefinition,
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
+        initial_messages: Vec<RuntimeMessage>,
     ) -> anyhow::Result<String> {
         let mut kernel = self.runtime_factory.create_handle(vec![kernel_def]);
         let model_driver = self.runtime_factory.create_model_driver(self.llm.clone());
         let tool_executor = self.runtime_factory.create_tool_executor(self.tools.clone());
         let output_sink = self.runtime_factory.create_output_sink(event_sink.clone());
 
-        // Execute without policy (policy is evaluated at orchestration layer)
         let result = kernel
             .execute_v1(
                 request,
                 &model_driver,
                 &tool_executor,
                 Some(&output_sink),
-                vec![RuntimeMessage::user("Run request execution")],
+                initial_messages,
             )
             .await;
 
@@ -339,8 +367,4 @@ impl RunService {
             .map(|r| r.summary.unwrap_or_default())
             .map_err(|e| anyhow::anyhow!("Kernel execution failed: {}", e))
     }
-
-    // TODO: Re-implement when resume flow supports execution with message history.
-    // The resume endpoint should call execute_with_messages to resume execution
-    // with stored message history instead of starting fresh.
 }

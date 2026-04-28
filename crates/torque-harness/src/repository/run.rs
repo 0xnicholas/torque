@@ -16,6 +16,14 @@ pub trait RunRepository: Send + Sync {
         webhook_sent_at: DateTime<Utc>,
         webhook_attempts: i32,
     ) -> anyhow::Result<()>;
+    async fn update_result(
+        &self,
+        id: Uuid,
+        status: RunStatus,
+        started_at: Option<DateTime<Utc>>,
+        completed_at: Option<DateTime<Utc>>,
+        error: Option<String>,
+    ) -> anyhow::Result<()>;
 }
 
 pub struct PostgresRunRepository {
@@ -33,14 +41,16 @@ impl RunRepository for PostgresRunRepository {
     async fn create(&self, run: &Run) -> anyhow::Result<()> {
         sqlx::query(
             r#"
-            INSERT INTO runs (id, tenant_id, status, instruction, failure_policy, webhook_url, async_execution, created_at, webhook_sent_at, webhook_attempts)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO runs (id, tenant_id, status, agent_instance_id, instruction, request_payload, failure_policy, webhook_url, async_execution, created_at, webhook_sent_at, webhook_attempts)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
         )
         .bind(run.id)
         .bind(run.tenant_id)
         .bind(run.status.to_string())
+        .bind(run.agent_instance_id)
         .bind(&run.instruction)
+        .bind(&run.request_payload)
         .bind(&run.failure_policy)
         .bind(&run.webhook_url)
         .bind(run.async_execution)
@@ -54,7 +64,7 @@ impl RunRepository for PostgresRunRepository {
 
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Run>> {
         let row = sqlx::query_as::<_, Run>(
-            "SELECT id, tenant_id, status, instruction, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error, webhook_sent_at, webhook_attempts FROM runs WHERE id = $1",
+            "SELECT id, tenant_id, status, agent_instance_id, instruction, request_payload, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error, webhook_sent_at, webhook_attempts FROM runs WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(self.db.pool())
@@ -73,7 +83,7 @@ impl RunRepository for PostgresRunRepository {
 
     async fn get_by_status(&self, status: RunStatus, limit: i64) -> anyhow::Result<Vec<Run>> {
         let rows = sqlx::query_as::<_, Run>(
-            "SELECT id, tenant_id, status, instruction, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error, webhook_sent_at, webhook_attempts FROM runs WHERE status = $1 LIMIT $2",
+            "SELECT id, tenant_id, status, agent_instance_id, instruction, request_payload, failure_policy, webhook_url, async_execution, created_at, started_at, completed_at, error, webhook_sent_at, webhook_attempts FROM runs WHERE status = $1 LIMIT $2",
         )
         .bind(status.to_string())
         .bind(limit)
@@ -94,6 +104,27 @@ impl RunRepository for PostgresRunRepository {
             .bind(id)
             .execute(self.db.pool())
             .await?;
+        Ok(())
+    }
+
+    async fn update_result(
+        &self,
+        id: Uuid,
+        status: RunStatus,
+        started_at: Option<DateTime<Utc>>,
+        completed_at: Option<DateTime<Utc>>,
+        error: Option<String>,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "UPDATE runs SET status = $1, started_at = COALESCE($2, started_at), completed_at = COALESCE($3, completed_at), error = $4 WHERE id = $5",
+        )
+        .bind(&status)
+        .bind(started_at)
+        .bind(completed_at)
+        .bind(&error)
+        .bind(id)
+        .execute(self.db.pool())
+        .await?;
         Ok(())
     }
 }

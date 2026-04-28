@@ -1,14 +1,14 @@
 use crate::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use crate::environment::{
-    RuntimeCheckpointSink, RuntimeExecutionContext, RuntimeHydrationSource, RuntimeModelDriver,
-    RuntimeOutputSink, RuntimeToolExecutor,
+    ApprovalGateway, RuntimeCheckpointSink, RuntimeExecutionContext, RuntimeHydrationSource,
+    RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
 };
 use crate::events::RuntimeFinishReason;
 use crate::message::RuntimeMessage;
 use std::sync::Arc;
 use torque_kernel::{
-    AgentDefinition, AgentInstanceId, ExecutionRequest, ExecutionResult, InMemoryKernelRuntime,
-    KernelError, KernelRuntime, StepDecision,
+    AgentDefinition, AgentInstanceId, ExecutionOutcome, ExecutionRequest, ExecutionResult,
+    InMemoryKernelRuntime, KernelError, KernelRuntime, StepDecision,
 };
 
 /// Maximum tool calls per execution before returning an error.
@@ -56,6 +56,7 @@ pub struct RuntimeHost {
     checkpoint_sink: Arc<dyn RuntimeCheckpointSink>,
     hydration_source: Option<Arc<dyn RuntimeHydrationSource>>,
     checkpoint_policy: RuntimeCheckpointPolicy,
+    approval_gateway: Option<Arc<dyn ApprovalGateway>>,
 }
 
 impl RuntimeHost {
@@ -70,6 +71,7 @@ impl RuntimeHost {
             checkpoint_sink,
             hydration_source: None,
             checkpoint_policy: RuntimeCheckpointPolicy::default(),
+            approval_gateway: None,
         }
     }
 
@@ -83,6 +85,14 @@ impl RuntimeHost {
 
     pub fn with_checkpoint_policy(mut self, checkpoint_policy: RuntimeCheckpointPolicy) -> Self {
         self.checkpoint_policy = checkpoint_policy;
+        self
+    }
+
+    pub fn with_approval_gateway(
+        mut self,
+        approval_gateway: Arc<dyn ApprovalGateway>,
+    ) -> Self {
+        self.approval_gateway = Some(approval_gateway);
         self
     }
 
@@ -106,6 +116,7 @@ impl RuntimeHost {
     ) -> Result<ExecutionResult, RuntimeHostError> {
         let result = self.runtime.handle(request, StepDecision::Continue)?;
         self.record_events(&result).await?;
+        self.notify_approval_if_needed(&result).await;
 
         let instance_id = result.instance_id;
         let final_content = self
@@ -124,6 +135,7 @@ impl RuntimeHost {
             StepDecision::CompleteTask(final_content.clone()),
         )?;
         self.record_events(&result).await?;
+        self.notify_approval_if_needed(&result).await;
 
         if self.checkpoint_policy.checkpoint_on_task_complete {
             let checkpoint = self.create_checkpoint(instance_id, "task_complete").await?;
@@ -270,6 +282,33 @@ impl RuntimeHost {
             .record_checkpoint_created(checkpoint.checkpoint_id, instance_id, reason)
             .await?;
         Ok(())
+    }
+
+    async fn notify_approval_if_needed(
+        &self,
+        result: &ExecutionResult,
+    ) {
+        if let Some(gateway) = &self.approval_gateway {
+            if matches!(result.outcome, torque_kernel::ExecutionOutcome::AwaitApproval) {
+                for approval_id in &result.approval_request_ids {
+                    let ctx = RuntimeExecutionContext {
+                        instance_id: result.instance_id.as_uuid(),
+                        request_id: None,
+                        source_task_id: Some(result.task_id.as_uuid()),
+                    };
+                    if let Err(e) = gateway
+                        .notify_approval_required(&ctx, *approval_id)
+                        .await
+                    {
+                        tracing::warn!(
+                            "Approval gateway notification failed for {}: {}",
+                            approval_id.as_uuid(),
+                            e
+                        );
+                    }
+                }
+            }
+        }
     }
 
     async fn create_checkpoint(

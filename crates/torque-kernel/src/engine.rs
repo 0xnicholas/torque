@@ -1,7 +1,7 @@
 use crate::{
     agent_instance::{AgentInstance, AgentInstanceState},
     execution::{ExecutionEvent, ExecutionOutcome, ExecutionResult},
-    ids::{ApprovalRequestId, ArtifactId, DelegationRequestId},
+    ids::{AgentInstanceId, ApprovalRequestId, ArtifactId, DelegationRequestId, TaskId},
     task::{Task, TaskState},
     task_packet::TaskPacket,
     KernelError, ValidationError,
@@ -19,13 +19,30 @@ pub enum StepDecision {
     SuspendInstance,
 }
 
+/// Callback invoked by the execution engine when the instance enters a
+/// checkpoint-worthy state (AwaitingTool, AwaitingApproval,
+/// AwaitingDelegation, or Suspended). Implementations persist checkpoints
+/// without the kernel depending on any persistence crate.
+pub trait CheckpointCallback {
+    fn on_awaiting_state(
+        &self,
+        instance_id: AgentInstanceId,
+        task_id: TaskId,
+        from_state: AgentInstanceState,
+        to_state: AgentInstanceState,
+        approval_ids: &[ApprovalRequestId],
+        delegation_ids: &[DelegationRequestId],
+    );
+}
+
 #[derive(Debug, Default)]
 /// Core execution engine that validates state transitions and produces
 /// execution events.
 ///
 /// [`ExecutionEngine::step`] takes an instance, a task, a task packet,
-/// and a step decision, then applies state transitions and returns
-/// an [`ExecutionResult`] with the resulting events.
+/// a step decision, and an optional [`CheckpointCallback`], then applies
+/// state transitions and returns an [`ExecutionResult`] with the resulting
+/// events.
 pub struct ExecutionEngine;
 
 impl ExecutionEngine {
@@ -35,6 +52,7 @@ impl ExecutionEngine {
         task: &mut Task,
         packet: &TaskPacket,
         decision: StepDecision,
+        checkpoint_callback: Option<&dyn CheckpointCallback>,
     ) -> Result<ExecutionResult, KernelError> {
         validate_task_packet(packet, task)?;
         ensure_running(instance.state(), &decision)?;
@@ -46,27 +64,6 @@ impl ExecutionEngine {
         let mut delegation_request_ids = Vec::new();
         let outcome;
         let mut summary = None;
-
-        // =============================================================================
-        // CHECKPOINT CREATION POINT
-        // =============================================================================
-        // TODO (Phase 2): When transitioning to AwaitingTool/AwaitingApproval/AwaitingDelegation/Suspended,
-        // trigger checkpoint creation via callback to persistence layer.
-        //
-        // Per Recovery Core Design Section 5.2 - "Recommended checkpoint contents should
-        // focus on the minimum useful running state needed for efficient recovery"
-        //
-        // Full implementation requires:
-        // 1. Defining CheckpointCallback trait in kernel
-        // 2. Implementing callback in harness to call checkpointer.save()
-        // 3. Wiring callback into state transition logic below
-        //
-        // Key state transitions that should trigger checkpoint:
-        // - Running -> AwaitingTool (line 49)
-        // - Running -> AwaitingApproval (line 53)
-        // - Running -> AwaitingDelegation (line 58)
-        // - Running -> Suspended (line 84)
-        // =============================================================================
 
         match decision {
             StepDecision::Continue => {
@@ -110,6 +107,26 @@ impl ExecutionEngine {
             StepDecision::SuspendInstance => {
                 instance.suspend()?;
                 outcome = ExecutionOutcome::SuspendedInstance;
+            }
+        }
+
+        // Notify persistence layer on checkpoint-worthy state transitions.
+        if matches!(
+            outcome,
+            ExecutionOutcome::AwaitTool
+                | ExecutionOutcome::AwaitApproval
+                | ExecutionOutcome::AwaitDelegation
+                | ExecutionOutcome::SuspendedInstance
+        ) {
+            if let Some(callback) = checkpoint_callback {
+                callback.on_awaiting_state(
+                    instance.id(),
+                    task.id(),
+                    previous_instance_state,
+                    instance.state(),
+                    &approval_request_ids,
+                    &delegation_request_ids,
+                );
             }
         }
 

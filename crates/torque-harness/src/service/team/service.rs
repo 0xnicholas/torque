@@ -1,11 +1,12 @@
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTask,
-    TeamTaskCreate,
+    ArtifactRef, PublishScope, TeamDefinition, TeamDefinitionCreate, TeamInstance,
+    TeamInstanceCreate, TeamMember, TeamTask, TeamTaskCreate,
 };
 use crate::repository::{
     SharedTaskStateRepository, TeamDefinitionRepository, TeamEventRepository,
     TeamInstanceRepository, TeamMemberRepository, TeamTaskRepository,
 };
+use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -161,6 +162,24 @@ impl TeamService {
     ) -> anyhow::Result<Vec<crate::models::v1::team::TeamEvent>> {
         self.team_event_repo
             .list_by_team(team_instance_id, limit)
+            .await
+    }
+
+    pub async fn publish_artifact(
+        &self,
+        team_instance_id: Uuid,
+        artifact_id: Uuid,
+        scope: PublishScope,
+        published_by: &str,
+    ) -> anyhow::Result<bool> {
+        let artifact_ref = ArtifactRef {
+            artifact_id,
+            scope,
+            published_by: published_by.to_string(),
+            published_at: Utc::now(),
+        };
+        self.shared_state_repo
+            .add_accepted_artifact(team_instance_id, artifact_ref)
             .await
     }
 }

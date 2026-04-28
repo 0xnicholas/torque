@@ -146,6 +146,7 @@ pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> 
         .route("/v1/checkpoints", get(checkpoints::list))
         .route("/v1/checkpoints/:id", get(checkpoints::get))
         .route("/v1/checkpoints/:id/restore", post(checkpoints::restore))
+        .route("/v1/checkpoints/:id/resume", post(checkpoints::resume))
         .route(
             "/v1/checkpoints/:id/messages",
             get(checkpoints::get_messages),

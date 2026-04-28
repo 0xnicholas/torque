@@ -1,8 +1,8 @@
 use crate::db::Database;
 use crate::models::v1::common::{ErrorBody, ListQuery, ListResponse, Pagination};
 use crate::models::v1::team::{
-    TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate, TeamMember, TeamTask,
-    TeamTaskCreate,
+    PublishScope, TeamDefinition, TeamDefinitionCreate, TeamInstance, TeamInstanceCreate,
+    TeamMember, TeamTask, TeamTaskCreate,
 };
 use crate::service::ServiceContainer;
 use axum::{
@@ -218,9 +218,8 @@ pub async fn list_members(
 pub async fn publish(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
+    Json(body): Json<PublishRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorBody>)> {
-    // For MVP, publish marks the team instance as having shared state
-    // In a full implementation, this would publish artifacts to team's shared state
     let _instance = services
         .team
         .get_instance(id)
@@ -228,9 +227,52 @@ pub async fn publish(
         .map_err(ErrorBody::db_error)?
         .ok_or(ErrorBody::not_found("Team instance not found"))?;
 
-    // TODO: Implement actual publish logic (update team instance status, create shared state entry)
-    // For now, return 200 OK as placeholder
-    Ok(StatusCode::OK)
+    let scope = body
+        .scope
+        .as_deref()
+        .map(|s| match s {
+            "private" => PublishScope::Private,
+            "team_shared" => PublishScope::TeamShared,
+            "external_published" => PublishScope::ExternalPublished,
+            _ => PublishScope::TeamShared,
+        })
+        .unwrap_or(PublishScope::TeamShared);
+
+    let published = services
+        .team
+        .publish_artifact(id, body.artifact_id, scope, "api")
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: "PUBLISH_ERROR".into(),
+                    message: e.to_string(),
+                    details: None,
+                    request_id: None,
+                }),
+            )
+        })?;
+
+    if published {
+        Ok(StatusCode::OK)
+    } else {
+        Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                code: "PUBLISH_FAILED".into(),
+                message: "Failed to publish artifact".into(),
+                details: None,
+                request_id: None,
+            }),
+        ))
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct PublishRequest {
+    pub artifact_id: Uuid,
+    pub scope: Option<String>,
 }
 
 #[derive(serde::Serialize)]

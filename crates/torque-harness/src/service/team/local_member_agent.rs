@@ -71,15 +71,24 @@ impl MemberAgent for LocalMemberAgent {
         Ok(tasks)
     }
 
-    async fn accept_task(&self, _delegation_id: Uuid) -> anyhow::Result<()> {
+    async fn accept_task(&self, delegation_id: Uuid) -> anyhow::Result<()> {
+        self.delegation_repo
+            .update_status(delegation_id, "ACCEPTED")
+            .await?;
         Ok(())
     }
 
-    async fn complete_task(&self, _delegation_id: Uuid, _artifact_id: Uuid) -> anyhow::Result<()> {
+    async fn complete_task(&self, delegation_id: Uuid, artifact_id: Uuid) -> anyhow::Result<()> {
+        self.delegation_repo
+            .complete(delegation_id, artifact_id)
+            .await?;
         Ok(())
     }
 
-    async fn fail_task(&self, _delegation_id: Uuid, _error: &str) -> anyhow::Result<()> {
+    async fn fail_task(&self, delegation_id: Uuid, error: &str) -> anyhow::Result<()> {
+        self.delegation_repo
+            .fail(delegation_id, error)
+            .await?;
         Ok(())
     }
 

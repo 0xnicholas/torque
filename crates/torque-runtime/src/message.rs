@@ -71,3 +71,18 @@ impl From<RuntimeMessage> for LlmMessage {
         }
     }
 }
+
+impl From<crate::checkpoint::Message> for RuntimeMessage {
+    fn from(m: crate::checkpoint::Message) -> Self {
+        let role = match m.role.as_str() {
+            "system" => RuntimeMessageRole::System,
+            "assistant" => RuntimeMessageRole::Assistant,
+            "tool" => RuntimeMessageRole::Tool,
+            _ => RuntimeMessageRole::User,
+        };
+        Self {
+            role,
+            content: m.content,
+        }
+    }
+}

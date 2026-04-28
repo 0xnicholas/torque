@@ -261,7 +261,7 @@ impl ServiceContainer {
             None,
         ));
         let run_repo = repos.run.clone();
-        let async_runner = std::sync::Arc::new(AsyncRunner::new(repos.run.clone()));
+        let async_runner = std::sync::Arc::new(AsyncRunner::new(repos.run.clone(), run.clone()));
         let escalation_service =
             std::sync::Arc::new(EscalationService::new(repos.escalation.clone()));
         let recovery = std::sync::Arc::new(

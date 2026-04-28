@@ -32,11 +32,25 @@ pub async fn create(
     State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
     Json(req): Json<RunRequest>,
 ) -> Result<(StatusCode, Json<RunResponse>), (StatusCode, Json<ErrorBody>)> {
+    if req.async_execution && req.agent_instance_id.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                code: "MISSING_AGENT_INSTANCE_ID".into(),
+                message: "agent_instance_id is required for async execution".into(),
+                details: None,
+                request_id: None,
+            }),
+        ));
+    }
+
     let run = Run {
         id: Uuid::new_v4(),
         tenant_id: Uuid::new_v4(),
         status: RunStatus::Queued,
+        agent_instance_id: req.agent_instance_id.unwrap_or_else(Uuid::new_v4),
         instruction: req.instructions.clone().unwrap_or_default(),
+        request_payload: serde_json::to_value(&req).unwrap_or_default(),
         failure_policy: None,
         webhook_url: req.webhook_url.clone(),
         async_execution: req.async_execution,
