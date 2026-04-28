@@ -224,3 +224,26 @@ async fn tool_result_offloaded_to_scratch_when_above_inline_threshold() {
         paths
     );
 }
+
+#[tokio::test]
+async fn context_compacted_when_messages_exceed_threshold() {
+    let mut messages = vec![];
+    for i in 0..20 {
+        messages.push(RuntimeMessage::user(format!("message {}", i)));
+        messages.push(RuntimeMessage::assistant(format!("response {}", i)));
+    }
+
+    let agent_def = torque_kernel::AgentDefinition::new("test", "system");
+    let mut host = RuntimeHost::new(
+        vec![agent_def.clone()],
+        Arc::new(FakeEventSink::default()),
+        Arc::new(FakeCheckpointSink::default()),
+    );
+
+    let request = torque_kernel::ExecutionRequest::new(agent_def.id, "Compact test", vec![]);
+    let result = host
+        .execute_v1(request, &FakeModelDriver, &LargeOutputToolExecutor, None, messages)
+        .await;
+
+    assert!(result.is_ok());
+}

@@ -33,6 +33,20 @@ pub struct CompactSummary {
     pub preserved_tail: Vec<LlmMessage>,
 }
 
+impl CompactSummary {
+    pub fn to_runtime_message(&self) -> crate::message::RuntimeMessage {
+        crate::message::RuntimeMessage::user(format!(
+            "[Context Compaction] {} Key facts from earlier messages:\n  {}",
+            self.compact_summary,
+            self.key_facts.join("\n  ")
+        ))
+    }
+
+    pub fn is_compaction_message(content: &str) -> bool {
+        content.starts_with("[Context Compaction]")
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ContextCompactionService {
     policy: ContextCompactionPolicy,

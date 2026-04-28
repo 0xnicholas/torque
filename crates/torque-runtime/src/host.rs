@@ -1,4 +1,5 @@
 use crate::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
+use crate::context::{ContextCompactionPolicy, ContextCompactionService};
 use crate::environment::{
     ApprovalGateway, RuntimeCheckpointSink, RuntimeExecutionContext, RuntimeHydrationSource,
     RuntimeModelDriver, RuntimeOutputSink, RuntimeToolExecutor,
@@ -6,6 +7,7 @@ use crate::environment::{
 use crate::events::RuntimeFinishReason;
 use crate::message::RuntimeMessage;
 use crate::offload::ToolOffloadPolicy;
+use llm::Message as LlmMessage;
 use std::sync::Arc;
 use torque_kernel::{
     AgentDefinition, AgentInstanceId, ExecutionOutcome, ExecutionRequest, ExecutionResult,
@@ -59,6 +61,7 @@ pub struct RuntimeHost {
     checkpoint_policy: RuntimeCheckpointPolicy,
     approval_gateway: Option<Arc<dyn ApprovalGateway>>,
     offload_policy: Option<Arc<ToolOffloadPolicy>>,
+    compaction_service: ContextCompactionService,
 }
 
 impl RuntimeHost {
@@ -75,6 +78,7 @@ impl RuntimeHost {
             checkpoint_policy: RuntimeCheckpointPolicy::default(),
             approval_gateway: None,
             offload_policy: None,
+            compaction_service: ContextCompactionService::new(ContextCompactionPolicy::default()),
         }
     }
 
@@ -101,6 +105,11 @@ impl RuntimeHost {
 
     pub fn with_offload_policy(mut self, offload_policy: Arc<ToolOffloadPolicy>) -> Self {
         self.offload_policy = Some(offload_policy);
+        self
+    }
+
+    pub fn with_compaction_policy(mut self, policy: ContextCompactionPolicy) -> Self {
+        self.compaction_service = ContextCompactionService::new(policy);
         self
     }
 
@@ -189,6 +198,20 @@ impl RuntimeHost {
                 return Err(RuntimeHostError::Runtime(anyhow::anyhow!(
                     "Maximum tool call limit reached"
                 )));
+            }
+
+            // Auto-compact context before model turn if threshold exceeded.
+            let llm_messages: Vec<LlmMessage> =
+                messages.iter().map(|m| m.clone().into()).collect();
+            if let Some(compacted) = self.compaction_service.compact(&llm_messages) {
+                messages = vec![compacted.to_runtime_message()];
+                for lm in compacted.preserved_tail {
+                    messages.push(crate::message::RuntimeMessage::from(LlmMessage {
+                        role: lm.role,
+                        content: lm.content,
+                        tool_calls: lm.tool_calls,
+                    }));
+                }
             }
 
             let turn = model_driver
