@@ -142,10 +142,10 @@ impl ArtifactRepository for InMemoryArtifactRepository {
 }
 
 fn test_vfs() -> Arc<RoutedVfs> {
-    Arc::new(RoutedVfs::new(
-        Arc::new(ScratchBackend::default()),
-        Arc::new(WorkspaceBackend::new(std::env::current_dir().unwrap())),
-    ))
+    Arc::new(RoutedVfs::new(vec![
+        ("/scratch".to_string(), Arc::new(ScratchBackend::default())),
+        ("/workspace".to_string(), Arc::new(WorkspaceBackend::new(std::env::current_dir().unwrap()))),
+    ]))
 }
 
 #[tokio::test]

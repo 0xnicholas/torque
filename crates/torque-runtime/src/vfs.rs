@@ -41,41 +41,58 @@ pub trait VfsBackend: Send + Sync {
 }
 
 pub struct RoutedVfs {
-    scratch: Arc<dyn VfsBackend>,
-    workspace: Arc<dyn VfsBackend>,
+    routes: Vec<(String, Arc<dyn VfsBackend>)>,
 }
 
 impl RoutedVfs {
-    pub fn new(scratch: Arc<dyn VfsBackend>, workspace: Arc<dyn VfsBackend>) -> Self {
-        Self { scratch, workspace }
+    pub fn new(raw_routes: Vec<(String, Arc<dyn VfsBackend>)>) -> Self {
+        let mut sorted = raw_routes;
+        sorted.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()));
+        Self { routes: sorted }
     }
 
     pub fn for_current_workspace() -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        Self::new(
-            Arc::new(ScratchBackend::default()),
-            Arc::new(WorkspaceBackend::new(workspace_root)),
-        )
+        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::new(vec![
+            ("/scratch".to_string(), Arc::new(ScratchBackend::default())),
+            ("/workspace".to_string(), Arc::new(WorkspaceBackend::new(root))),
+        ])
+    }
+
+    fn resolve(&self, path: &str) -> Option<&Arc<dyn VfsBackend>> {
+        self.routes
+            .iter()
+            .find(|(prefix, _)| path.starts_with(prefix.as_str()))
+            .map(|(_, backend)| backend)
     }
 
     pub async fn ls(&self, path: &str) -> anyhow::Result<Vec<FileInfo>> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => backend.ls(path).await,
-            RoutedBackend::Workspace(backend) => backend.ls(path).await,
+        if path == "/" {
+            let mut results = Vec::new();
+            for (prefix, backend) in &self.routes {
+                if let Ok(files) = backend.ls(prefix).await {
+                    results.extend(files);
+                }
+            }
+            return Ok(results);
+        }
+        match self.resolve(path) {
+            Some(backend) => backend.ls(path).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 
     pub async fn read(&self, path: &str) -> anyhow::Result<String> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => backend.read(path).await,
-            RoutedBackend::Workspace(backend) => backend.read(path).await,
+        match self.resolve(path) {
+            Some(backend) => backend.read(path).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 
     pub async fn write(&self, path: &str, content: &str) -> anyhow::Result<()> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => backend.write(path, content).await,
-            RoutedBackend::Workspace(backend) => backend.write(path, content).await,
+        match self.resolve(path) {
+            Some(backend) => backend.write(path, content).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 
@@ -86,27 +103,32 @@ impl RoutedVfs {
         new_string: &str,
         replace_all: bool,
     ) -> anyhow::Result<EditResult> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => {
-                backend.edit(path, old_string, new_string, replace_all).await
-            }
-            RoutedBackend::Workspace(backend) => {
-                backend.edit(path, old_string, new_string, replace_all).await
-            }
+        match self.resolve(path) {
+            Some(backend) => backend.edit(path, old_string, new_string, replace_all).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 
     pub async fn glob(&self, path: &str, pattern: &str) -> anyhow::Result<Vec<FileInfo>> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => backend.glob(path, pattern).await,
-            RoutedBackend::Workspace(backend) => backend.glob(path, pattern).await,
+        if path == "/" {
+            let mut results = Vec::new();
+            for (prefix, backend) in &self.routes {
+                if let Ok(files) = backend.glob(prefix, pattern).await {
+                    results.extend(files);
+                }
+            }
+            return Ok(results);
+        }
+        match self.resolve(path) {
+            Some(backend) => backend.glob(path, pattern).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 
     pub async fn grep(&self, path: &str, pattern: &str) -> anyhow::Result<Vec<GrepMatch>> {
-        match route_backend(path, &self.scratch, &self.workspace)? {
-            RoutedBackend::Scratch(backend) => backend.grep(path, pattern).await,
-            RoutedBackend::Workspace(backend) => backend.grep(path, pattern).await,
+        match self.resolve(path) {
+            Some(backend) => backend.grep(path, pattern).await,
+            None => anyhow::bail!("No backend found for path: {}", path),
         }
     }
 }
@@ -144,27 +166,6 @@ impl VfsBackend for RoutedVfs {
     }
 }
 
-enum RoutedBackend<'a> {
-    Scratch(&'a Arc<dyn VfsBackend>),
-    Workspace(&'a Arc<dyn VfsBackend>),
-}
-
-fn route_backend<'a>(
-    path: &str,
-    scratch: &'a Arc<dyn VfsBackend>,
-    workspace: &'a Arc<dyn VfsBackend>,
-) -> anyhow::Result<RoutedBackend<'a>> {
-    if path == "/scratch" || path.starts_with("/scratch/") {
-        Ok(RoutedBackend::Scratch(scratch))
-    } else if path == "/workspace" || path.starts_with("/workspace/") {
-        Ok(RoutedBackend::Workspace(workspace))
-    } else {
-        Err(anyhow::anyhow!(
-            "unsupported VFS path '{}': expected /scratch or /workspace",
-            path
-        ))
-    }
-}
 
 #[derive(Default)]
 pub struct ScratchBackend {

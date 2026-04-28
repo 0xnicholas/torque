@@ -2,10 +2,10 @@ use torque_runtime::vfs::{RoutedVfs, ScratchBackend, VfsBackend, WorkspaceBacken
 use std::sync::Arc;
 
 fn test_vfs(workspace_root: std::path::PathBuf) -> RoutedVfs {
-    RoutedVfs::new(
-        Arc::new(ScratchBackend::default()),
-        Arc::new(WorkspaceBackend::new(workspace_root)),
-    )
+    RoutedVfs::new(vec![
+        ("/scratch".to_string(), Arc::new(ScratchBackend::default())),
+        ("/workspace".to_string(), Arc::new(WorkspaceBackend::new(workspace_root))),
+    ])
 }
 
 #[tokio::test]
@@ -99,4 +99,44 @@ async fn workspace_grep_finds_matches() {
         .expect("grep");
     assert!(matches.iter().any(|m| m.path.contains("grep.txt")));
     assert!(matches.len() >= 2);
+}
+
+#[tokio::test]
+async fn routed_vfs_custom_routing_table() {
+    let scratch = Arc::new(ScratchBackend::default());
+    let ws = Arc::new(WorkspaceBackend::new(std::path::PathBuf::from(".")));
+
+    let vfs = RoutedVfs::new(vec![
+        ("/scratch".to_string(), scratch.clone()),
+        ("/workspace".to_string(), ws.clone()),
+    ]);
+
+    vfs.write("/scratch/test.txt", "hello").await.unwrap();
+    let content = vfs.read("/scratch/test.txt").await.unwrap();
+    assert_eq!(content, "hello");
+}
+
+#[tokio::test]
+async fn routed_vfs_root_aggregates_all_backends() {
+    let scratch = Arc::new(ScratchBackend::default());
+    scratch.write("/scratch/file.txt", "data").await.unwrap();
+    let ws = Arc::new(WorkspaceBackend::new(std::path::PathBuf::from(".")));
+    ws.write("/workspace/other.txt", "more").await.unwrap();
+
+    let vfs = RoutedVfs::new(vec![
+        ("/scratch".to_string(), scratch),
+        ("/workspace".to_string(), ws),
+    ]);
+
+    let entries = vfs.ls("/").await.unwrap();
+    assert!(!entries.is_empty());
+    assert!(entries.iter().any(|e| e.path.contains("file.txt")));
+    assert!(entries.iter().any(|e| e.path.contains("other.txt")));
+}
+
+#[tokio::test]
+async fn routed_vfs_unknown_path_returns_error() {
+    let vfs = RoutedVfs::new(vec![]);
+    let result = vfs.read("/unknown/test.txt").await;
+    assert!(result.is_err());
 }
