@@ -5,6 +5,7 @@ use crate::environment::{
 };
 use crate::events::RuntimeFinishReason;
 use crate::message::RuntimeMessage;
+use crate::offload::ToolOffloadPolicy;
 use std::sync::Arc;
 use torque_kernel::{
     AgentDefinition, AgentInstanceId, ExecutionOutcome, ExecutionRequest, ExecutionResult,
@@ -57,6 +58,7 @@ pub struct RuntimeHost {
     hydration_source: Option<Arc<dyn RuntimeHydrationSource>>,
     checkpoint_policy: RuntimeCheckpointPolicy,
     approval_gateway: Option<Arc<dyn ApprovalGateway>>,
+    offload_policy: Option<Arc<ToolOffloadPolicy>>,
 }
 
 impl RuntimeHost {
@@ -72,6 +74,7 @@ impl RuntimeHost {
             hydration_source: None,
             checkpoint_policy: RuntimeCheckpointPolicy::default(),
             approval_gateway: None,
+            offload_policy: None,
         }
     }
 
@@ -93,6 +96,11 @@ impl RuntimeHost {
         approval_gateway: Arc<dyn ApprovalGateway>,
     ) -> Self {
         self.approval_gateway = Some(approval_gateway);
+        self
+    }
+
+    pub fn with_offload_policy(mut self, offload_policy: Arc<ToolOffloadPolicy>) -> Self {
+        self.offload_policy = Some(offload_policy);
         self
     }
 
@@ -202,6 +210,18 @@ impl RuntimeHost {
                                 tool_call.arguments.clone(),
                             )
                             .await?;
+
+                        let result = if let Some(offload) = &self.offload_policy {
+                            offload
+                                .offload(
+                                    &tool_call.name,
+                                    result,
+                                    Some(instance_id.as_uuid()),
+                                )
+                                .await?
+                        } else {
+                            result
+                        };
 
                         if let Some(output_sink) = output_sink {
                             output_sink.on_tool_result(&tool_call.name, &result);

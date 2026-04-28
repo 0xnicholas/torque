@@ -1,13 +1,16 @@
 use async_trait::async_trait;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use torque_runtime::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use torque_runtime::environment::{
-    RuntimeCheckpointSink, RuntimeEventSink, RuntimeModelDriver, RuntimeToolExecutor,
+    RuntimeCheckpointSink, RuntimeEventSink, RuntimeExecutionContext, RuntimeModelDriver,
+    RuntimeToolExecutor,
 };
 use torque_runtime::events::{ModelTurnResult, RuntimeFinishReason};
 use torque_runtime::host::RuntimeHost;
 use torque_runtime::message::RuntimeMessage;
-use torque_runtime::tools::{RuntimeToolDef, RuntimeToolResult};
+use torque_runtime::offload::ToolOffloadPolicy;
+use torque_runtime::tools::{RuntimeToolCall, RuntimeToolDef, RuntimeToolResult};
+use torque_runtime::vfs::{EditResult, FileInfo, GrepMatch, VfsBackend};
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -116,4 +119,108 @@ async fn runtime_host_executes_through_neutral_ports() {
     assert_eq!(*event_sink.execution_results.lock().unwrap(), 2);
     assert_eq!(*event_sink.checkpoint_events.lock().unwrap(), 1);
     assert_eq!(*checkpoint_sink.saves.lock().unwrap(), 1);
+}
+
+struct ToolCallingModelDriver;
+
+#[async_trait]
+impl RuntimeModelDriver for ToolCallingModelDriver {
+    async fn run_turn(
+        &self,
+        _messages: Vec<RuntimeMessage>,
+        _tools: Vec<RuntimeToolDef>,
+        _sink: Option<&dyn torque_runtime::environment::RuntimeOutputSink>,
+    ) -> anyhow::Result<ModelTurnResult> {
+        Ok(ModelTurnResult {
+            finish_reason: RuntimeFinishReason::ToolCalls,
+            assistant_text: String::new(),
+            tool_calls: vec![RuntimeToolCall {
+                id: "call_test".to_string(),
+                name: "test_tool".to_string(),
+                arguments: serde_json::json!({}),
+            }],
+        })
+    }
+}
+
+struct LargeOutputToolExecutor;
+
+#[async_trait]
+impl RuntimeToolExecutor for LargeOutputToolExecutor {
+    async fn execute(
+        &self,
+        _ctx: RuntimeExecutionContext,
+        _name: &str,
+        _args: serde_json::Value,
+    ) -> anyhow::Result<RuntimeToolResult> {
+        Ok(RuntimeToolResult {
+            success: true,
+            content: "x".repeat(5000),
+            error: None,
+            offload_ref: None,
+        })
+    }
+
+    async fn tool_defs(&self) -> anyhow::Result<Vec<RuntimeToolDef>> {
+        Ok(vec![])
+    }
+}
+
+struct RecordingScratch(Mutex<Vec<String>>);
+
+#[async_trait]
+impl VfsBackend for RecordingScratch {
+    async fn ls(&self, _: &str) -> anyhow::Result<Vec<FileInfo>> {
+        Ok(vec![])
+    }
+    async fn read(&self, _: &str) -> anyhow::Result<String> {
+        Ok(String::new())
+    }
+    async fn write(&self, path: &str, _: &str) -> anyhow::Result<()> {
+        self.0.lock().unwrap().push(path.to_string());
+        Ok(())
+    }
+    async fn edit(&self, _: &str, _: &str, _: &str, _: bool) -> anyhow::Result<EditResult> {
+        Ok(EditResult { occurrences: 0 })
+    }
+    async fn glob(&self, _: &str, _: &str) -> anyhow::Result<Vec<FileInfo>> {
+        Ok(vec![])
+    }
+    async fn grep(&self, _: &str, _: &str) -> anyhow::Result<Vec<GrepMatch>> {
+        Ok(vec![])
+    }
+}
+
+#[tokio::test]
+async fn tool_result_offloaded_to_scratch_when_above_inline_threshold() {
+    let scratch = Arc::new(RecordingScratch(Mutex::new(vec![])));
+    let offload_policy = Arc::new(ToolOffloadPolicy::new(Some(scratch.clone()), None));
+    let agent_def = torque_kernel::AgentDefinition::new("test", "system");
+
+    let mut host = RuntimeHost::new(
+        vec![agent_def.clone()],
+        Arc::new(FakeEventSink::default()),
+        Arc::new(FakeCheckpointSink::default()),
+    )
+    .with_offload_policy(offload_policy);
+
+    let request = torque_kernel::ExecutionRequest::new(agent_def.id, "Test offload", vec![]);
+    let _ = host
+        .execute_v1(
+            request,
+            &ToolCallingModelDriver,
+            &LargeOutputToolExecutor,
+            None,
+            vec![RuntimeMessage::user("go")],
+        )
+        .await;
+
+    let paths = scratch.0.lock().unwrap();
+    assert!(
+        paths
+            .iter()
+            .any(|p| p.starts_with("/scratch/tool-results/")),
+        "Expected offloaded path in {:?}",
+        paths
+    );
 }
