@@ -7,12 +7,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Approval>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -43,7 +43,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Approval>, StatusCode> {
     match services.approval.get(id).await {
@@ -54,7 +54,7 @@ pub async fn get(
 }
 
 pub async fn resolve(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<ApprovalResolveRequest>,
 ) -> Result<StatusCode, StatusCode> {

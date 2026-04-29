@@ -10,12 +10,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Task>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -46,7 +46,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Task>, StatusCode> {
     match services.task.get(id).await {
@@ -57,7 +57,7 @@ pub async fn get(
 }
 
 pub async fn cancel(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.task.cancel(id).await {
@@ -68,7 +68,7 @@ pub async fn cancel(
 }
 
 pub async fn list_events(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Event>>, (StatusCode, Json<ErrorBody>)> {
@@ -89,7 +89,7 @@ pub async fn list_events(
 }
 
 pub async fn list_approvals(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Approval>>, (StatusCode, Json<ErrorBody>)> {
@@ -115,7 +115,7 @@ pub async fn list_approvals(
 }
 
 pub async fn list_delegations(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Delegation>>, (StatusCode, Json<ErrorBody>)> {

@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+
+use super::provider::{Provider, ProviderConfig, ProviderType};
 
 use super::client::{
     ChatRequest, ChatResponse, Chunk, FinishReason, LlmClient, Message, TokenUsage,
@@ -16,31 +18,77 @@ pub struct OpenAiClient {
     base_url: String,
     api_key: String,
     default_model: String,
+    provider_config: ProviderConfig,
 }
 
 impl OpenAiClient {
+    /// Create a client from raw parameters (backward compat).
+    ///
+    /// Provider type is auto-detected from the URL: `localhost:11434`
+    /// → Ollama, `api.openai.com` → OpenAI, everything else →
+    /// `Custom("openai-compatible")`.
     pub fn new(base_url: String, api_key: String, default_model: String) -> Self {
+        let provider_type = if base_url.contains("localhost:11434") {
+            ProviderType::Ollama
+        } else if base_url.contains("api.openai.com") {
+            ProviderType::OpenAI
+        } else {
+            ProviderType::Custom("openai-compatible".into())
+        };
+
+        let config = ProviderConfig {
+            provider_type,
+            base_url: Some(base_url),
+            api_key: Some(api_key),
+            default_model: Some(default_model),
+            extra: HashMap::new(),
+        };
+
+        Self::new_with_config(config)
+    }
+
+    /// Canonical constructor — preserves the full [`ProviderConfig`]
+    /// including `extra` parameters.
+    ///
+    /// Defaults are applied via [`ProviderConfig::with_defaults`]
+    /// before construction.
+    pub fn new_with_config(config: ProviderConfig) -> Self {
+        let cfg = config.with_defaults();
+
+        let base_url = cfg
+            .base_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1")
+            .to_string();
+        let api_key = cfg.api_key.as_deref().unwrap_or("").to_string();
+        let default_model = cfg
+            .default_model
+            .as_deref()
+            .unwrap_or("gpt-4o-mini")
+            .to_string();
+
         let http_client = Client::builder()
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .expect("failed to build reqwest client");
+
         Self {
             http_client,
             base_url,
             api_key,
             default_model,
+            provider_config: cfg,
         }
     }
 
-    pub fn from_env() -> Result<Self> {
-        let base_url = std::env::var("LLM_BASE_URL")
-            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-        let api_key = std::env::var("LLM_API_KEY")
-            .map_err(|_| LlmError::Config("LLM_API_KEY not set".to_string()))?;
-        let default_model =
-            std::env::var("LLM_AGENT_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    /// Construct an [`OpenAiClient`] from a [`ProviderConfig`] reference.
+    pub fn from_config(config: &ProviderConfig) -> Result<Self> {
+        Ok(Self::new_with_config(config.clone()))
+    }
 
-        Ok(Self::new(base_url, api_key, default_model))
+    pub fn from_env() -> Result<Self> {
+        let config = ProviderConfig::from_env();
+        Ok(Self::new_with_config(config))
     }
 
     fn build_request(&self, request: ChatRequest) -> serde_json::Value {
@@ -53,13 +101,17 @@ impl OpenAiClient {
             body["tools"] = serde_json::json!(tools
                 .into_iter()
                 .map(|t| {
+                    let mut f = serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    });
+                    if let Some(strict) = t.strict {
+                        f["strict"] = strict.into();
+                    }
                     serde_json::json!({
                         "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        }
+                        "function": f,
                     })
                 })
                 .collect::<Vec<_>>());
@@ -71,6 +123,22 @@ impl OpenAiClient {
 
         if let Some(temperature) = request.temperature {
             body["temperature"] = temperature.into();
+        }
+
+        if let Some(ref fmt) = request.response_format {
+            body["response_format"] = serde_json::json!(fmt);
+        }
+
+        if let Some(ref choice) = request.tool_choice {
+            body["tool_choice"] = serde_json::json!(choice);
+        }
+
+        if let Some(top_p) = request.top_p {
+            body["top_p"] = top_p.into();
+        }
+
+        if let Some(seed) = request.seed {
+            body["seed"] = seed.into();
         }
 
         if let Some(stream) = request.stream {
@@ -88,6 +156,45 @@ impl OpenAiClient {
             Some("tool_calls") => FinishReason::ToolCalls,
             _ => FinishReason::Stop,
         }
+    }
+
+    /// List available models via `/v1/models`.
+    async fn list_models_impl(&self) -> Result<Vec<String>> {
+        let url = format!("{}/models", self.base_url);
+
+        let response = self
+            .http_client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await?;
+
+        let status = response.status();
+        if status.as_u16() == 401 {
+            return Err(LlmError::AuthenticationFailed);
+        }
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LlmError::InvalidResponse(format!(
+                "Status {}: {}",
+                status.as_u16(),
+                error_text
+            )));
+        }
+
+        #[derive(Deserialize)]
+        struct ModelList {
+            data: Vec<ModelEntry>,
+        }
+
+        #[derive(Deserialize)]
+        struct ModelEntry {
+            id: String,
+        }
+
+        let body: ModelList = response.json().await?;
+        let models: Vec<String> = body.data.into_iter().map(|m| m.id).collect();
+        Ok(models)
     }
 }
 
@@ -128,6 +235,8 @@ impl LlmClient for OpenAiClient {
 
         #[derive(Deserialize)]
         struct ResponseBody {
+            id: Option<String>,
+            model: Option<String>,
             choices: Vec<Choice>,
             usage: Usage,
         }
@@ -189,6 +298,8 @@ impl LlmClient for OpenAiClient {
                 role: choice.message.role,
                 content,
                 tool_calls,
+                tool_call_id: None,
+                name: None,
             };
             (msg, reason)
         } else {
@@ -206,6 +317,8 @@ impl LlmClient for OpenAiClient {
         );
 
         Ok(ChatResponse {
+            id: body.id,
+            model: body.model,
             message,
             usage: TokenUsage {
                 prompt_tokens: body.usage.prompt_tokens,
@@ -411,6 +524,8 @@ impl LlmClient for OpenAiClient {
         );
 
         Ok(ChatResponse {
+            id: None,
+            model: Some(self.default_model.clone()),
             message: Message::assistant(full_content),
             usage,
             finish_reason,
@@ -427,6 +542,29 @@ impl LlmClient for OpenAiClient {
 
     fn model(&self) -> &str {
         &self.default_model
+    }
+
+    async fn list_models(&self) -> Result<Vec<String>> {
+        self.list_models_impl().await
+    }
+}
+
+// ─── Provider implementation ───────────────────────────────────
+
+#[async_trait]
+impl Provider for OpenAiClient {
+    fn provider_type(&self) -> ProviderType {
+        self.provider_config.provider_type.clone()
+    }
+
+    fn config(&self) -> &ProviderConfig {
+        &self.provider_config
+    }
+
+    async fn create_client(&self) -> Result<Box<dyn LlmClient>> {
+        Ok(Box::new(Self::new_with_config(
+            self.provider_config.clone(),
+        )))
     }
 }
 

@@ -11,14 +11,14 @@ use crate::models::v1::memory::{
 };
 use crate::repository::MemoryRepositoryV1;
 use anyhow::Context;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MemoryGatingService {
     repo: Arc<dyn MemoryRepositoryV1>,
     embedding: Option<Arc<dyn EmbeddingGenerator>>,
-    llm: Option<Arc<OpenAiClient>>,
+    llm: Option<Arc<dyn LlmClient>>,
     gating_config: GatingConfig,
     candidate_config: CandidateGenerationConfig,
 }
@@ -27,7 +27,7 @@ impl MemoryGatingService {
     pub fn new(
         repo: Arc<dyn MemoryRepositoryV1>,
         embedding: Option<Arc<dyn EmbeddingGenerator>>,
-        llm: Option<Arc<OpenAiClient>>,
+        llm: Option<Arc<dyn LlmClient>>,
     ) -> Self {
         Self {
             repo,

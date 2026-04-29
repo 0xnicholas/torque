@@ -124,6 +124,7 @@ async fn test_run_lifecycle_creates_task_and_updates_instance_status() {
         idempotency_key: None,
         webhook_url: None,
         async_execution: false,
+        agent_instance_id: None,
     };
 
     let result = run_service
@@ -256,6 +257,7 @@ async fn test_run_with_nonexistent_instance_returns_error() {
         idempotency_key: None,
         webhook_url: None,
         async_execution: false,
+        agent_instance_id: None,
     };
 
     // Use a random UUID that doesn't exist
@@ -404,6 +406,7 @@ async fn test_run_kernel_path_isolates_private_todos_by_instance() {
         idempotency_key: None,
         webhook_url: None,
         async_execution: false,
+        agent_instance_id: None,
     };
     let run_request_b = RunRequest {
         goal: "write todos".into(),
@@ -416,6 +419,7 @@ async fn test_run_kernel_path_isolates_private_todos_by_instance() {
         idempotency_key: None,
         webhook_url: None,
         async_execution: false,
+        agent_instance_id: None,
     };
 
     let (event_tx_a, _event_rx_a) = mpsc::channel::<StreamEvent>(32);
@@ -556,6 +560,7 @@ async fn test_run_task_status_transitions() {
         idempotency_key: None,
         webhook_url: None,
         async_execution: false,
+        agent_instance_id: None,
     };
 
     run_service

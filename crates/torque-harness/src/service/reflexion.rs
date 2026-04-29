@@ -159,6 +159,10 @@ Rules:
                 max_tokens: Some(1500),
                 tools: None,
                 stream: None,
+                response_format: None,
+                tool_choice: None,
+                top_p: None,
+                seed: None,
             })
             .await
             .map_err(|e| anyhow::anyhow!("LLM reflection failed: {}", e))?;

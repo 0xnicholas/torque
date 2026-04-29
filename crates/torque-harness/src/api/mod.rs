@@ -1,13 +1,13 @@
 use crate::db::Database;
 use crate::service::ServiceContainer;
 use axum::Router;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 
 pub mod middleware;
 pub mod v1;
 
-pub fn router(db: Database, llm: Arc<OpenAiClient>, services: Arc<ServiceContainer>) -> Router {
+pub fn router(db: Database, llm: Arc<dyn LlmClient>, services: Arc<ServiceContainer>) -> Router {
     use crate::api::middleware::auth_middleware;
     use axum::middleware;
 

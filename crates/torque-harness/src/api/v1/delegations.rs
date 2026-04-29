@@ -7,12 +7,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn create(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<DelegationCreate>,
 ) -> Result<(StatusCode, Json<Delegation>), (StatusCode, Json<ErrorBody>)> {
     let delegation = services
@@ -28,7 +28,7 @@ pub async fn create(
 }
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Delegation>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -59,7 +59,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Delegation>, StatusCode> {
     match services.delegation.get(id).await {
@@ -70,7 +70,7 @@ pub async fn get(
 }
 
 pub async fn accept(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.delegation.accept(id).await {
@@ -86,7 +86,7 @@ pub struct RejectRequest {
 }
 
 pub async fn reject(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<RejectRequest>,
 ) -> Result<StatusCode, StatusCode> {
@@ -103,7 +103,7 @@ pub struct CompleteRequest {
 }
 
 pub async fn complete(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<CompleteRequest>,
 ) -> Result<StatusCode, StatusCode> {
@@ -120,7 +120,7 @@ pub struct FailRequest {
 }
 
 pub async fn fail(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<FailRequest>,
 ) -> Result<StatusCode, StatusCode> {

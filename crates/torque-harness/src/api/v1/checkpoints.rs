@@ -12,13 +12,13 @@ use axum::{
     Json,
 };
 use torque_runtime::checkpoint::Message;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Checkpoint>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -49,7 +49,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Checkpoint>, StatusCode> {
     match services.checkpoint.get(id).await {
@@ -60,7 +60,7 @@ pub async fn get(
 }
 
 pub async fn restore(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<RecoveryResult>, (StatusCode, Json<ErrorBody>)> {
     let assessment = services.recovery.assess_recovery(id).await.map_err(|e| {
@@ -107,7 +107,7 @@ pub async fn restore(
 }
 
 pub async fn get_messages(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<CheckpointMessagesResponse>, (StatusCode, Json<ErrorBody>)> {
     let messages = services
@@ -128,7 +128,7 @@ pub struct CheckpointMessagesResponse {
 }
 
 pub async fn resume(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<RunRequest>,
 ) -> Result<Sse<ReceiverStream<Result<Event, axum::Error>>>, (StatusCode, Json<ErrorBody>)> {

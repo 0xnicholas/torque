@@ -27,8 +27,31 @@ async fn main() -> anyhow::Result<()> {
 
     let database = Database::new(pool);
 
-    info!("Initializing LLM client...");
-    let llm = Arc::new(llm::OpenAiClient::from_env()?);
+    info!("Initializing LLM provider...");
+    let mut registry = llm::ProviderRegistry::new();
+    let default_config = llm::ProviderConfig::from_env().with_defaults();
+    let default_provider = llm::create_provider(default_config)?;
+    registry.register("default", default_provider);
+
+    let health = registry.health_check_all().await;
+    for (name, status) in &health {
+        if !status.reachable {
+            tracing::warn!(
+                "Provider '{}' health check failed: {:?}",
+                name,
+                status.error
+            );
+        } else {
+            tracing::info!(
+                "Provider '{}' OK ({}ms, {} models)",
+                name,
+                status.latency_ms,
+                status.model_count.unwrap_or(0)
+            );
+        }
+    }
+
+    let llm: Arc<dyn llm::LlmClient> = registry.create_default_client().await?.into();
 
     let app = app::build_app(database, llm);
 

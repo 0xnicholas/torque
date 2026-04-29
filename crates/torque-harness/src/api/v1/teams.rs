@@ -10,12 +10,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn create_definition(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<TeamDefinitionCreate>,
 ) -> Result<(StatusCode, Json<TeamDefinition>), (StatusCode, Json<ErrorBody>)> {
     let def = services.team.create_definition(req).await.map_err(|e| {
@@ -33,7 +33,7 @@ pub async fn create_definition(
 }
 
 pub async fn list_definitions(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<TeamDefinition>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -58,7 +58,7 @@ pub async fn list_definitions(
 }
 
 pub async fn get_definition(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<TeamDefinition>, StatusCode> {
     match services.team.get_definition(id).await {
@@ -69,7 +69,7 @@ pub async fn get_definition(
 }
 
 pub async fn delete_definition(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.team.delete_definition(id).await {
@@ -80,7 +80,7 @@ pub async fn delete_definition(
 }
 
 pub async fn create_instance(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<TeamInstanceCreate>,
 ) -> Result<(StatusCode, Json<TeamInstance>), (StatusCode, Json<ErrorBody>)> {
     let instance = services.team.create_instance(req).await.map_err(|e| {
@@ -98,7 +98,7 @@ pub async fn create_instance(
 }
 
 pub async fn list_instances(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<TeamInstance>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -129,7 +129,7 @@ pub async fn list_instances(
 }
 
 pub async fn get_instance(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<TeamInstance>, StatusCode> {
     match services.team.get_instance(id).await {
@@ -140,7 +140,7 @@ pub async fn get_instance(
 }
 
 pub async fn delete_instance(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.team.delete_instance(id).await {
@@ -151,7 +151,7 @@ pub async fn delete_instance(
 }
 
 pub async fn create_task(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<TeamTaskCreate>,
 ) -> Result<(StatusCode, Json<TeamTask>), (StatusCode, Json<ErrorBody>)> {
@@ -164,7 +164,7 @@ pub async fn create_task(
 }
 
 pub async fn list_tasks(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<TeamTask>>, (StatusCode, Json<ErrorBody>)> {
@@ -190,7 +190,7 @@ pub async fn list_tasks(
 }
 
 pub async fn list_members(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<TeamMember>>, (StatusCode, Json<ErrorBody>)> {
@@ -216,7 +216,7 @@ pub async fn list_members(
 }
 
 pub async fn publish(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(body): Json<PublishRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorBody>)> {
@@ -284,7 +284,7 @@ pub struct SupervisorExecutionResponse {
 }
 
 pub async fn execute_supervisor(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<SupervisorExecutionResponse>, (StatusCode, Json<ErrorBody>)> {
     match services.team_supervisor.poll_and_execute(id).await {

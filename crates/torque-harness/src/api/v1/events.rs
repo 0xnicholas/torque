@@ -7,11 +7,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Event>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);

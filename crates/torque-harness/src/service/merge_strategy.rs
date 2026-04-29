@@ -2,7 +2,9 @@ use crate::models::v1::gating::MergeStrategy;
 use crate::models::v1::memory::{MemoryContent, MemoryEntry};
 use anyhow::Result;
 use async_trait::async_trait;
+use llm::{ChatRequest, LlmClient};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProvenanceEntry {
@@ -132,24 +134,15 @@ impl MergeStrategyHandler for WithProvenanceStrategy {
     }
 }
 
-use llm::OpenAiClient;
-use std::sync::Arc;
-
 pub struct SummarizeStrategy {
-    http_client: reqwest::Client,
-    api_base: String,
-    api_key: String,
+    llm: Arc<dyn LlmClient>,
     model: String,
 }
 
 impl SummarizeStrategy {
-    pub fn new(llm: Arc<OpenAiClient>) -> Self {
-        Self {
-            http_client: reqwest::Client::new(),
-            api_base: crate::config::extraction_api_base(),
-            api_key: crate::config::extraction_api_key().unwrap_or_default(),
-            model: crate::config::extraction_model(),
-        }
+    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
+        let model = crate::config::extraction_model();
+        Self { llm, model }
     }
 }
 
@@ -169,36 +162,27 @@ impl MergeStrategyHandler for SummarizeStrategy {
             candidate.key, candidate.value
         );
 
-        let body = serde_json::json!({
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": "You are a memory consolidation assistant."},
-                {"role": "user", "content": prompt}
+        let request = ChatRequest::new(
+            &self.model,
+            vec![
+                llm::Message::system("You are a memory consolidation assistant."),
+                llm::Message::user(&prompt),
             ],
-            "temperature": 0.3,
-            "max_tokens": 500
-        });
+        )
+        .with_max_tokens(500)
+        .with_temperature(0.3);
 
-        let url = format!("{}/chat/completions", self.api_base);
-        let response = self
-            .http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await?
-            .text()
-            .await?;
+        let response = self.llm.chat(request).await?;
+        let response_text = response.message.content;
 
         let consolidated: serde_json::Value =
-            serde_json::from_str(&response).unwrap_or_else(|_| {
+            serde_json::from_str(&response_text).unwrap_or_else(|_| {
                 serde_json::json!({
                     "key": candidate.key.clone(),
                     "value": {
                         "original": existing.value,
                         "new": candidate.value.clone(),
-                        "summary": response
+                        "summary": response_text
                     }
                 })
             });
@@ -230,7 +214,7 @@ pub struct MergeStrategyExecutor {
 }
 
 impl MergeStrategyExecutor {
-    pub fn new(llm: Arc<OpenAiClient>) -> Self {
+    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
         Self {
             summarize: SummarizeStrategy::new(llm),
             append: AppendStrategy,

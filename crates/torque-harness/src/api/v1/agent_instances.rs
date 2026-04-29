@@ -14,7 +14,7 @@ use axum::{
     Json,
 };
 use torque_runtime::checkpoint::Message;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -25,7 +25,7 @@ pub struct ResumeResponse {
 }
 
 pub async fn create(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<AgentInstanceCreate>,
 ) -> Result<(StatusCode, Json<AgentInstance>), (StatusCode, Json<ErrorBody>)> {
     let instance = services.agent_instance.create(req).await.map_err(|e| {
@@ -43,7 +43,7 @@ pub async fn create(
 }
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<AgentInstance>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -74,7 +74,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<AgentInstance>, StatusCode> {
     match services.agent_instance.get(id).await {
@@ -85,7 +85,7 @@ pub async fn get(
 }
 
 pub async fn delete(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.agent_instance.delete(id).await {
@@ -96,7 +96,7 @@ pub async fn delete(
 }
 
 pub async fn cancel(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services
@@ -111,7 +111,7 @@ pub async fn cancel(
 }
 
 pub async fn resume(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ResumeResponse>, (StatusCode, Json<ErrorBody>)> {
     let (instance, messages, _rebuilt_state) =
@@ -130,7 +130,7 @@ pub async fn resume(
 }
 
 pub async fn time_travel(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<TimeTravelRequest>,
 ) -> Result<Json<AgentInstance>, (StatusCode, Json<ErrorBody>)> {
@@ -153,7 +153,7 @@ pub async fn time_travel(
 }
 
 pub async fn list_delegations(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Delegation>>, (StatusCode, Json<ErrorBody>)> {
@@ -179,7 +179,7 @@ pub async fn list_delegations(
 }
 
 pub async fn list_artifacts(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Artifact>>, (StatusCode, Json<ErrorBody>)> {
@@ -205,7 +205,7 @@ pub async fn list_artifacts(
 }
 
 pub async fn list_events(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Event>>, (StatusCode, Json<ErrorBody>)> {
@@ -226,7 +226,7 @@ pub async fn list_events(
 }
 
 pub async fn list_checkpoints(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<Checkpoint>>, (StatusCode, Json<ErrorBody>)> {

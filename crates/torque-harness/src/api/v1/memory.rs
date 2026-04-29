@@ -14,7 +14,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -38,7 +38,7 @@ pub struct CandidateStats {
 }
 
 pub async fn create_candidate(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<MemoryWriteCandidateCreate>,
 ) -> Result<
     (
@@ -82,7 +82,7 @@ pub async fn create_candidate(
 }
 
 pub async fn list_candidates(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<CandidateListResponse>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -180,7 +180,7 @@ fn default_limit() -> i64 {
 }
 
 pub async fn list_decisions(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<DecisionListQuery>,
 ) -> Result<Json<ListResponse<MemoryDecisionLog>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -221,7 +221,7 @@ pub async fn list_decisions(
 }
 
 pub async fn get_candidate(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<crate::models::v1::memory::MemoryWriteCandidate>, StatusCode> {
     match services.memory.v1_get_candidate(id).await {
@@ -232,7 +232,7 @@ pub async fn get_candidate(
 }
 
 pub async fn approve_candidate(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<crate::models::v1::memory::MemoryEntry>, (StatusCode, Json<ErrorBody>)> {
     let candidate = services.memory.v1_get_candidate(id).await.map_err(|e| {
@@ -318,7 +318,7 @@ pub async fn approve_candidate(
 }
 
 pub async fn reject_candidate(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<RejectCandidateRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorBody>)> {
@@ -353,7 +353,7 @@ pub async fn reject_candidate(
 }
 
 pub async fn merge_candidate(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<MergeCandidateRequest>,
 ) -> Result<Json<crate::models::v1::memory::MemoryEntry>, (StatusCode, Json<ErrorBody>)> {
@@ -492,7 +492,7 @@ pub async fn merge_candidate(
 }
 
 pub async fn list_entries(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<crate::models::v1::memory::MemoryEntry>>, (StatusCode, Json<ErrorBody>)>
 {
@@ -524,7 +524,7 @@ pub async fn list_entries(
 }
 
 pub async fn get_entry(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<crate::models::v1::memory::MemoryEntry>, StatusCode> {
     match services.memory.v1_get_entry(id).await {
@@ -535,7 +535,7 @@ pub async fn get_entry(
 }
 
 pub async fn search(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<SemanticSearchQuery>,
 ) -> Result<Json<ListResponse<SemanticSearchResult>>, (StatusCode, Json<ErrorBody>)> {
     let limit = req.limit.unwrap_or(10).clamp(1, 100);
@@ -571,7 +571,7 @@ pub async fn search(
 }
 
 pub async fn force_write(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<crate::models::v1::memory::MemoryContent>,
 ) -> Result<(StatusCode, Json<crate::models::v1::memory::MemoryEntry>), (StatusCode, Json<ErrorBody>)>
 {
@@ -596,7 +596,7 @@ pub struct BackfillResponse {
 }
 
 pub async fn backfill(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<BackfillRequest>,
 ) -> Result<Json<BackfillResponse>, (StatusCode, Json<ErrorBody>)> {
     let batch_size = req.batch_size.unwrap_or(100).clamp(1, 1000);
@@ -629,7 +629,7 @@ pub async fn backfill(
 }
 
 pub async fn review_notifications_sse(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
 ) -> Result<
     Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>>,
     StatusCode,
@@ -683,7 +683,7 @@ pub struct CompactionRequest {
 }
 
 pub async fn trigger_compaction(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<CompactionRequest>,
 ) -> Result<Json<CompactionJob>, (StatusCode, Json<ErrorBody>)> {
     let job = services
@@ -702,7 +702,7 @@ pub struct DecisionStatsQuery {
 }
 
 pub async fn get_decision_stats(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<DecisionStatsQuery>,
 ) -> Result<Json<DecisionStats>, (StatusCode, Json<ErrorBody>)> {
     let stats = services

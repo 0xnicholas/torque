@@ -103,6 +103,8 @@ impl LlmClient for FakeLlm {
         }
         let response = self.pop_response()?;
         Ok(ChatResponse {
+            id: None,
+            model: None,
             message: Message::assistant(response.message_content),
             usage: TokenUsage {
                 prompt_tokens: 0,
@@ -127,6 +129,8 @@ impl LlmClient for FakeLlm {
         }
 
         Ok(ChatResponse {
+            id: None,
+            model: None,
             message: Message::assistant(response.message_content),
             usage: TokenUsage {
                 prompt_tokens: 0,

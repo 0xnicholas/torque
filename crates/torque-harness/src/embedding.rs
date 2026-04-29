@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use llm::ProviderConfig;
 
 #[async_trait]
 pub trait EmbeddingGenerator: Send + Sync {
@@ -57,6 +58,26 @@ impl OpenAIEmbeddingGenerator {
         Ok(Self::new(api_key)
             .with_base_url(base_url)
             .with_model(model, dimensions))
+    }
+
+    /// Create from a [`ProviderConfig`], reusing its `base_url` and
+    /// `api_key`. The embedding-specific `model` and `dimensions`
+    /// are read from `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` env
+    /// vars with sensible defaults.
+    pub fn from_provider_config(config: &ProviderConfig) -> Self {
+        let cfg = config.clone().with_defaults();
+        let base_url = cfg.base_url.unwrap_or_else(|| "https://api.openai.com/v1".into());
+        let api_key = cfg.api_key.unwrap_or_default();
+        let model = std::env::var("EMBEDDING_MODEL")
+            .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+        let dimensions = std::env::var("EMBEDDING_DIMENSIONS")
+            .ok()
+            .and_then(|d| d.parse().ok())
+            .unwrap_or(1536);
+
+        Self::new(api_key)
+            .with_base_url(base_url)
+            .with_model(model, dimensions)
     }
 }
 

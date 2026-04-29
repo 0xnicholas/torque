@@ -10,7 +10,7 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
@@ -29,7 +29,7 @@ pub struct WebhookStatusResponse {
 }
 
 pub async fn create(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<RunRequest>,
 ) -> Result<(StatusCode, Json<RunResponse>), (StatusCode, Json<ErrorBody>)> {
     if req.async_execution && req.agent_instance_id.is_none() {
@@ -87,7 +87,7 @@ pub async fn create(
 }
 
 pub async fn run(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<RunRequest>,
 ) -> Sse<ReceiverStream<Result<Event, axum::Error>>> {
@@ -121,7 +121,7 @@ pub async fn run(
 }
 
 pub async fn webhook_status(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WebhookStatusResponse>, (StatusCode, Json<ErrorBody>)> {
     let run = services

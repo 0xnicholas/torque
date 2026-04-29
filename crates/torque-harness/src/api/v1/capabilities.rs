@@ -10,12 +10,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn create_profile(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<CapabilityProfileCreate>,
 ) -> Result<(StatusCode, Json<CapabilityProfile>), (StatusCode, Json<ErrorBody>)> {
     let profile = services.capability.create_profile(req).await.map_err(|e| {
@@ -33,7 +33,7 @@ pub async fn create_profile(
 }
 
 pub async fn list_profiles(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<CapabilityProfile>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -58,7 +58,7 @@ pub async fn list_profiles(
 }
 
 pub async fn get_profile(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<CapabilityProfile>, StatusCode> {
     match services.capability.get_profile(id).await {
@@ -69,7 +69,7 @@ pub async fn get_profile(
 }
 
 pub async fn delete_profile(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.capability.delete_profile(id).await {
@@ -80,7 +80,7 @@ pub async fn delete_profile(
 }
 
 pub async fn resolve(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<CapabilityResolveByRefRequest>,
 ) -> Result<Json<CapabilityResolution>, (StatusCode, Json<ErrorBody>)> {
     let resolution = services
@@ -102,7 +102,7 @@ pub async fn resolve(
 }
 
 pub async fn create_binding(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Json(req): Json<CapabilityRegistryBindingCreate>,
 ) -> Result<(StatusCode, Json<CapabilityRegistryBinding>), (StatusCode, Json<ErrorBody>)> {
     let binding = services.capability.create_binding(req).await.map_err(|e| {
@@ -120,7 +120,7 @@ pub async fn create_binding(
 }
 
 pub async fn list_bindings(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<ListResponse<CapabilityRegistryBinding>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.clamp(1, 100);
@@ -145,7 +145,7 @@ pub async fn list_bindings(
 }
 
 pub async fn get_binding(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<CapabilityRegistryBinding>, StatusCode> {
     match services.capability.get_binding(id).await {
@@ -156,7 +156,7 @@ pub async fn get_binding(
 }
 
 pub async fn delete_binding(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
     match services.capability.delete_binding(id).await {

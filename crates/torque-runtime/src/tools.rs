@@ -60,6 +60,7 @@ impl From<RuntimeToolDef> for LlmToolDef {
             name: value.name,
             description: value.description,
             parameters: value.parameters,
+            strict: None,
         }
     }
 }

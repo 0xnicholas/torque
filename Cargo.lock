@@ -2626,20 +2626,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "torque-harness-lite"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "llm",
- "serde_json",
- "tokio",
- "torque-kernel",
- "torque-runtime",
- "uuid",
-]
-
-[[package]]
 name = "torque-kernel"
 version = "0.1.0"
 dependencies = [

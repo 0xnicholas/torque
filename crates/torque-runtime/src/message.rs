@@ -68,6 +68,8 @@ impl From<RuntimeMessage> for LlmMessage {
             role: role.to_string(),
             content: value.content,
             tool_calls: None,
+            tool_call_id: None,
+            name: None,
         }
     }
 }

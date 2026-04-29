@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub struct EscalationListQuery {
 }
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Query(q): Query<EscalationListQuery>,
 ) -> Result<Json<ListResponse<Escalation>>, (StatusCode, Json<ErrorBody>)> {
     let limit = q.limit.unwrap_or(50).clamp(1, 100);
@@ -45,7 +45,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {
     let escalation = services
@@ -65,7 +65,7 @@ pub struct EscalationResolveRequest {
 }
 
 pub async fn resolve(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(id): Path<Uuid>,
     Json(req): Json<EscalationResolveRequest>,
 ) -> Result<Json<Escalation>, (StatusCode, Json<ErrorBody>)> {

@@ -237,14 +237,9 @@ impl ServiceContainer {
             Some(notification_service.clone()),
         ));
         let candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator> =
-            if let Ok(gen) = candidate_generator::OpenAICandidateGenerator::new() {
+            {
+                let gen = candidate_generator::OpenAICandidateGenerator::new(llm.clone());
                 std::sync::Arc::new(gen)
-                    as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
-            } else {
-                tracing::warn!(
-                    "Failed to initialize OpenAICandidateGenerator, using NoOpCandidateGenerator"
-                );
-                std::sync::Arc::new(candidate_generator::NoOpCandidateGenerator {})
                     as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
             };
         let run = std::sync::Arc::new(RunService::new(

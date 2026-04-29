@@ -1,9 +1,12 @@
+use async_trait::async_trait;
+use chrono::Utc;
+use llm::{ChatRequest, LlmClient};
+use std::sync::Arc;
+use uuid::Uuid;
+
 use crate::config;
 use crate::models::v1::gating::{CandidateGenerationConfig, ExecutionSummary};
 use crate::models::v1::memory::{MemoryContent, MemoryWriteCandidate, MemoryWriteCandidateStatus};
-use async_trait::async_trait;
-use chrono::Utc;
-use uuid::Uuid;
 
 #[async_trait]
 pub trait CandidateGenerator: Send + Sync {
@@ -15,28 +18,14 @@ pub trait CandidateGenerator: Send + Sync {
 }
 
 pub struct OpenAICandidateGenerator {
-    http_client: reqwest::Client,
-    api_key: String,
-    base_url: String,
+    llm: Arc<dyn LlmClient>,
     model: String,
 }
 
 impl OpenAICandidateGenerator {
-    pub fn new() -> anyhow::Result<Self> {
-        let api_key = config::extraction_api_key()
-            .ok_or_else(|| anyhow::anyhow!("OPENAI_API_KEY or LLM_API_KEY must be set"))?;
-        let base_url = config::extraction_api_base();
+    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
         let model = config::extraction_model();
-
-        Ok(Self {
-            http_client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
-            api_key,
-            base_url,
-            model,
-        })
+        Self { llm, model }
     }
 
     async fn extract_candidates_via_llm(
@@ -81,51 +70,18 @@ impl OpenAICandidateGenerator {
             tool_calls = tool_calls_text
         );
 
-        let body = serde_json::json!({
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+        let request = ChatRequest::new(
+            &self.model,
+            vec![
+                llm::Message::system(&system_prompt),
+                llm::Message::user(&user_prompt),
             ],
-            "temperature": 0.3,
-            "max_tokens": 2000
-        });
+        )
+        .with_max_tokens(2000)
+        .with_temperature(0.3);
 
-        let url = format!("{}/chat/completions", self.base_url);
-        let response = self
-            .http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            anyhow::bail!("LLM API error: {} - {}", status, error_text);
-        }
-
-        #[derive(serde::Deserialize)]
-        struct ChatResponse {
-            choices: Vec<Choice>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Choice {
-            message: Message,
-        }
-        #[derive(serde::Deserialize)]
-        struct Message {
-            content: String,
-        }
-
-        let chat_response: ChatResponse = response.json().await?;
-        let content = chat_response
-            .choices
-            .first()
-            .map(|c| c.message.content.trim())
-            .unwrap_or("[]");
+        let response = self.llm.chat(request).await?;
+        let content = response.message.content.trim();
 
         let parsed: Vec<MemoryContent> = serde_json::from_str(content)
             .or_else(|_| {

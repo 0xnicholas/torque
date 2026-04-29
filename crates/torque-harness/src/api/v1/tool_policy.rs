@@ -7,11 +7,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 
 pub async fn list(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
 ) -> Result<Json<ListResponse<ToolPolicy>>, (StatusCode, Json<ErrorBody>)> {
     let data = services
         .tool_policy
@@ -30,7 +30,7 @@ pub async fn list(
 }
 
 pub async fn get(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(tool_name): Path<String>,
 ) -> Result<Json<ToolPolicy>, StatusCode> {
     services
@@ -43,7 +43,7 @@ pub async fn get(
 }
 
 pub async fn upsert(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(tool_name): Path<String>,
     Json(policy): Json<ToolPolicy>,
 ) -> Result<StatusCode, StatusCode> {
@@ -63,7 +63,7 @@ pub async fn upsert(
 }
 
 pub async fn delete(
-    State((_, _, services)): State<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)>,
+    State((_, _, services)): State<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>,
     Path(tool_name): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     services

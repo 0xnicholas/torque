@@ -4,7 +4,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use llm::OpenAiClient;
+use llm::LlmClient;
 use std::sync::Arc;
 
 pub mod agent_definitions;
@@ -22,7 +22,7 @@ pub mod tasks;
 pub mod teams;
 pub mod tool_policy;
 
-pub fn router() -> Router<(Database, Arc<OpenAiClient>, Arc<ServiceContainer>)> {
+pub fn router() -> Router<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)> {
     Router::new()
         .route(
             "/v1/agent-definitions",
