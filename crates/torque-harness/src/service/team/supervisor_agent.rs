@@ -1,4 +1,4 @@
-use crate::harness::{ReActHarness, ReActHarnessError};
+use crate::harness::{AgentLoop, AgentLoopError};
 use crate::infra::llm::LlmClient;
 use crate::models::v1::team::TriageResult;
 use crate::policy::ToolGovernanceService;
@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use torque_runtime::StepDecision;
 
 pub struct SupervisorAgent {
-    react: ReActHarness,
+    agent: AgentLoop,
     tools: Arc<ToolRegistry>,
 }
 
@@ -36,7 +36,7 @@ impl SupervisorAgent {
 
         let governed_registry =
             Arc::new(GovernedToolRegistry::new(registry.clone(), tool_governance));
-        let react = ReActHarness::new(
+        let agent = AgentLoop::new(
             llm,
             Arc::new(crate::harness::react::ToolExecution::Governed(
                 governed_registry,
@@ -44,7 +44,7 @@ impl SupervisorAgent {
         );
 
         Self {
-            react,
+            agent,
             tools: registry,
         }
     }
@@ -57,7 +57,7 @@ impl SupervisorAgent {
         &mut self,
         task: &str,
         event_sink: mpsc::Sender<crate::agent::stream::StreamEvent>,
-    ) -> Result<StepDecision, ReActHarnessError> {
+    ) -> Result<StepDecision, AgentLoopError> {
         let system_prompt = r#"You are a Team Supervisor agent.
 
 You lead a team of specialists to accomplish tasks. You must:
@@ -70,14 +70,14 @@ You lead a team of specialists to accomplish tasks. You must:
 
 Available tools let you delegate, accept/reject results, publish artifacts, and manage the team."#;
 
-        self.react.run(task, Some(system_prompt), event_sink).await
+        self.agent.run(task, Some(system_prompt), event_sink).await
     }
 
-    pub fn step_history(&self) -> &[crate::harness::ReActStep] {
-        self.react.step_history()
+    pub fn turn_count(&self) -> u32 {
+        self.agent.turn_count()
     }
 
-    pub async fn triage(&self, task: &str) -> Result<TriageResult, ReActHarnessError> {
-        self.react.triage(task).await
+    pub async fn triage(&self, task: &str) -> Result<TriageResult, AgentLoopError> {
+        self.agent.triage(task).await
     }
 }

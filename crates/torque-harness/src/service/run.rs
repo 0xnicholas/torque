@@ -15,9 +15,12 @@ use crate::service::candidate_generator::CandidateGenerator;
 use crate::service::gating::MemoryGatingService;
 use crate::service::memory_pipeline::MemoryPipelineService;
 use crate::service::reflexion::ReflexionService;
+use crate::service::governed_tool::GovernedToolRegistry;
 use crate::service::{RuntimeFactory, ToolService};
 use std::sync::Arc;
 use torque_runtime::checkpoint::RuntimeCheckpointPayload;
+use torque_runtime::message::StructuredMessage;
+use torque_runtime::message_queue::{DeliveryMode, InMemoryMessageQueue, MessageQueue};
 use tokio::sync::mpsc;
 use tracing::warn;
 use uuid::Uuid;
@@ -102,6 +105,24 @@ impl RunService {
         event_sink: mpsc::Sender<StreamEvent>,
         initial_messages: Vec<RuntimeMessage>,
     ) -> anyhow::Result<()> {
+        self.execute_inner_with_depth(instance_id, request, event_sink, initial_messages, 0)
+            .await
+    }
+
+    /// Recursive execution with followUp depth guard (max 3 levels).
+    async fn execute_inner_with_depth(
+        &self,
+        instance_id: Uuid,
+        request: RunRequest,
+        event_sink: mpsc::Sender<StreamEvent>,
+        initial_messages: Vec<RuntimeMessage>,
+        depth: usize,
+    ) -> anyhow::Result<()> {
+        const MAX_FOLLOWUP_DEPTH: usize = 3;
+        if depth >= MAX_FOLLOWUP_DEPTH {
+            warn!("FollowUp chain reached max depth {}; discarding remaining", MAX_FOLLOWUP_DEPTH);
+            return Ok(());
+        }
         // 1. Fetch instance and definition
         let instance = self
             .agent_instance_repo
@@ -171,82 +192,19 @@ impl RunService {
             )
             .await;
 
-        // 7a. Memory candidate generation (on success)
-        if let Ok(ref summary) = execution_result {
-            let exec_summary = ExecutionSummary {
-                task_id: task.id,
-                agent_instance_id: instance_id,
-                goal: request.goal.clone(),
-                output_summary: summary.clone(),
-                tool_calls: vec![],
-                duration_ms: None,
-            };
-            let candidate_config = config::candidate_generation_config();
-            match self
-                .candidate_generator
-                .generate_candidates(&exec_summary, &candidate_config)
-                .await
-            {
-                Ok(candidates) => {
-                    for candidate in candidates {
-                        match self.memory_pipeline.gate_and_notify(&candidate).await {
-                            Ok(decision) => {
-                                tracing::debug!(
-                                    "Memory candidate {} gated: {:?}",
-                                    candidate.id,
-                                    decision.decision
-                                );
-                            }
-                            Err(e) => {
-                                tracing::warn!("Failed to gate candidate {}: {}", candidate.id, e);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to generate memory candidates: {}", e);
-                }
-            }
-        }
 
-        let result = execution_result;
+        let (summary, mut queue) = match execution_result {
+            Ok((summary, queue)) => (summary, queue),
+            Err(e) => {
+                // 8. Update task status for failure
+                self.task_repo.update_status(task.id, TaskStatus::Failed).await?;
+                self.agent_instance_repo
+                    .update_current_task(instance_id, None)
+                    .await?;
+                self.agent_instance_repo
+                    .update_status(instance_id, AgentInstanceStatus::Failed)
+                    .await?;
 
-        // 8. Update task status based on result
-        let final_status = match &result {
-            Ok(_) => TaskStatus::Completed,
-            Err(_) => TaskStatus::Failed,
-        };
-        self.task_repo.update_status(task.id, final_status).await?;
-
-        // 9. Update instance status
-        self.agent_instance_repo
-            .update_current_task(instance_id, None)
-            .await?;
-        self.agent_instance_repo
-            .update_status(
-                instance_id,
-                if result.is_ok() {
-                    AgentInstanceStatus::Ready
-                } else {
-                    AgentInstanceStatus::Failed
-                },
-            )
-            .await?;
-
-        // 10. Send terminal event
-        match result {
-            Ok(_) => {
-                if let Err(e) = event_sink
-                    .send(StreamEvent::Done {
-                        message_id: task.id,
-                        artifacts: None,
-                    })
-                    .await
-                {
-                    warn!("Failed to send done event: {}", e);
-                }
-            }
-            Err(ref e) => {
                 if let Err(send_err) = event_sink
                     .send(StreamEvent::Error {
                         code: "EXECUTION_ERROR".into(),
@@ -256,34 +214,148 @@ impl RunService {
                 {
                     warn!("Failed to send error event: {}", send_err);
                 }
+
+                // Create failure checkpoint
+                let snapshot = serde_json::json!({
+                    "status": "FAILED",
+                    "task_id": task.id,
+                    "goal": request.goal,
+                });
+                if let Err(ce) = self
+                    .create_checkpoint(instance_id, Some(task.id), snapshot, None)
+                    .await
+                {
+                    warn!("Failed to create checkpoint after failure: {}", ce);
+                }
+
+                return Err(e);
             }
+        };
+
+        // 8. Update task status to completed
+        self.task_repo.update_status(task.id, TaskStatus::Completed).await?;
+        // 9. Update instance status to Ready
+        self.agent_instance_repo
+            .update_current_task(instance_id, None)
+            .await?;
+        self.agent_instance_repo
+            .update_status(instance_id, AgentInstanceStatus::Ready)
+            .await?;
+
+        // 10. Send terminal event
+        if let Err(e) = event_sink
+            .send(StreamEvent::Done {
+                message_id: task.id,
+                artifacts: None,
+            })
+            .await
+        {
+            warn!("Failed to send done event: {}", e);
         }
 
         // 11. Create checkpoint after execution
         let snapshot = serde_json::json!({
-            "status": if result.is_ok() { "READY" } else { "FAILED" },
+            "status": "READY",
             "task_id": task.id,
             "goal": request.goal,
         });
 
         if let Err(e) = self
-            .create_checkpoint(instance_id, Some(task.id), snapshot)
+            .create_checkpoint(instance_id, Some(task.id), snapshot, None)
             .await
         {
             warn!("Failed to create checkpoint after execution: {}", e);
         }
 
-        result.map(|_| ())
+        // 12. Process candidate generation with the summary
+        let exec_summary = ExecutionSummary {
+            task_id: task.id,
+            agent_instance_id: instance_id,
+            goal: request.goal.clone(),
+            output_summary: summary,
+            tool_calls: vec![],
+            duration_ms: None,
+        };
+        let candidate_config = config::candidate_generation_config();
+        match self
+            .candidate_generator
+            .generate_candidates(&exec_summary, &candidate_config)
+            .await
+        {
+            Ok(candidates) => {
+                for candidate in candidates {
+                    match self.memory_pipeline.gate_and_notify(&candidate).await {
+                        Ok(decision) => {
+                            tracing::debug!(
+                                "Memory candidate {} gated: {:?}",
+                                candidate.id,
+                                decision.decision
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to gate candidate {}: {}", candidate.id, e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to generate memory candidates: {}", e);
+            }
+        }
+
+        // 13. Check for followUp messages — chain recursive execution
+        let followups = queue.drain_followups();
+        if !followups.is_empty() {
+            tracing::debug!(
+                "FollowUp chain: {} message(s) at depth {}",
+                followups.len(),
+                depth
+            );
+
+            let followup_messages: Vec<RuntimeMessage> = followups
+                .into_iter()
+                .map(|sm| sm.into())
+                .collect();
+
+            // Create a follow-up request using the same goal
+            let followup_request = RunRequest {
+                goal: format!("[followUp] {}", request.goal),
+                instructions: request.instructions.clone(),
+                input_artifacts: request.input_artifacts.clone(),
+                external_context_refs: request.external_context_refs.clone(),
+                constraints: request.constraints.clone(),
+                execution_mode: request.execution_mode.clone(),
+                expected_outputs: request.expected_outputs.clone(),
+                idempotency_key: None,
+                webhook_url: None,
+                async_execution: false,
+                agent_instance_id: Some(instance_id),
+            };
+
+            return Box::pin(self.execute_inner_with_depth(
+                instance_id,
+                followup_request,
+                event_sink,
+                followup_messages,
+                depth + 1,
+            ))
+            .await;
+        }
+
+        Ok(())
     }
 
-    async fn create_checkpoint(
+    /// Creates a post-execution checkpoint with the runtime state.
+    /// Accepts optional messages from the agent loop for persistence.
+    pub async fn create_checkpoint(
         &self,
         instance_id: Uuid,
         task_id: Option<Uuid>,
         snapshot: serde_json::Value,
+        messages: Option<&[serde_json::Value]>,
     ) -> anyhow::Result<()> {
         let state = serde_json::json!({
-            "messages": [],
+            "messages": messages.unwrap_or(&[]),
             "tool_call_count": 0,
             "intermediate_results": [],
             "custom_state": {
@@ -347,24 +419,36 @@ impl RunService {
         request: torque_kernel::ExecutionRequest,
         event_sink: mpsc::Sender<StreamEvent>,
         initial_messages: Vec<RuntimeMessage>,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<(String, InMemoryMessageQueue)> {
         let mut kernel = self.runtime_factory.create_handle(vec![kernel_def]);
         let model_driver = self.runtime_factory.create_model_driver(self.llm.clone());
-        let tool_executor = self.runtime_factory.create_tool_executor(self.tools.clone());
+        let governed_tool_registry = Arc::new(GovernedToolRegistry::new(
+            self.tools.registry(),
+            self.tool_governance.clone(),
+        ));
+        let tool_executor = self.runtime_factory.create_tool_executor(governed_tool_registry);
         let output_sink = self.runtime_factory.create_output_sink(event_sink.clone());
 
+        // Build a queue from initial messages for lifetime-safety and followUp chaining.
+        let mut queue = InMemoryMessageQueue::new(
+            initial_messages
+                .iter()
+                .map(StructuredMessage::from_runtime)
+                .collect(),
+        );
+
         let result = kernel
-            .execute_v1(
+            .execute_v1_with_queue(
                 request,
                 &model_driver,
                 &tool_executor,
                 Some(&output_sink),
-                initial_messages,
+                &mut queue,
             )
             .await;
 
         result
-            .map(|r| r.summary.unwrap_or_default())
+            .map(|r| (r.summary.unwrap_or_default(), queue))
             .map_err(|e| anyhow::anyhow!("Kernel execution failed: {}", e))
     }
 }

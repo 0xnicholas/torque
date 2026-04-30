@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -16,6 +17,18 @@ pub enum AgentInstanceState {
     AwaitingDelegation,
     AwaitingApproval,
     Suspended,
+    /// Terminal: task completed successfully.
+    Completed,
+    /// Terminal: execution failed.
+    Failed,
+    /// Terminal: execution was cancelled.
+    Cancelled,
+}
+
+impl AgentInstanceState {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
 }
 
 impl fmt::Display for AgentInstanceState {
@@ -29,6 +42,9 @@ impl fmt::Display for AgentInstanceState {
             Self::AwaitingDelegation => write!(f, "awaiting_delegation"),
             Self::AwaitingApproval => write!(f, "awaiting_approval"),
             Self::Suspended => write!(f, "suspended"),
+            Self::Completed => write!(f, "completed"),
+            Self::Failed => write!(f, "failed"),
+            Self::Cancelled => write!(f, "cancelled"),
         }
     }
 }
@@ -41,10 +57,13 @@ pub struct AgentInstance {
     active_task_id: Option<TaskId>,
     pending_approval_ids: Vec<ApprovalRequestId>,
     child_delegation_ids: Vec<DelegationRequestId>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 impl AgentInstance {
     pub fn new(agent_definition_id: AgentDefinitionId) -> Self {
+        let now = Utc::now();
         Self {
             id: AgentInstanceId::new(),
             agent_definition_id,
@@ -52,6 +71,8 @@ impl AgentInstance {
             active_task_id: None,
             pending_approval_ids: Vec::new(),
             child_delegation_ids: Vec::new(),
+            created_at: now,
+            updated_at: now,
         }
     }
 
@@ -77,6 +98,18 @@ impl AgentInstance {
 
     pub fn child_delegation_ids(&self) -> &[DelegationRequestId] {
         &self.child_delegation_ids
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        self.state.is_terminal()
     }
 
     pub fn begin_hydrating(&mut self) -> Result<(), StateTransitionError> {
@@ -217,6 +250,43 @@ impl AgentInstance {
         }
     }
 
+    pub fn complete(&mut self) -> Result<(), StateTransitionError> {
+        self.transition(
+            AgentInstanceState::Completed,
+            &[
+                AgentInstanceState::Running,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
+            ],
+        )
+    }
+
+    pub fn fail(&mut self) -> Result<(), StateTransitionError> {
+        self.transition(
+            AgentInstanceState::Failed,
+            &[
+                AgentInstanceState::Running,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
+            ],
+        )
+    }
+
+    pub fn cancel(&mut self) -> Result<(), StateTransitionError> {
+        self.transition(
+            AgentInstanceState::Cancelled,
+            &[
+                AgentInstanceState::Running,
+                AgentInstanceState::AwaitingTool,
+                AgentInstanceState::AwaitingDelegation,
+                AgentInstanceState::AwaitingApproval,
+                AgentInstanceState::Suspended,
+            ],
+        )
+    }
+
     fn transition(
         &mut self,
         next: AgentInstanceState,
@@ -224,6 +294,7 @@ impl AgentInstance {
     ) -> Result<(), StateTransitionError> {
         if allowed.contains(&self.state) {
             self.state = next;
+            self.updated_at = Utc::now();
             Ok(())
         } else {
             Err(StateTransitionError::new(

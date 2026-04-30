@@ -83,6 +83,27 @@ impl RuntimeModelDriver for HarnessModelDriver {
             },
             assistant_text,
             tool_calls,
+            prompt_tokens: Some(response.usage.prompt_tokens as u32),
+            completion_tokens: Some(response.usage.completion_tokens as u32),
+            total_tokens: Some(response.usage.total_tokens as u32),
         })
+    }
+
+    async fn chat(
+        &self,
+        messages: Vec<RuntimeMessage>,
+        max_tokens: Option<u32>,
+        temperature: Option<f32>,
+    ) -> anyhow::Result<String> {
+        let llm_messages: Vec<llm::Message> = messages.into_iter().map(Into::into).collect();
+        let mut request = ChatRequest::new(self.llm.model().to_string(), llm_messages);
+        if let Some(mt) = max_tokens {
+            request = request.with_max_tokens(mt as usize);
+        }
+        if let Some(temp) = temperature {
+            request = request.with_temperature(temp);
+        }
+        let response = self.llm.chat(request).await?;
+        Ok(response.message.content)
     }
 }

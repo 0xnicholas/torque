@@ -43,6 +43,7 @@ pub use delegation::DelegationService;
 pub use delegation_packet::build_delegation_packet;
 pub use escalation::EscalationService;
 pub use event::EventService;
+pub use governed_tool::GovernedToolRegistry;
 pub use gating::MemoryGatingService;
 pub use memory::MemoryService;
 pub use memory_pipeline::MemoryPipelineService;
@@ -99,8 +100,11 @@ impl RuntimeFactory {
         HarnessModelDriver::new(llm)
     }
 
-    pub fn create_tool_executor(&self, tools: Arc<ToolService>) -> HarnessToolExecutor {
-        HarnessToolExecutor::new(tools)
+    pub fn create_tool_executor(
+        &self,
+        governed: Arc<GovernedToolRegistry>,
+    ) -> HarnessToolExecutor {
+        HarnessToolExecutor::new(governed)
     }
 
     pub fn create_output_sink(
@@ -238,7 +242,9 @@ impl ServiceContainer {
         ));
         let candidate_generator: std::sync::Arc<dyn candidate_generator::CandidateGenerator> =
             {
-                let gen = candidate_generator::OpenAICandidateGenerator::new(llm.clone());
+                let gen = candidate_generator::OpenAICandidateGenerator::new(
+                    Arc::new(HarnessModelDriver::new(llm.clone())),
+                );
                 std::sync::Arc::new(gen)
                     as std::sync::Arc<dyn candidate_generator::CandidateGenerator>
             };

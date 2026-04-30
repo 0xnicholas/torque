@@ -73,7 +73,19 @@ impl RuntimeModelDriver for FakeModelDriver {
             finish_reason: RuntimeFinishReason::Stop,
             assistant_text: "final answer".to_string(),
             tool_calls: vec![],
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
         })
+    }
+
+    async fn chat(
+        &self,
+        _messages: Vec<RuntimeMessage>,
+        _max_tokens: Option<u32>,
+        _temperature: Option<f32>,
+    ) -> anyhow::Result<String> {
+        Ok("fake chat response".to_string())
     }
 }
 
@@ -139,7 +151,19 @@ impl RuntimeModelDriver for ToolCallingModelDriver {
                 name: "test_tool".to_string(),
                 arguments: serde_json::json!({}),
             }],
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
         })
+    }
+
+    async fn chat(
+        &self,
+        _messages: Vec<RuntimeMessage>,
+        _max_tokens: Option<u32>,
+        _temperature: Option<f32>,
+    ) -> anyhow::Result<String> {
+        Ok("fake tool chat response".to_string())
     }
 }
 

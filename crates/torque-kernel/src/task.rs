@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -13,6 +14,12 @@ pub enum TaskState {
     Blocked,
     Done,
     Failed,
+}
+
+impl TaskState {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Done | Self::Failed)
+    }
 }
 
 impl fmt::Display for TaskState {
@@ -82,10 +89,13 @@ pub struct Task {
     block_reason: Option<String>,
     completion_summary: Option<String>,
     failure_reason: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 impl Task {
     pub fn new(goal: String, instructions: Vec<String>, constraints: Vec<TaskConstraint>) -> Self {
+        let now = Utc::now();
         Self {
             id: TaskId::new(),
             goal,
@@ -98,6 +108,8 @@ impl Task {
             block_reason: None,
             completion_summary: None,
             failure_reason: None,
+            created_at: now,
+            updated_at: now,
         }
     }
 
@@ -140,6 +152,22 @@ impl Task {
     pub fn with_expected_output(mut self, expected_output: ExpectedOutput) -> Self {
         self.expected_outputs.push(expected_output);
         self
+    }
+
+    pub fn failure_reason(&self) -> Option<&str> {
+        self.failure_reason.as_deref()
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        self.state.is_terminal()
     }
 
     pub fn with_input_ref(mut self, input_ref: TaskInputRef) -> Self {
@@ -190,6 +218,7 @@ impl Task {
             TaskState::InProgress => {
                 self.state = TaskState::Done;
                 self.completion_summary = Some(summary.into());
+                self.updated_at = Utc::now();
                 Ok(())
             }
             other => Err(StateTransitionError::new(
@@ -205,6 +234,7 @@ impl Task {
             TaskState::Open | TaskState::InProgress | TaskState::Blocked => {
                 self.state = TaskState::Failed;
                 self.failure_reason = Some(reason.into());
+                self.updated_at = Utc::now();
                 Ok(())
             }
             other => Err(StateTransitionError::new(

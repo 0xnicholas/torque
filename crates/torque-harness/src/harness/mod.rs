@@ -1,3 +1,3 @@
 pub mod react;
 
-pub use react::{ReActAction, ReActHarness, ReActHarnessError, ReActStep};
+pub use react::{AgentLoop, AgentLoopError, ToolExecution};

@@ -1,3 +1,4 @@
+use crate::tools::RuntimeToolCall;
 use serde::{Deserialize, Serialize};
 use torque_kernel::AgentInstanceId;
 use uuid::Uuid;
@@ -29,6 +30,12 @@ pub struct HydrationState {
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<RuntimeToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// A lightweight reference to an artifact stored in a checkpoint.

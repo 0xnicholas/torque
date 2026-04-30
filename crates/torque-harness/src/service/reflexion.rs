@@ -48,7 +48,7 @@ pub struct ReflexionService {
     rule_repo: Arc<dyn RuleRepository>,
     memory_repo: Arc<dyn crate::repository::MemoryRepositoryV1>,
     embedding: Option<Arc<dyn EmbeddingGenerator>>,
-    llm: Arc<dyn crate::infra::llm::LlmClient>,
+    model_driver: Arc<dyn torque_runtime::environment::RuntimeModelDriver>,
 }
 
 impl ReflexionService {
@@ -57,14 +57,14 @@ impl ReflexionService {
         rule_repo: Arc<dyn RuleRepository>,
         memory_repo: Arc<dyn crate::repository::MemoryRepositoryV1>,
         embedding: Option<Arc<dyn EmbeddingGenerator>>,
-        llm: Arc<dyn crate::infra::llm::LlmClient>,
+        model_driver: Arc<dyn torque_runtime::environment::RuntimeModelDriver>,
     ) -> Self {
         Self {
             ephemeral_log_repo,
             rule_repo,
             memory_repo,
             embedding,
-            llm,
+            model_driver,
         }
     }
 
@@ -147,27 +147,20 @@ Rules:
             error_context, logs_summary
         );
 
-        let response = self
-            .llm
-            .chat(llm::ChatRequest {
-                model: config::extraction_model(),
-                messages: vec![
-                    llm::Message::system(system_prompt),
-                    llm::Message::user(&user_prompt),
+        let response_content = self
+            .model_driver
+            .chat(
+                vec![
+                    torque_runtime::message::RuntimeMessage::system(system_prompt),
+                    torque_runtime::message::RuntimeMessage::user(&user_prompt),
                 ],
-                temperature: Some(0.3),
-                max_tokens: Some(1500),
-                tools: None,
-                stream: None,
-                response_format: None,
-                tool_choice: None,
-                top_p: None,
-                seed: None,
-            })
+                Some(1500),
+                Some(0.3),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("LLM reflection failed: {}", e))?;
 
-        let content = response.message.content.as_ref();
+        let content = &response_content;
 
         let parsed: ReflectionResult = serde_json::from_str(content).unwrap_or_else(|_| {
             serde_json::from_str::<serde_json::Value>(content)

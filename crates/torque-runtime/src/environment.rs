@@ -65,6 +65,15 @@ pub trait RuntimeModelDriver: Send + Sync {
         tools: Vec<RuntimeToolDef>,
         sink: Option<&dyn RuntimeOutputSink>,
     ) -> anyhow::Result<ModelTurnResult>;
+
+    /// Simple non-streaming chat for side-path LLM calls (reflection, extraction, merge).
+    /// Returns the assistant's text response.
+    async fn chat(
+        &self,
+        messages: Vec<RuntimeMessage>,
+        max_tokens: Option<u32>,
+        temperature: Option<f32>,
+    ) -> anyhow::Result<String>;
 }
 
 /// Loads persisted state to rehydrate an agent instance.
@@ -89,6 +98,8 @@ pub trait RuntimeOutputSink: Send + Sync {
     fn on_tool_call(&self, tool_name: &str, arguments: &serde_json::Value);
     fn on_tool_result(&self, tool_name: &str, result: &RuntimeToolResult);
     fn on_checkpoint(&self, checkpoint_id: Uuid, reason: &str);
+    /// Called at the start of each agent turn. `turn` is 1-based.
+    fn on_turn_start(&self, _turn: u32) {}
 }
 
 /// Notifies an external system when an approval is required.

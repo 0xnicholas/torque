@@ -32,27 +32,21 @@ The current architectural center is `AgentInstance`, not DAG.
 
 ---
 
-## Current Repo State
+## Current Crate Structure
 
-The repository is in transition.
+The repository contains four production crates:
 
-Current codebase:
+- `crates/torque-kernel`
+  Core execution contracts: `AgentInstance`, `Task`, `ExecutionRequest`, `Event`, `Checkpoint`, `DelegationRequest`, `TaskPacket`, `ExternalContextRef`
+
+- `crates/torque-runtime`
+  Runtime implementation: `Environment`, `Host`, `VFS`, `Checkpoint` persistence, `Event` storage, `Message` handling, `Tool` infrastructure
+
+- `crates/torque-harness`
+  Harness layer: API handlers, Service orchestration, Repository persistence, Team supervisor, Policy evaluation, Capability registry
 
 - `crates/llm`
-  OpenAI-compatible client, streaming, and tool-call primitives
-- `crates/torque-harness`
-  lightweight session agent prototype with persistence and streaming
-- `crates/checkpointer`
-  emerging checkpoint abstraction
-
-Current architecture direction is more complete than the implementation and is defined in the specs under `docs/superpowers/specs/`.
-
-When code and specs diverge:
-
-- for **current runtime behavior**, code is authoritative
-- for **target architecture and new implementation direction**, the specs are authoritative
-
-Do not use the older DAG/planner model in this file as the default architecture unless a later spec explicitly restores it.
+  OpenAI-compatible LLM client with streaming and tool-call support
 
 ---
 
@@ -60,23 +54,14 @@ Do not use the older DAG/planner model in this file as the default architecture 
 
 Torque should be understood as a layered system:
 
-1. **Kernel Execution**
-   execution entry, instance lifecycle, task lifecycle, delegation, approval, progression results
-
-2. **Capability Layer**
-   capability references, profiles, registry bindings, runtime resolution
-
-3. **Policy Layer**
-   approval, visibility, delegation, resource, memory, and tool governance
-
-4. **Context and State Layer**
-   layered context, `TaskPacket`, shared-state slicing, lazy loading, context compaction
-
-5. **Harness / Team Layer**
-   supervisor-led collaboration, team tasks, shared task state, selector-governed expansion, publish, team approval, team recovery
-
-6. **Recovery Layer**
-   event truth, checkpoint acceleration, replay, reconciliation
+| Layer | Crate | Key Concepts |
+|-------|-------|-------------|
+| 1. Kernel Execution | `torque-kernel` | `AgentInstance`, `Task`, `ExecutionRequest`, `DelegationRequest`, checkpoint, recovery |
+| 2. Capability Layer | `torque-harness` | `CapabilityRef`, `CapabilityProfile`, `CapabilityRegistry`, resolution |
+| 3. Policy Layer | `torque-harness` | `PolicyDecision`, dimensional evaluation, tool/approval/resource governance |
+| 4. Context and State | `torque-kernel` + `torque-harness` | `TaskPacket`, `ExternalContextRef`, lazy loading, compaction |
+| 5. Harness / Team | `torque-harness` | `TeamInstance`, supervisor, `SharedTaskState`, selector expansion, publish |
+| 6. Recovery | `torque-kernel` + `torque-runtime` | `Event` truth source, `Checkpoint` acceleration, replay |
 
 These layers should stay separated in both code and design.
 
@@ -234,13 +219,15 @@ Before substantial implementation work in this repo:
 
 When unsure where something belongs, use this default mapping:
 
-- execution semantics -> kernel execution contract
-- capability lookup / resolution -> capability registry model
-- governance / limits / approvals -> policy model
-- context shaping / retrieval / compaction -> context state model
-- artifacts / memory / external references -> context planes
-- collaboration / shared state / publish / selector use -> team design
-- replay / checkpoint / restore / reconciliation -> recovery core
+| Concern | Layer | Spec |
+|---------|-------|------|
+| execution semantics | Kernel Execution | kernel execution contract |
+| capability lookup / resolution | Capability Layer | capability registry model |
+| governance / limits / approvals | Policy Layer | policy model |
+| context shaping / retrieval / compaction | Context and State | context state model |
+| artifacts / memory / external references | Context Planes | context planes |
+| collaboration / shared state / publish / selector | Harness / Team | team design |
+| replay / checkpoint / restore / reconciliation | Recovery | recovery core |
 
 ---
 

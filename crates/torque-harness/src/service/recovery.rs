@@ -17,19 +17,25 @@ use serde::Serialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-fn normalize_status(s: &str) -> String {
-    if s.contains('_') {
-        s.to_string()
+fn normalize_status(s: &str) -> AgentInstanceStatus {
+    // Try direct parse first (handles "CREATED", "RUNNING", etc.)
+    if let Ok(status) = AgentInstanceStatus::try_from(s) {
+        return status;
+    }
+    // Try normalizing to SCREAMING_SNAKE_CASE
+    let normalized = if s.contains('_') {
+        s.to_uppercase()
     } else {
         let mut result = String::new();
         for (i, c) in s.chars().enumerate() {
             if c.is_uppercase() && i > 0 {
                 result.push('_');
             }
-            result.push(c.to_ascii_uppercase());
+            result.push(c);
         }
-        result
-    }
+        result.to_uppercase()
+    };
+    AgentInstanceStatus::try_from(normalized.as_str()).unwrap_or(AgentInstanceStatus::Created)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -185,13 +191,13 @@ impl RecoveryService {
             .unwrap_or("CREATED");
 
         let normalized = normalize_status(state_str);
-        let disposition = match normalized.as_str() {
-            "WAITING_APPROVAL" => RecoveryDisposition::AwaitingApproval,
-            "WAITING_TOOL" => RecoveryDisposition::AwaitingTool,
-            "WAITING_SUBAGENT" => RecoveryDisposition::AwaitingDelegation,
-            "SUSPENDED" => RecoveryDisposition::Suspended,
-            "COMPLETED" => RecoveryDisposition::Completed,
-            "FAILED" => RecoveryDisposition::Failed,
+        let disposition = match normalized {
+            AgentInstanceStatus::AwaitingApproval => RecoveryDisposition::AwaitingApproval,
+            AgentInstanceStatus::AwaitingTool => RecoveryDisposition::AwaitingTool,
+            AgentInstanceStatus::AwaitingDelegation => RecoveryDisposition::AwaitingDelegation,
+            AgentInstanceStatus::Suspended => RecoveryDisposition::Suspended,
+            AgentInstanceStatus::Completed => RecoveryDisposition::Completed,
+            AgentInstanceStatus::Failed => RecoveryDisposition::Failed,
             _ => RecoveryDisposition::ResumeCurrent,
         };
 
@@ -280,13 +286,13 @@ impl RecoveryService {
         if let Some(custom) = checkpoint.snapshot.get("custom_state") {
             if let Some(status) = custom.get("instance_state").and_then(|s| s.as_str()) {
                 let normalized = normalize_status(status);
-                let restored_status = match normalized.as_str() {
-                    "READY" => AgentInstanceStatus::Ready,
-                    "RUNNING" => AgentInstanceStatus::Running,
-                    "SUSPENDED" => AgentInstanceStatus::Suspended,
-                    "WAITING_SUBAGENT" => AgentInstanceStatus::AwaitingDelegation,
-                    "WAITING_APPROVAL" => AgentInstanceStatus::AwaitingApproval,
-                    "WAITING_TOOL" => AgentInstanceStatus::AwaitingTool,
+                let restored_status = match normalized {
+                    AgentInstanceStatus::Ready => AgentInstanceStatus::Ready,
+                    AgentInstanceStatus::Running => AgentInstanceStatus::Running,
+                    AgentInstanceStatus::Suspended => AgentInstanceStatus::Suspended,
+                    AgentInstanceStatus::AwaitingDelegation => AgentInstanceStatus::AwaitingDelegation,
+                    AgentInstanceStatus::AwaitingApproval => AgentInstanceStatus::AwaitingApproval,
+                    AgentInstanceStatus::AwaitingTool => AgentInstanceStatus::AwaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo
@@ -581,13 +587,13 @@ impl RecoveryService {
         if let Some(custom) = checkpoint.snapshot.get("custom_state") {
             if let Some(status) = custom.get("instance_state").and_then(|s| s.as_str()) {
                 let normalized = normalize_status(status);
-                let restored_status = match normalized.as_str() {
-                    "READY" => AgentInstanceStatus::Ready,
-                    "RUNNING" => AgentInstanceStatus::Running,
-                    "SUSPENDED" => AgentInstanceStatus::Suspended,
-                    "WAITING_SUBAGENT" => AgentInstanceStatus::AwaitingDelegation,
-                    "WAITING_APPROVAL" => AgentInstanceStatus::AwaitingApproval,
-                    "WAITING_TOOL" => AgentInstanceStatus::AwaitingTool,
+                let restored_status = match normalized {
+                    AgentInstanceStatus::Ready => AgentInstanceStatus::Ready,
+                    AgentInstanceStatus::Running => AgentInstanceStatus::Running,
+                    AgentInstanceStatus::Suspended => AgentInstanceStatus::Suspended,
+                    AgentInstanceStatus::AwaitingDelegation => AgentInstanceStatus::AwaitingDelegation,
+                    AgentInstanceStatus::AwaitingApproval => AgentInstanceStatus::AwaitingApproval,
+                    AgentInstanceStatus::AwaitingTool => AgentInstanceStatus::AwaitingTool,
                     _ => AgentInstanceStatus::Created,
                 };
                 self.agent_instance_repo
@@ -742,15 +748,14 @@ impl RecoveryService {
         let custom = checkpoint.snapshot.get("custom_state");
         if let Some(data) = custom {
             if let Some(checkpoint_state) = data.get("instance_state").and_then(|s| s.as_str()) {
-                let current_state = current_instance.status.to_string();
                 let normalized = normalize_status(checkpoint_state);
-                if normalized != current_state {
+                if normalized != current_instance.status {
                     inconsistencies.push(Inconsistency {
                         anchor_type: ContextAnchorType::MemoryEntry,
                         reference_id: instance_id,
                         description: format!(
                             "State mismatch: checkpoint={}, current={}",
-                            normalized, current_state
+                            normalized, current_instance.status
                         ),
                     });
                 }

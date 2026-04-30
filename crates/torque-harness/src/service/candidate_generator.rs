@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use llm::{ChatRequest, LlmClient};
 use std::sync::Arc;
+use torque_runtime::environment::RuntimeModelDriver;
+use torque_runtime::message::RuntimeMessage;
 use uuid::Uuid;
 
 use crate::config;
@@ -18,14 +19,12 @@ pub trait CandidateGenerator: Send + Sync {
 }
 
 pub struct OpenAICandidateGenerator {
-    llm: Arc<dyn LlmClient>,
-    model: String,
+    model_driver: Arc<dyn RuntimeModelDriver>,
 }
 
 impl OpenAICandidateGenerator {
-    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
-        let model = config::extraction_model();
-        Self { llm, model }
+    pub fn new(model_driver: Arc<dyn RuntimeModelDriver>) -> Self {
+        Self { model_driver }
     }
 
     async fn extract_candidates_via_llm(
@@ -70,18 +69,18 @@ impl OpenAICandidateGenerator {
             tool_calls = tool_calls_text
         );
 
-        let request = ChatRequest::new(
-            &self.model,
-            vec![
-                llm::Message::system(&system_prompt),
-                llm::Message::user(&user_prompt),
-            ],
-        )
-        .with_max_tokens(2000)
-        .with_temperature(0.3);
-
-        let response = self.llm.chat(request).await?;
-        let content = response.message.content.trim();
+        let content = self
+            .model_driver
+            .chat(
+                vec![
+                    RuntimeMessage::system(&system_prompt),
+                    RuntimeMessage::user(&user_prompt),
+                ],
+                Some(2000),
+                Some(0.3),
+            )
+            .await?;
+        let content = content.trim();
 
         let parsed: Vec<MemoryContent> = serde_json::from_str(content)
             .or_else(|_| {

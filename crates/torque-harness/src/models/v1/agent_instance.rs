@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use torque_kernel::AgentInstanceState;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,6 +18,32 @@ pub enum AgentInstanceStatus {
     Completed,
     Failed,
     Cancelled,
+}
+
+impl AgentInstanceStatus {
+    /// Map harness status to kernel state. Returns None for harness-only terminal states
+    /// that have no kernel equivalent yet (Completed, Failed, Cancelled).
+    pub fn to_kernel_state(&self) -> Option<AgentInstanceState> {
+        match self {
+            Self::Created => Some(AgentInstanceState::Created),
+            Self::Hydrating => Some(AgentInstanceState::Hydrating),
+            Self::Ready => Some(AgentInstanceState::Ready),
+            Self::Running => Some(AgentInstanceState::Running),
+            Self::AwaitingTool => Some(AgentInstanceState::AwaitingTool),
+            Self::AwaitingDelegation => Some(AgentInstanceState::AwaitingDelegation),
+            Self::AwaitingApproval => Some(AgentInstanceState::AwaitingApproval),
+            Self::Suspended => Some(AgentInstanceState::Suspended),
+            // Terminal states now exist in kernel too
+            Self::Completed => Some(AgentInstanceState::Completed),
+            Self::Failed => Some(AgentInstanceState::Failed),
+            Self::Cancelled => Some(AgentInstanceState::Cancelled),
+        }
+    }
+
+    /// Returns true if this is a terminal state.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
 }
 
 impl std::fmt::Display for AgentInstanceStatus {

@@ -1,0 +1,2168 @@
+openapi: 3.1.0
+info:
+  title: Torque Platform API
+  description: 'Torque Agent Runtime Platform API v1.
+
+
+    Provides CRUD operations for agent definitions, instances, tasks, artifacts,
+
+    teams, delegations, approvals, checkpoints, capabilities, events, and memory.
+
+    '
+  version: 1.0.0
+  contact:
+    name: Torque Team
+    url: https://github.com/0xnicholas/torque
+servers:
+- url: http://localhost:3000
+  description: Local development
+paths:
+  /v1/agent-definitions:
+    get:
+      summary: List agent definitions
+      operationId: listAgentDefinitions
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentDefinitionList'
+      tags:
+      - Agent Definitions
+    post:
+      summary: Create agent definition
+      operationId: createAgentDefinition
+      requestBody:
+        $ref: '#/components/requestBodies/AgentDefinitionCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/AgentDefinition'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Agent Definitions
+  /v1/agent-definitions/{id}:
+    get:
+      summary: Get agent definition
+      operationId: getAgentDefinition
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Definitions
+    delete:
+      summary: Delete agent definition
+      operationId: deleteAgentDefinition
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Definitions
+  /v1/agent-instances:
+    get:
+      summary: List agent instances
+      operationId: listAgentInstances
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentInstanceList'
+      tags:
+      - Agent Instances
+    post:
+      summary: Create agent instance
+      operationId: createAgentInstance
+      requestBody:
+        $ref: '#/components/requestBodies/AgentInstanceCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/AgentInstance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}:
+    get:
+      summary: Get agent instance
+      operationId: getAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Instances
+    delete:
+      summary: Delete agent instance
+      operationId: deleteAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/cancel:
+    post:
+      summary: Cancel agent instance
+      operationId: cancelAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/resume:
+    post:
+      summary: Resume agent instance
+      operationId: resumeAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Resumed successfully
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/time-travel:
+    post:
+      summary: Time travel agent instance to checkpoint
+      operationId: timeTravelAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        $ref: '#/components/requestBodies/TimeTravelRequest'
+      responses:
+        '200':
+          description: Time travel initiated
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/delegations:
+    get:
+      summary: List delegations for agent instance
+      operationId: listAgentInstanceDelegations
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/DelegationList'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/artifacts:
+    get:
+      summary: List artifacts for agent instance
+      operationId: listAgentInstanceArtifacts
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ArtifactList'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/events:
+    get:
+      summary: List events for agent instance
+      operationId: listAgentInstanceEvents
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/EventList'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/checkpoints:
+    get:
+      summary: List checkpoints for agent instance
+      operationId: listAgentInstanceCheckpoints
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/CheckpointList'
+      tags:
+      - Agent Instances
+  /v1/agent-instances/{id}/runs:
+    post:
+      summary: Start a run for agent instance
+      operationId: runAgentInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        $ref: '#/components/requestBodies/RunRequest'
+      responses:
+        '200':
+          description: SSE stream of run events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+      tags:
+      - Agent Instances
+  /v1/tasks:
+    get:
+      summary: List tasks
+      operationId: listTasks
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/TaskList'
+      tags:
+      - Tasks
+  /v1/tasks/{id}:
+    get:
+      summary: Get task
+      operationId: getTask
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Task'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Tasks
+  /v1/tasks/{id}/cancel:
+    post:
+      summary: Cancel task
+      operationId: cancelTask
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Tasks
+  /v1/tasks/{id}/events:
+    get:
+      summary: List events for task
+      operationId: listTaskEvents
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/EventList'
+      tags:
+      - Tasks
+  /v1/tasks/{id}/approvals:
+    get:
+      summary: List approvals for task
+      operationId: listTaskApprovals
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalList'
+      tags:
+      - Tasks
+  /v1/tasks/{id}/delegations:
+    get:
+      summary: List delegations for task
+      operationId: listTaskDelegations
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/DelegationList'
+      tags:
+      - Tasks
+  /v1/artifacts:
+    get:
+      summary: List artifacts
+      operationId: listArtifacts
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ArtifactList'
+      tags:
+      - Artifacts
+    post:
+      summary: Create artifact
+      operationId: createArtifact
+      requestBody:
+        $ref: '#/components/requestBodies/ArtifactCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/Artifact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Artifacts
+  /v1/artifacts/{id}:
+    get:
+      summary: Get artifact
+      operationId: getArtifact
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Artifact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Artifacts
+    delete:
+      summary: Delete artifact
+      operationId: deleteArtifact
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Artifacts
+  /v1/artifacts/{id}/content:
+    get:
+      summary: Get artifact content
+      operationId: getArtifactContent
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Artifact content
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Artifacts
+  /v1/artifacts/{id}/publish:
+    post:
+      summary: Publish artifact to team
+      operationId: publishArtifact
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Published successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Artifacts
+  /v1/events:
+    get:
+      summary: List events
+      operationId: listEvents
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/EventList'
+      tags:
+      - Events
+  /v1/capability-profiles:
+    get:
+      summary: List capability profiles
+      operationId: listCapabilityProfiles
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/CapabilityProfileList'
+      tags:
+      - Capabilities
+    post:
+      summary: Create capability profile
+      operationId: createCapabilityProfile
+      requestBody:
+        $ref: '#/components/requestBodies/CapabilityProfileCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/CapabilityProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Capabilities
+  /v1/capability-profiles/{id}:
+    get:
+      summary: Get capability profile
+      operationId: getCapabilityProfile
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/CapabilityProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
+    delete:
+      summary: Delete capability profile
+      operationId: deleteCapabilityProfile
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
+  /v1/capability-profiles/{id}/resolve:
+    post:
+      summary: Resolve capability
+      operationId: resolveCapability
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        $ref: '#/components/requestBodies/CapabilityResolveRequest'
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+      - Capabilities
+  /v1/capability-registry-bindings:
+    get:
+      summary: List capability registry bindings
+      operationId: listCapabilityBindings
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/CapabilityBindingList'
+      tags:
+      - Capabilities
+    post:
+      summary: Create capability registry binding
+      operationId: createCapabilityBinding
+      requestBody:
+        $ref: '#/components/requestBodies/CapabilityBindingCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/CapabilityBinding'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Capabilities
+  /v1/capability-registry-bindings/{id}:
+    get:
+      summary: Get capability registry binding
+      operationId: getCapabilityBinding
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/CapabilityBinding'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
+    delete:
+      summary: Delete capability registry binding
+      operationId: deleteCapabilityBinding
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Capabilities
+  /v1/team-definitions:
+    get:
+      summary: List team definitions
+      operationId: listTeamDefinitions
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/TeamDefinitionList'
+      tags:
+      - Teams
+    post:
+      summary: Create team definition
+      operationId: createTeamDefinition
+      requestBody:
+        $ref: '#/components/requestBodies/TeamDefinitionCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/TeamDefinition'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Teams
+  /v1/team-definitions/{id}:
+    get:
+      summary: Get team definition
+      operationId: getTeamDefinition
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/TeamDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
+    delete:
+      summary: Delete team definition
+      operationId: deleteTeamDefinition
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
+  /v1/team-instances:
+    get:
+      summary: List team instances
+      operationId: listTeamInstances
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/TeamInstanceList'
+      tags:
+      - Teams
+    post:
+      summary: Create team instance
+      operationId: createTeamInstance
+      requestBody:
+        $ref: '#/components/requestBodies/TeamInstanceCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/TeamInstance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Teams
+  /v1/team-instances/{id}:
+    get:
+      summary: Get team instance
+      operationId: getTeamInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/TeamInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
+    delete:
+      summary: Delete team instance
+      operationId: deleteTeamInstance
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Teams
+  /v1/team-instances/{id}/tasks:
+    get:
+      summary: List tasks for team instance
+      operationId: listTeamTasks
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/TaskList'
+      tags:
+      - Tasks
+    post:
+      summary: Create task for team instance
+      operationId: createTeamTask
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '202':
+          description: Task created
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Tasks
+  /v1/team-instances/{id}/members:
+    get:
+      summary: List team members
+      operationId: listTeamMembers
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Team members list
+          content:
+            application/json:
+              schema:
+                type: object
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Teams
+  /v1/team-instances/{id}/publish:
+    post:
+      summary: Publish to team
+      operationId: publishToTeam
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Published successfully
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Teams
+  /v1/delegations:
+    get:
+      summary: List delegations
+      operationId: listDelegations
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/DelegationList'
+      tags:
+      - Delegations
+    post:
+      summary: Create delegation
+      operationId: createDelegation
+      requestBody:
+        $ref: '#/components/requestBodies/DelegationCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/Delegation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Delegations
+  /v1/delegations/{id}:
+    get:
+      summary: Get delegation
+      operationId: getDelegation
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Delegation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Delegations
+  /v1/delegations/{id}/accept:
+    post:
+      summary: Accept delegation
+      operationId: acceptDelegation
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Accepted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Delegations
+  /v1/delegations/{id}/reject:
+    post:
+      summary: Reject delegation
+      operationId: rejectDelegation
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Rejected successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Delegations
+  /v1/approvals:
+    get:
+      summary: List approvals
+      operationId: listApprovals
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ApprovalList'
+      tags:
+      - Approvals
+  /v1/approvals/{id}:
+    get:
+      summary: Get approval
+      operationId: getApproval
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Approval'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Approvals
+  /v1/approvals/{id}/resolve:
+    post:
+      summary: Resolve approval
+      operationId: resolveApproval
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        $ref: '#/components/requestBodies/ApprovalResolveRequest'
+      responses:
+        '204':
+          description: Resolved successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Approvals
+  /v1/checkpoints:
+    get:
+      summary: List checkpoints
+      operationId: listCheckpoints
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/CheckpointList'
+      tags:
+      - Checkpoints
+  /v1/checkpoints/{id}:
+    get:
+      summary: Get checkpoint
+      operationId: getCheckpoint
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/Checkpoint'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Checkpoints
+  /v1/checkpoints/{id}/restore:
+    post:
+      summary: Restore checkpoint
+      operationId: restoreCheckpoint
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Restored successfully
+        '501':
+          $ref: '#/components/responses/NotImplemented'
+      tags:
+      - Checkpoints
+  /v1/memory-write-candidates:
+    get:
+      summary: List memory write candidates
+      operationId: listMemoryCandidates
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryCandidateList'
+      tags:
+      - Memory
+    post:
+      summary: Create memory write candidate
+      operationId: createMemoryCandidate
+      requestBody:
+        $ref: '#/components/requestBodies/MemoryCandidateCreate'
+      responses:
+        '201':
+          $ref: '#/components/responses/MemoryCandidate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      tags:
+      - Memory
+  /v1/memory-write-candidates/{id}:
+    get:
+      summary: Get memory write candidate
+      operationId: getMemoryCandidate
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryCandidate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Memory
+  /v1/memory-write-candidates/{id}/approve:
+    post:
+      summary: Approve memory write candidate
+      operationId: approveMemoryCandidate
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Memory
+  /v1/memory-write-candidates/{id}/reject:
+    post:
+      summary: Reject memory write candidate
+      operationId: rejectMemoryCandidate
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Rejected successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Memory
+  /v1/memory-entries:
+    get:
+      summary: List memory entries
+      operationId: listMemoryEntries
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryEntryList'
+      tags:
+      - Memory
+  /v1/memory-entries/{id}:
+    get:
+      summary: Get memory entry
+      operationId: getMemoryEntry
+      parameters:
+      - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      tags:
+      - Memory
+  /v1/memory-entries/search:
+    get:
+      summary: Search memory entries
+      operationId: searchMemoryEntries
+      parameters:
+      - $ref: '#/components/parameters/ListLimit'
+      - $ref: '#/components/parameters/ListCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/MemoryEntryList'
+      tags:
+      - Memory
+components:
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Resource UUID
+    ListLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Number of items to return
+    ListCursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: Pagination cursor
+  requestBodies:
+    AgentDefinitionCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentDefinitionCreate'
+    AgentInstanceCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentInstanceCreate'
+    TimeTravelRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TimeTravelRequest'
+    RunRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RunRequest'
+    ArtifactCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ArtifactCreate'
+    CapabilityProfileCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityProfileCreate'
+    CapabilityResolveRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityResolveRequest'
+    CapabilityBindingCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityRegistryBindingCreate'
+    TeamDefinitionCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TeamDefinitionCreate'
+    TeamInstanceCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TeamInstanceCreate'
+    DelegationCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DelegationCreate'
+    ApprovalResolveRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApprovalResolveRequest'
+    MemoryCandidateCreate:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MemoryWriteCandidateCreate'
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    NotImplemented:
+      description: Not implemented
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    AgentDefinition:
+      description: Agent definition
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentDefinition'
+    AgentDefinitionList:
+      description: List of agent definitions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseAgentDefinition'
+    AgentInstance:
+      description: Agent instance
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentInstance'
+    AgentInstanceList:
+      description: List of agent instances
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseAgentInstance'
+    Task:
+      description: Task
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Task'
+    TaskList:
+      description: List of tasks
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseTask'
+    Artifact:
+      description: Artifact
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Artifact'
+    ArtifactList:
+      description: List of artifacts
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseArtifact'
+    Event:
+      description: Event
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Event'
+    EventList:
+      description: List of events
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseEvent'
+    CapabilityProfile:
+      description: Capability profile
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityProfile'
+    CapabilityProfileList:
+      description: List of capability profiles
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseCapabilityProfile'
+    CapabilityBinding:
+      description: Capability registry binding
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CapabilityRegistryBinding'
+    CapabilityBindingList:
+      description: List of capability registry bindings
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseCapabilityRegistryBinding'
+    TeamDefinition:
+      description: Team definition
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TeamDefinition'
+    TeamDefinitionList:
+      description: List of team definitions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseTeamDefinition'
+    TeamInstance:
+      description: Team instance
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TeamInstance'
+    TeamInstanceList:
+      description: List of team instances
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseTeamInstance'
+    Delegation:
+      description: Delegation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Delegation'
+    DelegationList:
+      description: List of delegations
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseDelegation'
+    Approval:
+      description: Approval
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Approval'
+    ApprovalList:
+      description: List of approvals
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseApproval'
+    Checkpoint:
+      description: Checkpoint
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Checkpoint'
+    CheckpointList:
+      description: List of checkpoints
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseCheckpoint'
+    MemoryCandidate:
+      description: Memory write candidate
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MemoryWriteCandidate'
+    MemoryCandidateList:
+      description: List of memory write candidates
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseMemoryWriteCandidate'
+    MemoryEntry:
+      description: Memory entry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MemoryEntry'
+    MemoryEntryList:
+      description: List of memory entries
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListResponseMemoryEntry'
+  schemas:
+    ErrorBody:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+      required:
+      - code
+      - message
+    Pagination:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        has_more:
+          type: boolean
+      required:
+      - has_more
+    AgentDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt:
+          type: string
+        tool_policy:
+          type: object
+        memory_policy:
+          type: object
+        delegation_policy:
+          type: object
+        limits:
+          type: object
+        default_model_policy:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - tool_policy
+      - memory_policy
+      - delegation_policy
+      - limits
+      - default_model_policy
+      - created_at
+      - updated_at
+    AgentDefinitionCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt:
+          type: string
+        tool_policy:
+          type: object
+          default: {}
+        memory_policy:
+          type: object
+          default: {}
+        delegation_policy:
+          type: object
+          default: {}
+        limits:
+          type: object
+          default: {}
+        default_model_policy:
+          type: object
+          default: {}
+      required:
+      - name
+    ListResponseAgentDefinition:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentDefinition'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    AgentInstanceStatus:
+      type: string
+      enum:
+      - CREATED
+      - HYDRATING
+      - READY
+      - RUNNING
+      - WAITING_TOOL
+      - WAITING_SUBAGENT
+      - WAITING_APPROVAL
+      - SUSPENDED
+      - COMPLETED
+      - FAILED
+      - CANCELLED
+    AgentInstance:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_definition_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AgentInstanceStatus'
+        external_context_refs:
+          type: array
+          items:
+            type: object
+        current_task_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - agent_definition_id
+      - status
+      - external_context_refs
+      - created_at
+      - updated_at
+    AgentInstanceCreate:
+      type: object
+      properties:
+        agent_definition_id:
+          type: string
+          format: uuid
+        external_context_refs:
+          type: array
+          items:
+            type: object
+          default: []
+      required:
+      - agent_definition_id
+    TimeTravelRequest:
+      type: object
+      properties:
+        checkpoint_id:
+          type: string
+          format: uuid
+        branch_name:
+          type: string
+      required:
+      - checkpoint_id
+    ListResponseAgentInstance:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInstance'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal:
+          type: string
+        status:
+          type: string
+        execution_mode:
+          type: string
+        agent_instance_id:
+          type: string
+          format: uuid
+        team_instance_id:
+          type: string
+          format: uuid
+        parent_task_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - goal
+      - status
+      - execution_mode
+      - created_at
+      - updated_at
+    ListResponseTask:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    RunRequest:
+      type: object
+      properties:
+        goal:
+          type: string
+        instructions:
+          type: string
+        input_artifacts:
+          type: array
+          items:
+            type: string
+            format: uuid
+        external_context_refs:
+          type: array
+          items:
+            type: object
+        constraints:
+          type: object
+        execution_mode:
+          type: string
+          enum:
+          - sync
+          - async
+          default: sync
+        expected_outputs:
+          type: array
+          items:
+            type: string
+        idempotency_key:
+          type: string
+      required:
+      - goal
+    ArtifactScope:
+      type: string
+      enum:
+      - private
+      - team_shared
+      - external_published
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ArtifactScope'
+        source_instance_id:
+          type: string
+          format: uuid
+        published_to_team_instance_id:
+          type: string
+          format: uuid
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+        summary:
+          type: string
+        content:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - kind
+      - scope
+      - mime_type
+      - size_bytes
+      - content
+      - created_at
+    ArtifactCreate:
+      type: object
+      properties:
+        kind:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ArtifactScope'
+          default: private
+        mime_type:
+          type: string
+        content:
+          type: object
+      required:
+      - kind
+      - mime_type
+      - content
+    ListResponseArtifact:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    Event:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        payload:
+          type: object
+        sequence_number:
+          type: integer
+      required:
+      - event_id
+      - event_type
+      - timestamp
+      - resource_type
+      - resource_id
+      - payload
+    ListResponseEvent:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    CapabilityProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        capability_type:
+          type: string
+        schema:
+          type: object
+        constraints:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - capability_type
+      - schema
+      - created_at
+    CapabilityProfileCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        capability_type:
+          type: string
+        schema:
+          type: object
+        constraints:
+          type: object
+      required:
+      - name
+      - capability_type
+      - schema
+    CapabilityResolveRequest:
+      type: object
+      properties:
+        capability_refs:
+          type: array
+          items:
+            type: string
+        context:
+          type: object
+      required:
+      - capability_refs
+    ListResponseCapabilityProfile:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapabilityProfile'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    CapabilityRegistryBinding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        capability_profile_id:
+          type: string
+          format: uuid
+        agent_definition_id:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+        config:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - capability_profile_id
+      - agent_definition_id
+      - priority
+      - created_at
+    CapabilityRegistryBindingCreate:
+      type: object
+      properties:
+        capability_profile_id:
+          type: string
+          format: uuid
+        agent_definition_id:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+          default: 0
+        config:
+          type: object
+          default: {}
+      required:
+      - capability_profile_id
+      - agent_definition_id
+    ListResponseCapabilityRegistryBinding:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapabilityRegistryBinding'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    TeamDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        supervisor_agent_definition_id:
+          type: string
+          format: uuid
+        sub_agents:
+          type: array
+          items:
+            type: object
+        policy:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - supervisor_agent_definition_id
+      - sub_agents
+      - created_at
+    TeamDefinitionCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        supervisor_agent_definition_id:
+          type: string
+          format: uuid
+        sub_agents:
+          type: array
+          items:
+            type: object
+        policy:
+          type: string
+      required:
+      - name
+      - supervisor_agent_definition_id
+      - sub_agents
+    ListResponseTeamDefinition:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamDefinition'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    TeamInstance:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        team_definition_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - team_definition_id
+      - status
+      - created_at
+    TeamInstanceCreate:
+      type: object
+      properties:
+        team_definition_id:
+          type: string
+          format: uuid
+      required:
+      - team_definition_id
+    ListResponseTeamInstance:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamInstance'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    Delegation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        parent_agent_instance_id:
+          type: string
+          format: uuid
+        child_agent_definition_selector:
+          type: object
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - task_id
+      - parent_agent_instance_id
+      - child_agent_definition_selector
+      - status
+      - created_at
+    DelegationCreate:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        parent_agent_instance_id:
+          type: string
+          format: uuid
+        child_agent_definition_selector:
+          type: object
+      required:
+      - task_id
+      - parent_agent_instance_id
+      - child_agent_definition_selector
+    ListResponseDelegation:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delegation'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    Approval:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        approval_type:
+          type: string
+        status:
+          type: string
+        requested_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - task_id
+      - approval_type
+      - status
+      - requested_at
+    ApprovalResolveRequest:
+      type: object
+      properties:
+        resolution:
+          type: string
+        comment:
+          type: string
+      required:
+      - resolution
+    ListResponseApproval:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Approval'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    Checkpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_instance_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        snapshot:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - agent_instance_id
+      - snapshot
+      - created_at
+    ListResponseCheckpoint:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Checkpoint'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    MemoryCategory:
+      type: string
+      enum:
+      - agent_profile_memory
+      - user_preference_memory
+      - task_or_domain_memory
+      - external_context_memory
+    MemoryContent:
+      type: object
+      properties:
+        category:
+          $ref: '#/components/schemas/MemoryCategory'
+        key:
+          type: string
+        value:
+          type: object
+      required:
+      - category
+      - key
+      - value
+    MemoryWriteCandidateStatus:
+      type: string
+      enum:
+      - PENDING
+      - APPROVED
+      - REJECTED
+    MemoryWriteCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_instance_id:
+          type: string
+          format: uuid
+        team_instance_id:
+          type: string
+          format: uuid
+        content:
+          type: object
+        reasoning:
+          type: string
+        status:
+          $ref: '#/components/schemas/MemoryWriteCandidateStatus'
+        memory_entry_id:
+          type: string
+          format: uuid
+        reviewed_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        reviewed_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - agent_instance_id
+      - content
+      - status
+      - created_at
+    MemoryWriteCandidateCreate:
+      type: object
+      properties:
+        agent_instance_id:
+          type: string
+          format: uuid
+        content:
+          $ref: '#/components/schemas/MemoryContent'
+        reasoning:
+          type: string
+      required:
+      - agent_instance_id
+      - content
+    ListResponseMemoryWriteCandidate:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryWriteCandidate'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    MemoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_instance_id:
+          type: string
+          format: uuid
+        team_instance_id:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/MemoryCategory'
+        key:
+          type: string
+        value:
+          type: object
+        source_candidate_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - category
+      - key
+      - value
+      - source_candidate_id
+      - created_at
+      - updated_at
+    ListResponseMemoryEntry:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemoryEntry'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+      - data
+      - pagination
+    RunEvent:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - start
+          - chunk
+          - tool_call
+          - tool_result
+          - done
+          - error
+        data:
+          type: object
+      required:
+      - event
+    RunEventStart:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - start
+        session_id:
+          type: string
+          format: uuid
+      required:
+      - event
+      - session_id
+    RunEventChunk:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - chunk
+        content:
+          type: string
+      required:
+      - event
+      - content
+    RunEventToolCall:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - tool_call
+        name:
+          type: string
+        arguments:
+          type: object
+      required:
+      - event
+      - name
+      - arguments
+    RunEventToolResult:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - tool_result
+        name:
+          type: string
+        success:
+          type: boolean
+        content:
+          type: string
+        error:
+          type: string
+      required:
+      - event
+      - name
+      - success
+      - content
+    RunEventDone:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - done
+        message_id:
+          type: string
+          format: uuid
+        artifacts:
+          type: object
+      required:
+      - event
+      - message_id
+    RunEventError:
+      type: object
+      properties:
+        event:
+          type: string
+          enum:
+          - error
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - event
+      - code
+      - message
+tags:
+- name: Agent Definitions
+  description: Manage agent definitions
+- name: Agent Instances
+  description: Manage agent instances and their lifecycle
+- name: Tasks
+  description: Manage tasks
+- name: Artifacts
+  description: Manage artifacts
+- name: Events
+  description: Query events
+- name: Capabilities
+  description: Manage capability profiles and registry bindings
+- name: Teams
+  description: Manage team definitions and instances
+- name: Delegations
+  description: Manage agent delegations
+- name: Approvals
+  description: Manage approvals
+- name: Checkpoints
+  description: Manage checkpoints
+- name: Memory
+  description: Manage memory write candidates and entries

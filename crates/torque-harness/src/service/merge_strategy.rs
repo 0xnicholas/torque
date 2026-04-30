@@ -2,9 +2,10 @@ use crate::models::v1::gating::MergeStrategy;
 use crate::models::v1::memory::{MemoryContent, MemoryEntry};
 use anyhow::Result;
 use async_trait::async_trait;
-use llm::{ChatRequest, LlmClient};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use torque_runtime::environment::RuntimeModelDriver;
+use torque_runtime::message::RuntimeMessage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProvenanceEntry {
@@ -135,14 +136,12 @@ impl MergeStrategyHandler for WithProvenanceStrategy {
 }
 
 pub struct SummarizeStrategy {
-    llm: Arc<dyn LlmClient>,
-    model: String,
+    model_driver: Arc<dyn RuntimeModelDriver>,
 }
 
 impl SummarizeStrategy {
-    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
-        let model = crate::config::extraction_model();
-        Self { llm, model }
+    pub fn new(model_driver: Arc<dyn RuntimeModelDriver>) -> Self {
+        Self { model_driver }
     }
 }
 
@@ -162,18 +161,17 @@ impl MergeStrategyHandler for SummarizeStrategy {
             candidate.key, candidate.value
         );
 
-        let request = ChatRequest::new(
-            &self.model,
-            vec![
-                llm::Message::system("You are a memory consolidation assistant."),
-                llm::Message::user(&prompt),
-            ],
-        )
-        .with_max_tokens(500)
-        .with_temperature(0.3);
-
-        let response = self.llm.chat(request).await?;
-        let response_text = response.message.content;
+        let response_text = self
+            .model_driver
+            .chat(
+                vec![
+                    RuntimeMessage::system("You are a memory consolidation assistant."),
+                    RuntimeMessage::user(&prompt),
+                ],
+                Some(500),
+                Some(0.3),
+            )
+            .await?;
 
         let consolidated: serde_json::Value =
             serde_json::from_str(&response_text).unwrap_or_else(|_| {
@@ -207,6 +205,7 @@ impl MergeStrategyHandler for SummarizeStrategy {
 }
 
 pub struct MergeStrategyExecutor {
+    model_driver: Arc<dyn RuntimeModelDriver>,
     summarize: SummarizeStrategy,
     append: AppendStrategy,
     keep_separate: KeepSeparateStrategy,
@@ -214,9 +213,10 @@ pub struct MergeStrategyExecutor {
 }
 
 impl MergeStrategyExecutor {
-    pub fn new(llm: Arc<dyn LlmClient>) -> Self {
+    pub fn new(model_driver: Arc<dyn RuntimeModelDriver>) -> Self {
         Self {
-            summarize: SummarizeStrategy::new(llm),
+            model_driver: model_driver.clone(),
+            summarize: SummarizeStrategy::new(model_driver),
             append: AppendStrategy,
             keep_separate: KeepSeparateStrategy,
             with_provenance: WithProvenanceStrategy,

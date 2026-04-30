@@ -23,6 +23,9 @@ pub struct ModelTurnResult {
     pub finish_reason: RuntimeFinishReason,
     pub assistant_text: String,
     pub tool_calls: Vec<RuntimeToolCall>,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
+    pub total_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
