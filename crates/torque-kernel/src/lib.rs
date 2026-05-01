@@ -14,6 +14,7 @@ pub mod recovery;
 pub mod runtime;
 pub mod task;
 pub mod task_packet;
+pub mod tool;
 
 pub use agent_definition::{AgentDefinition, AgentLimits};
 pub use agent_instance::{AgentInstance, AgentInstanceState};

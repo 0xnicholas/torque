@@ -20,9 +20,11 @@ pub mod extension;
 pub mod events;
 pub mod memory;
 pub mod runs;
+pub mod sessions;
 pub mod tasks;
 pub mod teams;
 pub mod tool_policy;
+pub mod tools;
 
 pub fn router() -> Router<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)> {
     let mut router = Router::new()
@@ -194,7 +196,15 @@ pub fn router() -> Router<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>
         .route("/v1/tool-policies", get(tool_policy::list))
         .route("/v1/tool-policies/:tool_name", get(tool_policy::get))
         .route("/v1/tool-policies/:tool_name", post(tool_policy::upsert))
-        .route("/v1/tool-policies/:tool_name", delete(tool_policy::delete));
+        .route("/v1/tool-policies/:tool_name", delete(tool_policy::delete))
+        .route("/v1/sessions", post(sessions::create).get(sessions::list))
+        .route("/v1/sessions/:id", get(sessions::get).delete(sessions::delete))
+        .route("/v1/sessions/:id/chat", post(sessions::chat))
+        .route("/v1/sessions/:id/compact", post(sessions::compact))
+        .route("/v1/sessions/:id/compaction/abort", post(sessions::abort_compaction))
+        .route("/v1/tools/register", post(tools::register))
+        .route("/v1/tools", get(tools::list))
+        .route("/v1/tools/:name", delete(tools::delete).put(tools::update));
 
     #[cfg(feature = "extension")]
     {

@@ -56,12 +56,33 @@ pub enum HookInput {
         delegation_id: uuid::Uuid,
         result: serde_json::Value,
     },
+
+    // ── Compaction Hooks (Observational) ───────────────────────
+    /// Fired before a context compaction is applied.
+    /// Carries the custom instructions (if any) that were passed to `Session.compact()`.
+    CompactionStart {
+        session_id: uuid::Uuid,
+        job_id: uuid::Uuid,
+        custom_instructions: Option<String>,
+        message_count: usize,
+    },
+    /// Fired after a context compaction completes, whether successfully or via abort.
+    CompactionEnd {
+        session_id: uuid::Uuid,
+        job_id: uuid::Uuid,
+        success: bool,
+        aborted: bool,
+        compacted_message_count: usize,
+    },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use torque_kernel::{AgentDefinitionId, ExecutionRequest};
+    use torque_kernel::{
+        AgentDefinitionId, ExecutionRequest, TaskId, AgentInstanceId, ExecutionOutcome,
+        AgentInstanceState, TaskState, ExecutionResult,
+    };
     use crate::id::ExtensionId;
 
     #[test]
@@ -148,7 +169,7 @@ mod tests {
             _ => panic!("wrong variant"),
         }
 
-        let result = torque_kernel::ExecutionResult {
+        let result = ExecutionResult {
             instance_id: torque_kernel::AgentInstanceId::new(),
             task_id: torque_kernel::TaskId::new(),
             sequence_number: 0,
@@ -247,6 +268,54 @@ mod tests {
         let cloned = input.clone();
         match cloned {
             HookInput::ToolCall { tool, .. } => assert_eq!(tool, "test"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_hook_input_compaction() {
+        let session_id = uuid::Uuid::new_v4();
+        let job_id = uuid::Uuid::new_v4();
+
+        let start = HookInput::CompactionStart {
+            session_id,
+            job_id,
+            custom_instructions: Some("summarize key decisions".into()),
+            message_count: 42,
+        };
+        match start {
+            HookInput::CompactionStart {
+                session_id: sid,
+                job_id: jid,
+                custom_instructions,
+                message_count,
+            } => {
+                assert_eq!(sid, session_id);
+                assert_eq!(jid, job_id);
+                assert_eq!(custom_instructions.as_deref(), Some("summarize key decisions"));
+                assert_eq!(message_count, 42);
+            }
+            _ => panic!("wrong variant"),
+        }
+
+        let end = HookInput::CompactionEnd {
+            session_id,
+            job_id,
+            success: true,
+            aborted: false,
+            compacted_message_count: 10,
+        };
+        match end {
+            HookInput::CompactionEnd {
+                session_id: sid,
+                success,
+                aborted,
+                ..
+            } => {
+                assert_eq!(sid, session_id);
+                assert!(success);
+                assert!(!aborted);
+            }
             _ => panic!("wrong variant"),
         }
     }

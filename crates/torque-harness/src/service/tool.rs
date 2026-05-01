@@ -3,6 +3,7 @@ use crate::service::ArtifactService;
 use crate::service::tool_offload::HarnessOffloadArtifactStore;
 use crate::service::vfs::RoutedVfs;
 use crate::tools::builtin::create_builtin_tools;
+use crate::tools::ToolArc;
 use futures::executor::block_on;
 use std::sync::Arc;
 
@@ -45,6 +46,30 @@ impl ToolService {
 
     pub fn vfs(&self) -> Option<Arc<RoutedVfs>> {
         self.vfs.clone()
+    }
+
+    /// Register a tool at runtime.
+    ///
+    /// The tool becomes immediately available to LLM agents on their next turn.
+    pub async fn register_tool(&self, tool: ToolArc) {
+        self.registry.register(tool).await;
+    }
+
+    /// Unregister (remove) a tool by name.
+    ///
+    /// Returns `true` if the tool existed and was removed, `false` otherwise.
+    pub async fn unregister_tool(&self, name: &str) -> bool {
+        self.registry.remove(name).await
+    }
+
+    /// Return the names of all currently registered tools.
+    pub async fn list_tool_names(&self) -> Vec<String> {
+        self.registry.list_tool_names().await
+    }
+
+    /// Get a tool by name, if it exists.
+    pub async fn get_tool(&self, name: &str) -> Option<ToolArc> {
+        self.registry.get(name).await
     }
 
     pub fn tool_offload_service(&self) -> torque_runtime::offload::ToolOffloadPolicy {

@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use llm::Message as LlmMessage;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Optional LLM-powered summarizer for context compaction.
 /// When set on `ContextCompactionService`, the LLM path is tried first;
@@ -11,6 +14,22 @@ pub trait LlmSummarizer: Send + Sync {
     /// Attempt to produce a concise summary of the given messages.
     /// Return `None` if the summarizer declines (e.g. no model available).
     async fn summarize(&self, messages: &[LlmMessage]) -> Option<String>;
+
+    /// Same as `summarize` but also accepts custom summarization
+    /// instructions and a cancellation token.  When `cancel.is_cancelled()`
+    /// returns `true`, the summarizer should abort and return `None`.
+    ///
+    /// The default implementation ignores `instructions` and `cancel`
+    /// and delegates to `summarize()` for backward compatibility.
+    async fn summarize_with_options(
+        &self,
+        messages: &[LlmMessage],
+        instructions: Option<&str>,
+        cancel: &CancellationToken,
+    ) -> Option<String> {
+        let _ = (instructions, cancel);
+        self.summarize(messages).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,10 +114,25 @@ impl ContextCompactionService {
         &self.policy
     }
 
-    /// Run compaction on the given messages. If an LLM summarizer is
-    /// configured, it is tried first; on failure or absence, falls back
-    /// to character-level truncation.
+    /// Run compaction with default options (no custom instructions, no cancellation).
+    /// Delegates to `compact_with_options` for unified logic.
     pub async fn compact(&self, messages: &[LlmMessage]) -> Option<CompactSummary> {
+        let cancel = CancellationToken::new();
+        self.compact_with_options(messages, None, &cancel).await
+    }
+
+    /// Run compaction on the given messages with optional custom
+    /// summarization instructions and a cancellation token.
+    ///
+    /// - `instructions`: passed to the LLM summarizer if configured.
+    /// - `cancel`: checked before and after summarizer invocation.
+    ///   When cancelled, compaction returns `None`.
+    pub async fn compact_with_options(
+        &self,
+        messages: &[LlmMessage],
+        instructions: Option<String>,
+        cancel: &CancellationToken,
+    ) -> Option<CompactSummary> {
         if !self.policy.should_compact(messages) {
             return None;
         }
@@ -114,11 +148,24 @@ impl ContextCompactionService {
         let older = &messages[..split_index];
         let preserved_tail = messages[split_index..].to_vec();
 
+        // Check cancellation before summarizer.
+        if cancel.is_cancelled() {
+            tracing::info!("Compaction cancelled before summarizer");
+            return None;
+        }
+
         // Try LLM-driven summarization first.
         let compact_summary = if let Some(ref summarizer) = self.llm_summarizer {
-            match summarizer.summarize(older).await {
+            match summarizer
+                .summarize_with_options(older, instructions.as_deref(), cancel)
+                .await
+            {
                 Some(summary) => summary,
                 None => {
+                    if cancel.is_cancelled() {
+                        tracing::info!("Compaction cancelled during/after summarizer");
+                        return None;
+                    }
                     tracing::warn!("LLM summarizer declined; falling back to heuristic");
                     Self::heuristic_summary(older.len())
                 }
@@ -126,6 +173,12 @@ impl ContextCompactionService {
         } else {
             Self::heuristic_summary(older.len())
         };
+
+        // Check cancellation after summarizer, before key facts extraction.
+        if cancel.is_cancelled() {
+            tracing::info!("Compaction cancelled after summarizer");
+            return None;
+        }
 
         let key_facts = older
             .iter()
@@ -154,8 +207,73 @@ impl ContextCompactionService {
     }
 }
 
+// ── CancellationToken ────────────────────────────────────────────
+
+/// A lightweight cancellation token backed by `Arc<AtomicBool>`.
+/// Used to signal that an in-flight operation (e.g. compaction)
+/// should abort.
+///
+/// This is intentionally simpler than `tokio_util::CancellationToken`
+/// to avoid adding a dependency.  It matches the pattern used by
+/// `AbortSignal` in the extension system.
+#[derive(Clone, Debug)]
+pub struct CancellationToken {
+    inner: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    /// Create a new, non-cancelled token.
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Signal cancellation.  Idempotent — subsequent calls are no-ops.
+    pub fn cancel(&self) {
+        self.inner.store(true, Ordering::SeqCst);
+    }
+
+    /// Returns `true` if `cancel()` has been called.
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for CancellationToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── CompactionJob ────────────────────────────────────────────────
+
+/// Status of an in-flight compaction operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompactionJobStatus {
+    Running,
+    Completed,
+    Aborted,
+}
+
+/// A handle for an in-flight compaction operation.
+/// Created by `SessionService::compact()` and used by
+/// `SessionService::abort_compaction()` to cancel the operation.
+#[derive(Debug, Clone)]
+pub struct CompactionJob {
+    pub id: Uuid,
+    pub cancel: CancellationToken,
+    pub status: CompactionJobStatus,
+}
+
 fn estimate_tokens(messages: &[LlmMessage]) -> usize {
     messages.iter().map(|message| message.content.len() / 4).sum()
+}
+
+/// A no-op cancellation token that never cancels.
+/// Used internally when no cancellation is desired.
+pub fn never_cancel_token() -> CancellationToken {
+    CancellationToken::new()
 }
 
 pub fn truncate(text: &str, max_chars: usize) -> String {

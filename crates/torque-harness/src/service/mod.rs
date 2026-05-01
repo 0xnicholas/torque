@@ -21,6 +21,7 @@ pub mod notification;
 pub mod recovery;
 pub mod reflexion;
 pub mod run;
+pub mod session;
 pub mod task;
 pub mod team;
 pub mod tool;
@@ -53,6 +54,7 @@ pub use reflexion::{
     ExperienceQuery, ReflectionResult, ReflexionService, RetrievedExperience, SubtaskResult,
 };
 pub use run::RunService;
+pub use session::SessionService;
 pub use task::TaskService;
 pub use team::{TeamService, TeamSupervisor};
 pub use tool::ToolService;
@@ -147,6 +149,8 @@ pub struct ServiceContainer {
     pub tool_governance: std::sync::Arc<crate::policy::ToolGovernanceService>,
     pub tool_policy: std::sync::Arc<dyn crate::repository::ToolPolicyRepository>,
     pub runtime_factory: Arc<RuntimeFactory>,
+
+    pub session_service: std::sync::Arc<session::SessionService>,
 
     /// Extension service, available when the `extension` feature is enabled.
     #[cfg(feature = "extension")]
@@ -282,6 +286,19 @@ impl ServiceContainer {
         );
         let tool_policy = repos.tool_policy.clone();
 
+        #[cfg(feature = "extension")]
+        let extension_service = {
+            let ext_svc = crate::extension::ExtensionService::new(
+                std::sync::Arc::new(
+                    crate::extension::runtime_handle::HarnessExtensionRuntimeHandle::new(),
+                ),
+            )
+            .with_tool_service(tool.clone());
+            Some(std::sync::Arc::new(ext_svc))
+        };
+        #[cfg(not(feature = "extension"))]
+        let extension_service: Option<Arc<()>> = None;
+
         Self {
             memory,
             tool,
@@ -311,10 +328,11 @@ impl ServiceContainer {
             tool_policy,
             runtime_factory,
 
-            #[cfg(feature = "extension")]
-            extension_service: None,
-            #[cfg(not(feature = "extension"))]
-            extension_service: None,
+            session_service: std::sync::Arc::new(session::SessionService::new(
+                repos.session.clone(),
+            )),
+
+            extension_service,
         }
     }
 }

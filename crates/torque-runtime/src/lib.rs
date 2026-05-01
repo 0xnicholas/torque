@@ -3,6 +3,10 @@ pub mod context;
 pub mod environment;
 pub mod events;
 pub mod host;
+pub use context::{
+    CompactSummary, ContextCompactionPolicy, ContextCompactionService, CancellationToken,
+    CompactionJob, CompactionJobStatus,
+};
 pub mod message;
 pub mod message_queue;
 pub mod offload;

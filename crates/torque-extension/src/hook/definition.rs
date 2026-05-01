@@ -145,6 +145,28 @@ pub const CHECKPOINT: HookPointDef = HookPointDef {
     description: "Checkpoint notification",
 };
 
+/// Pre-compaction hook (observational).
+///
+/// Fired before a Session.compact() is applied, carrying optional
+/// custom instructions and the current message count.
+pub const PRE_COMPACTION: HookPointDef = HookPointDef {
+    name: "pre_compaction",
+    mode: HookMode::Observational,
+    phase: HookPhase::Pre,
+    description: "Pre-compaction notification",
+};
+
+/// Post-compaction hook (observational).
+///
+/// Fired after a Session.compact() completes, indicating whether
+/// the compaction succeeded or was aborted.
+pub const POST_COMPACTION: HookPointDef = HookPointDef {
+    name: "post_compaction",
+    mode: HookMode::Observational,
+    phase: HookPhase::Post,
+    description: "Post-compaction notification",
+};
+
 /// Delegation start notification.
 pub const DELEGATION_START: HookPointDef = HookPointDef {
     name: "delegation_start",
@@ -168,6 +190,7 @@ pub const ALL_HOOK_NAMES: &[&str] = &[
     "agent_start", "agent_end",
     "execution_start", "execution_end",
     "error", "checkpoint",
+    "pre_compaction", "post_compaction",
     "delegation_start", "delegation_complete",
 ];
 
@@ -185,6 +208,8 @@ pub fn get_hook_def(name: &str) -> Option<&'static HookPointDef> {
         "execution_end" => Some(&EXECUTION_END),
         "error" => Some(&ERROR),
         "checkpoint" => Some(&CHECKPOINT),
+        "pre_compaction" => Some(&PRE_COMPACTION),
+        "post_compaction" => Some(&POST_COMPACTION),
         "delegation_start" => Some(&DELEGATION_START),
         "delegation_complete" => Some(&DELEGATION_COMPLETE),
         _ => None,
@@ -234,6 +259,8 @@ mod tests {
         assert_eq!(EXECUTION_END.name, "execution_end");
         assert_eq!(ERROR.name, "error");
         assert_eq!(CHECKPOINT.name, "checkpoint");
+        assert_eq!(PRE_COMPACTION.name, "pre_compaction");
+        assert_eq!(POST_COMPACTION.name, "post_compaction");
         assert_eq!(DELEGATION_START.name, "delegation_start");
         assert_eq!(DELEGATION_COMPLETE.name, "delegation_complete");
     }
@@ -254,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_all_hook_names_count() {
-        assert_eq!(ALL_HOOK_NAMES.len(), 13);
+        assert_eq!(ALL_HOOK_NAMES.len(), 15);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::collections::VecDeque;
 
-use crate::context::{CompactSummary, ContextCompactionPolicy};
+use crate::context::{CompactSummary, ContextCompactionPolicy, CancellationToken};
 use crate::message::StructuredMessage;
 
 /// Three mutually exclusive delivery semantics for a message handed to
@@ -89,6 +89,11 @@ pub trait MessageQueue: Send + Sync {
     /// met or compaction was suppressed (already-compacted tail).
     async fn compact(&mut self, policy: &ContextCompactionPolicy) -> Option<CompactSummary>;
 
+    /// Abort any in-flight compaction operation.
+    /// Implementations should cancel the active `CancellationToken`
+    /// if one exists.  No-op if no compaction is in progress.
+    fn abort_compaction(&mut self);
+
     /// Derive a TaskPacket from the current conversation state.
     /// Used for delegation and team handoff (see Context State Model §10).
     ///
@@ -141,6 +146,11 @@ pub struct InMemoryMessageQueue {
 
     /// Maximum depth for followUp chain execution.
     pub max_followup_depth: usize,
+
+    /// Cancellation token for in-flight compaction.
+    /// Set when compaction starts, cleared when it completes.
+    /// When `abort_compaction()` is called, this token is cancelled.
+    pub abort_token: Option<CancellationToken>,
 }
 
 impl InMemoryMessageQueue {
@@ -154,6 +164,7 @@ impl InMemoryMessageQueue {
             max_total_tokens: 128_000, // generous default
             max_steer_pending: 8,
             max_followup_depth: 3,
+            abort_token: None,
         }
     }
 
@@ -284,6 +295,13 @@ impl MessageQueue for InMemoryMessageQueue {
         self.messages = vec![cm];
 
         Some(summary)
+    }
+
+    fn abort_compaction(&mut self) {
+        if let Some(ref token) = self.abort_token {
+            token.cancel();
+            tracing::info!("In-flight compaction aborted via abort_token");
+        }
     }
 }
 

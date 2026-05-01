@@ -29,6 +29,25 @@ impl ToolRegistry {
         self.tools.write().await.insert(name, tool);
     }
 
+    /// Remove a tool by name from the registry.
+    /// Returns `true` if the tool was found and removed, `false` otherwise.
+    pub async fn remove(&self, name: &str) -> bool {
+        self.tools.write().await.remove(name).is_some()
+    }
+
+    /// Update an existing tool in-place.
+    /// Returns `true` if the tool was found and updated, `false` if no tool
+    /// with the given name exists (in which case the registry is unchanged).
+    pub async fn update(&self, name: &str, tool: ToolArc) -> bool {
+        let mut guard = self.tools.write().await;
+        if guard.contains_key(name) {
+            guard.insert(name.to_string(), tool);
+            true
+        } else {
+            false
+        }
+    }
+
     pub async fn get(&self, name: &str) -> Option<ToolArc> {
         self.tools.read().await.get(name).cloned()
     }

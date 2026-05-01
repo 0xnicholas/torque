@@ -72,6 +72,7 @@ pub fn build_app(db: Database, llm: Arc<dyn LlmClient>) -> Router {
             db.clone(),
         )),
         run: Arc::new(crate::repository::PostgresRunRepository::new(db.clone())),
+        session: Arc::new(crate::repository::PostgresSessionRepository::new(db.clone())),
         tool_policy: Arc::new(crate::repository::PostgresToolPolicyRepository::new(
             db.clone(),
         )),

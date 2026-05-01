@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use torque_kernel::tool::ToolArc;
 
 use crate::{
     context::ExtensionContext,
@@ -51,4 +52,15 @@ pub trait ExtensionActor: Send + Sync {
         ctx: &ExtensionContext,
         msg: ExtensionMessage,
     ) -> Result<crate::message::ExtensionResponse>;
+
+    /// Optional: return a list of tools this Extension provides.
+    ///
+    /// When the Extension is registered, any tools returned here will be
+    /// automatically registered into the system's ToolRegistry so that
+    /// LLM agents can discover and invoke them.
+    ///
+    /// The default implementation returns an empty vec, meaning no tools.
+    fn tools(&self) -> Vec<ToolArc> {
+        Vec::new()
+    }
 }

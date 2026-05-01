@@ -11,9 +11,11 @@ use torque_harness::agent::stream::StreamEvent;
 use torque_harness::models::v1::artifact::{Artifact, ArtifactScope};
 use torque_harness::models::v1::event::Event;
 use torque_harness::repository::{ArtifactRepository, EventRepository};
+use torque_harness::policy::ToolGovernanceService;
 use torque_harness::runtime::{
     HarnessEventSink, HarnessModelDriver, HarnessToolExecutor, StreamEventSinkAdapter,
 };
+use torque_harness::service::governed_tool::GovernedToolRegistry;
 use torque_harness::service::{ArtifactService, ToolService};
 use torque_runtime::checkpoint::{RuntimeCheckpointPayload, RuntimeCheckpointRef};
 use torque_runtime::environment::{
@@ -125,9 +127,20 @@ impl RuntimeCheckpointSink for FakeCheckpointSink {
     }
 }
 
-fn setup_tool_service() -> Arc<ToolService> {
+fn setup_tool_service() -> Arc<GovernedToolRegistry> {
     let artifact_service = Arc::new(ArtifactService::new(Arc::new(NoopArtifactRepository)));
-    Arc::new(ToolService::new_with_builtins(artifact_service))
+    let tool_service = ToolService::new_with_builtins(artifact_service);
+    let registry = tool_service.registry();
+    let governance = Arc::new(ToolGovernanceService::new(
+        torque_harness::models::v1::tool_policy::ToolGovernanceConfig {
+            default_risk_level: torque_harness::models::v1::tool_policy::ToolRiskLevel::Low,
+            approval_required_above: torque_harness::models::v1::tool_policy::ToolRiskLevel::High,
+            blocked_tools: vec![],
+            privileged_tools: vec![],
+            side_effect_tracking: false,
+        },
+    ));
+    Arc::new(GovernedToolRegistry::new(registry, governance))
 }
 
 #[tokio::test]

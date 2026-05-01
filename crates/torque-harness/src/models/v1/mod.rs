@@ -15,12 +15,17 @@ pub mod memory;
 pub mod partial_quality;
 pub mod recovery;
 pub mod run;
+pub mod session;
 pub mod task;
 pub mod team;
+pub mod tool;
 pub mod tool_policy;
+
+pub use session::SessionStatus;
 
 pub use delegation::{Delegation, DelegationCreate, DelegationStatus};
 pub use delegation_event::{DelegationEvent, RejectionReason};
 pub use partial_quality::PartialQuality;
 pub use run::{Run, RunStatus};
+pub use session::Session;
 pub use tool_policy::{ToolGovernanceConfig, ToolPolicy, ToolRiskLevel, ToolSideEffect};

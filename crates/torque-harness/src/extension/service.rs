@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use tokio::sync::RwLock;
+use torque_kernel::tool::ToolArc;
 use torque_extension::{
     actor::ExtensionActor,
     config::ExtensionConfig,
@@ -12,6 +15,7 @@ use torque_extension::{
 };
 
 use crate::extension::runtime_handle::HarnessExtensionRuntimeHandle;
+use crate::service::ToolService;
 
 /// High-level service that manages Extension lifecycle within the Harness.
 ///
@@ -23,6 +27,8 @@ use crate::extension::runtime_handle::HarnessExtensionRuntimeHandle;
 pub struct ExtensionService {
     runtime: Arc<HarnessExtensionRuntimeHandle>,
     snapshot_manager: SnapshotManager,
+    tool_service: Option<Arc<ToolService>>,
+    tool_map: RwLock<HashMap<ExtensionId, Vec<String>>>,
 }
 
 impl ExtensionService {
@@ -32,6 +38,8 @@ impl ExtensionService {
         Self {
             snapshot_manager: SnapshotManager::new(storage),
             runtime,
+            tool_service: None,
+            tool_map: RwLock::new(HashMap::new()),
         }
     }
 
@@ -43,7 +51,15 @@ impl ExtensionService {
         Self {
             snapshot_manager: SnapshotManager::new(storage),
             runtime,
+            tool_service: None,
+            tool_map: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Inject a [`ToolService`] reference for automatic tool registration.
+    pub fn with_tool_service(mut self, tool_service: Arc<ToolService>) -> Self {
+        self.tool_service = Some(tool_service);
+        self
     }
 
     /// Return a reference to the underlying runtime handle.
@@ -58,12 +74,29 @@ impl ExtensionService {
     // ── Registration ───────────────────────────────────────────
 
     /// Register a new extension with the given config.
+    ///
+    /// If this service has a [`ToolService`] reference, any tools returned by
+    /// the extension's [`ExtensionActor::tools()`] method are automatically
+    /// registered into the system's [`ToolRegistry`] so that LLM agents can
+    /// discover and invoke them.
     pub async fn register(
         &self,
         extension: Arc<dyn ExtensionActor>,
         config: ExtensionConfig,
     ) -> Result<ExtensionId> {
-        let id = self.runtime.register(extension, config).await?;
+        let id = self.runtime.register(extension.clone(), config).await?;
+
+        // Automatically register tools provided by this extension.
+        if let Some(ref tool_service) = self.tool_service {
+            let tools = extension.tools();
+            if !tools.is_empty() {
+                let names: Vec<String> = tools.iter().map(|t| t.name().to_string()).collect();
+                for tool in tools {
+                    tool_service.register_tool(tool).await;
+                }
+                self.tool_map.write().await.insert(id, names);
+            }
+        }
 
         // Take an initial snapshot when an extension is registered.
         if let Ok(snap) = self.runtime.snapshot(id).await {
@@ -74,7 +107,19 @@ impl ExtensionService {
     }
 
     /// Unregister an extension by ID.
+    ///
+    /// Any tools that were automatically registered by this extension are
+    /// also unregistered from the system's [`ToolRegistry`].
     pub async fn unregister(&self, id: ExtensionId) -> Result<()> {
+        // Unregister all tools that this extension registered.
+        if let Some(ref tool_service) = self.tool_service {
+            if let Some(tool_names) = self.tool_map.write().await.remove(&id) {
+                for name in &tool_names {
+                    tool_service.unregister_tool(name).await;
+                }
+            }
+        }
+
         self.runtime.unregister(id).await?;
 
         // Clean up snapshots.
