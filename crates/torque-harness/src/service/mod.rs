@@ -147,6 +147,13 @@ pub struct ServiceContainer {
     pub tool_governance: std::sync::Arc<crate::policy::ToolGovernanceService>,
     pub tool_policy: std::sync::Arc<dyn crate::repository::ToolPolicyRepository>,
     pub runtime_factory: Arc<RuntimeFactory>,
+
+    /// Extension service, available when the `extension` feature is enabled.
+    #[cfg(feature = "extension")]
+    pub extension_service: Option<Arc<crate::extension::ExtensionService>>,
+    /// Placeholder when extension feature is disabled.
+    #[cfg(not(feature = "extension"))]
+    pub extension_service: Option<Arc<()>>,
 }
 
 impl ServiceContainer {
@@ -303,6 +310,11 @@ impl ServiceContainer {
             tool_governance,
             tool_policy,
             runtime_factory,
+
+            #[cfg(feature = "extension")]
+            extension_service: None,
+            #[cfg(not(feature = "extension"))]
+            extension_service: None,
         }
     }
 }

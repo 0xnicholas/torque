@@ -18,3 +18,6 @@ pub mod service;
 pub mod tools;
 pub mod v1_guards;
 pub mod vector_type;
+
+#[cfg(feature = "extension")]
+pub mod extension;

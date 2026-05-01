@@ -5,6 +5,7 @@ members = [
     "crates/torque-kernel",
     "crates/torque-runtime",
     "crates/torque-harness",
+    "crates/torque-extension",
 ]
 
 [workspace.package]

@@ -28,6 +28,11 @@ tokio-stream = { workspace = true }
 llm = { path = "../llm" }
 torque-kernel = { path = "../torque-kernel" }
 torque-runtime = { path = "../torque-runtime" }
+torque-extension = { path = "../torque-extension", optional = true }
+
+[features]
+default = []
+extension = ["torque-extension"]
 
 [dev-dependencies]
 tokio-test = "0.4"

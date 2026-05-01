@@ -2595,6 +2595,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "torque-extension"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "torque-kernel",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "torque-harness"
 version = "0.1.0"
 dependencies = [
@@ -2616,6 +2632,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-test",
+ "torque-extension",
  "torque-kernel",
  "torque-runtime",
  "tower",

@@ -11,3 +11,4 @@ torque-docs/.vitepress/
 torque-docs/dist/
 torque-docs/node_modules/
 _references-oss/
+.forge/

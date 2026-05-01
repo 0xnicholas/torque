@@ -89,7 +89,7 @@ pub fn build_app(db: Database, llm: Arc<dyn LlmClient>) -> Router {
     let checkpointer = Arc::new(crate::runtime::checkpoint::PostgresCheckpointer::new(db.clone()));
     let idempotency = Arc::new(crate::v1_guards::IdempotencyStore::new());
     let run_gate = Arc::new(crate::v1_guards::RunGate::new());
-    let services = ServiceContainer::new(
+    let mut services = ServiceContainer::new(
         repos,
         memory_v1,
         checkpointer,
@@ -98,6 +98,16 @@ pub fn build_app(db: Database, llm: Arc<dyn LlmClient>) -> Router {
         idempotency,
         run_gate,
     );
+
+    // ── Extension system (feature-gated) ────────────────────────
+    #[cfg(feature = "extension")]
+    {
+        use crate::extension::{ExtensionService, HarnessExtensionRuntimeHandle};
+
+        let ext_runtime = Arc::new(HarnessExtensionRuntimeHandle::new());
+        let ext_svc = Arc::new(ExtensionService::new(ext_runtime));
+        services.extension_service = Some(ext_svc);
+    }
 
     api::router(db, llm, Arc::new(services))
 }

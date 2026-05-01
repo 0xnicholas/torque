@@ -15,6 +15,8 @@ pub mod capabilities;
 pub mod checkpoints;
 pub mod delegations;
 pub mod escalations;
+#[cfg(feature = "extension")]
+pub mod extension;
 pub mod events;
 pub mod memory;
 pub mod runs;
@@ -23,7 +25,7 @@ pub mod teams;
 pub mod tool_policy;
 
 pub fn router() -> Router<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)> {
-    Router::new()
+    let mut router = Router::new()
         .route(
             "/v1/agent-definitions",
             post(agent_definitions::create).get(agent_definitions::list),
@@ -192,5 +194,29 @@ pub fn router() -> Router<(Database, Arc<dyn LlmClient>, Arc<ServiceContainer>)>
         .route("/v1/tool-policies", get(tool_policy::list))
         .route("/v1/tool-policies/:tool_name", get(tool_policy::get))
         .route("/v1/tool-policies/:tool_name", post(tool_policy::upsert))
-        .route("/v1/tool-policies/:tool_name", delete(tool_policy::delete))
+        .route("/v1/tool-policies/:tool_name", delete(tool_policy::delete));
+
+    #[cfg(feature = "extension")]
+    {
+        router = router
+            .route("/v1/extensions", get(extension::list))
+            .route(
+                "/v1/extensions/:id",
+                get(extension::get).delete(extension::delete),
+            )
+            .route(
+                "/v1/extensions/:id/suspend",
+                post(extension::suspend_extension),
+            )
+            .route(
+                "/v1/extensions/:id/resume",
+                post(extension::resume_extension),
+            )
+            .route(
+                "/v1/extensions/:id/messages",
+                post(extension::send_message),
+            );
+    }
+
+    router
 }
